@@ -1,5 +1,7 @@
 import React, { useState, useMemo, useEffect } from "react";
+import Swal from "sweetalert2";
 import { useApp } from "../context/AppContext";
+import { useAuth } from "../context/AuthContext";
 import {
   Modal,
   FormGroup,
@@ -9,13 +11,15 @@ import {
 } from "../components/UI";
 import Loader from "../components/Loader";
 import LoaderDashboard from "../components/LoaderDashboard";
+import { DateRangeSelect, isWithinDateRange, latestDateFrom } from "../utils/dateFilters";
 
 // From the party's perspective: dispatched = In Progress, received back = Completed
 // If party name is unknown, status should be Pending
 const toLedgerStatus = (status, partyName) => {
   if (!partyName || !String(partyName).trim()) return "Pending";
-  if (!status) return "In Progress";
+  if (!status) return "Pending";
   const s = String(status).trim().toLowerCase();
+  if (s === "pending") return "Pending";
   if (s === "completed" || s === "received back") return "Completed";
   return "In Progress";
 };
@@ -220,10 +224,12 @@ export default function PartyLedger() {
     payments,
     initialDataLoading,
   } = useApp();
+  const { isAdmin, isParty, user } = useAuth();
   const PAGE_SIZE = 10;
   const [search, setSearch] = useState("");
-  const [partyFilter, setPartyFilter] = useState("All");
+  const [partyFilter, setPartyFilter] = useState(() => (user?.role === "party" && user?.partyId ? String(user.partyId) : "All"));
   const [statusFilter, setStatusFilter] = useState("All");
+  const [dateRange, setDateRange] = useState("all");
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({});
   const [ledgerSaving, setLedgerSaving] = useState(false);
@@ -231,18 +237,24 @@ export default function PartyLedger() {
   const [receiptPreview, setReceiptPreview] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
 
+  const samePartyId = (a, b) =>
+    String(a ?? "").trim() === String(b ?? "").trim();
+
   // Only lots assigned to a party
   const assignedLots = useMemo(
     () =>
       ghausiaLots.filter(
         (l) =>
           String(l.partyId || "").trim() || String(l.partyName || "").trim(),
-      ),
-    [ghausiaLots],
+      ).filter((lot) => {
+        if (isParty && user?.partyId && !samePartyId(lot.partyId, user.partyId)) return false;
+        return isWithinDateRange(
+          latestDateFrom(lot, ["updatedAt", "createdAt", "receivedBackDate", "dispatchDate", "allotDate", "receivedDate"]),
+          dateRange,
+        );
+      }),
+    [ghausiaLots, isParty, user?.partyId, dateRange],
   );
-
-  const samePartyId = (a, b) =>
-    String(a ?? "").trim() === String(b ?? "").trim();
 
   const formatYmd = (value) => {
     if (!value) return "";
@@ -277,7 +289,7 @@ export default function PartyLedger() {
     if (pe.partyBillAmount != null && Number(pe.partyBillAmount) > 0) {
       return Number(pe.partyBillAmount);
     }
-    return Number(0);
+    return Number(l.billAmount || 0);
   };
 
   const filtered = useMemo(() => {
@@ -304,7 +316,13 @@ export default function PartyLedger() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [search, partyFilter, statusFilter]);
+  }, [search, partyFilter, statusFilter, dateRange]);
+
+  useEffect(() => {
+    if (isParty && user?.partyId) {
+      setPartyFilter(String(user.partyId));
+    }
+  }, [isParty, user?.partyId]);
 
   useEffect(() => {
     if (currentPage > totalPages) {
@@ -315,6 +333,7 @@ export default function PartyLedger() {
   const openEdit = (lot, initialStatus) => {
     const pe = partyEdits[lot.id] || {};
     const statusForForm = initialStatus || getDisplayStatus(lot);
+    if (statusForForm === "Completed" && !isAdmin) return;
     const existingComplete =
       formatYmd(pe.completeDate) || formatYmd(lot.receivedBackDate) || "";
     setLedgerFormErrors({});
@@ -360,6 +379,45 @@ export default function PartyLedger() {
         String(editForm.partyId || "").trim() !== "" &&
         !samePartyId(editForm.partyId, lot.partyId);
 
+      const previousLedgerAmount = getDisplayBill(lot);
+      const nextLedgerAmount = Number(editForm.billAmount) || 0;
+      const completedAmountChanged =
+        getDisplayStatus(lot) === "Completed" &&
+        previousLedgerAmount !== nextLedgerAmount;
+      let amountChangeNote = null;
+
+      if (completedAmountChanged) {
+        if (!isAdmin) return;
+        const ghausiaAmount = Number(lot.billAmount || 0);
+        const difference = nextLedgerAmount - previousLedgerAmount;
+        const result = await Swal.fire({
+          title: "Confirm completed lot amount change",
+          icon: "warning",
+          html: `
+            <div style="text-align:left;font-size:14px;line-height:1.6">
+              <div><strong>Ghausia amount:</strong> ₨${ghausiaAmount.toLocaleString()}</div>
+              <div><strong>Current party ledger amount:</strong> ₨${previousLedgerAmount.toLocaleString()}</div>
+              <div><strong>Updated party ledger amount:</strong> ₨${nextLedgerAmount.toLocaleString()}</div>
+              <div><strong>Difference:</strong> ₨${difference.toLocaleString()}</div>
+              <div style="margin-top:10px;color:#92400e">No payment transaction will be created automatically.</div>
+            </div>
+          `,
+          showCancelButton: true,
+          confirmButtonText: "Save amount note",
+          cancelButtonText: "Cancel",
+        });
+        if (!result.isConfirmed) {
+          return;
+        }
+        amountChangeNote = {
+          previousAmount: previousLedgerAmount,
+          updatedAmount: nextLedgerAmount,
+          difference,
+          ghausiaAmount,
+          changedAt: new Date().toISOString(),
+        };
+      }
+
       if (editForm.status === "Completed") {
         await updatePartyEdit(editingId, {
           completeDate:
@@ -368,12 +426,16 @@ export default function PartyLedger() {
           receipt: editForm.receipt,
           notes: editForm.notes,
           overrideStatus: "Completed",
+          ...(amountChangeNote ? { amountChangeNote } : {}),
         });
         const lotUpdates = {
           status: "received back",
           receivedBackDate:
             editForm.completeDate || new Date().toISOString().slice(0, 10),
         };
+        if (amountChangeNote) {
+          lotUpdates.billAmount = nextLedgerAmount;
+        }
         if (partyChanged) {
           const sel = parties.find((p) => samePartyId(p.id, editForm.partyId));
           lotUpdates.partyId = editForm.partyId;
@@ -381,19 +443,25 @@ export default function PartyLedger() {
         }
         await updateLot(editingId, lotUpdates);
       } else {
+        const nextOverrideStatus = editForm.status === "Pending" ? "Pending" : "In Progress";
         await updatePartyEdit(editingId, {
           completeDate: editForm.completeDate || null,
           partyBillAmount: Number(editForm.billAmount) || 0,
           receipt: editForm.receipt,
           notes: editForm.notes,
-          overrideStatus: "In Progress",
+          overrideStatus: nextOverrideStatus,
         });
         const lotUpdates = {};
         const lowerStatus = (lot.status || "").toLowerCase();
-        if (lowerStatus !== "dispatched") {
-          lotUpdates.status = "dispatched";
-          lotUpdates.dispatchDate =
-            lot.dispatchDate || new Date().toISOString().slice(0, 10);
+        if (editForm.status === "Pending") {
+          if (lowerStatus !== "pending") {
+            lotUpdates.status = "pending";
+            lotUpdates.dispatchDate = "";
+          }
+        } else if (lowerStatus !== "dispatched") {
+            lotUpdates.status = "dispatched";
+            lotUpdates.dispatchDate =
+              lot.dispatchDate || new Date().toISOString().slice(0, 10);
         }
         if (partyChanged) {
           const sel = parties.find((p) => samePartyId(p.id, editForm.partyId));
@@ -421,6 +489,8 @@ export default function PartyLedger() {
 
       if (status === "Completed") {
         completedAmount += bill;
+      } else if (status === "Pending") {
+        inProgressAmount += 0;
       } else {
         inProgressAmount += bill;
       }
@@ -431,6 +501,8 @@ export default function PartyLedger() {
       billTotal: filtered.reduce((s, l) => s + getDisplayBill(l), 0),
       completed: filtered.filter((l) => getDisplayStatus(l) === "Completed")
         .length,
+      pending: filtered.filter((l) => getDisplayStatus(l) === "Pending")
+        .length,
       inProgress: filtered.filter((l) => getDisplayStatus(l) === "In Progress")
         .length,
       completedAmount,
@@ -440,7 +512,7 @@ export default function PartyLedger() {
   }, [filtered, partyEdits]);
 
   const partyBalanceInfo = useMemo(() => {
-  const pays = payments.filter((p) => p.type === "Paid");
+    const pays = payments.filter((p) => p.type === "Paid" && isWithinDateRange(p.updatedAt || p.date, dateRange));
 
   if (partyFilter === "All") {
     const names = [
@@ -486,13 +558,19 @@ export default function PartyLedger() {
       ? `${pname}'s balance`
       : "Total bill value minus paid to party",
   };
-}, [partyFilter, filtered, payments, parties, partyEdits, totals.billTotal]);
+}, [partyFilter, filtered, payments, parties, partyEdits, totals.billTotal, dateRange]);
   const handleRowStatusChange = async (lot, newStatus) => {
     if (newStatus === "Completed") {
       openEdit(lot, "Completed");
       return;
     }
-    // In Progress
+    if (newStatus === "Pending") {
+      await updatePartyEdit(lot.id, { overrideStatus: "Pending", completeDate: "" });
+      if ((lot.status || "").toLowerCase() !== "pending") {
+        await updateLot(lot.id, { status: "pending", dispatchDate: "" });
+      }
+      return;
+    }
     await updatePartyEdit(lot.id, { overrideStatus: "In Progress" });
     const lowerStatus = (lot.status || "").toLowerCase();
     if (lowerStatus !== "dispatched") {
@@ -565,6 +643,19 @@ export default function PartyLedger() {
             color: "#15803d",
           },
           {
+            key: "pending",
+            label: (
+              <>
+                Pending{" "}
+                <strong style={{ fontSize: 14, color: "#d97706" }}>
+                  ({totals.pending})
+                </strong>
+              </>
+            ),
+            value: "Awaiting dispatch",
+            color: "#d97706",
+          },
+          {
             key: "inprogress",
             label: (
               <>
@@ -625,14 +716,16 @@ export default function PartyLedger() {
           style={{ width: 190 }}
           value={partyFilter}
           onChange={(e) => setPartyFilter(e.target.value)}
+          disabled={isParty}
         >
-          <option value="All">All Parties</option>
+          {!isParty && <option value="All">All Parties</option>}
           {parties.map((p) => (
             <option key={p.id} value={String(p.id)}>
               {p.name}
             </option>
           ))}
         </select>
+        <DateRangeSelect value={dateRange} onChange={setDateRange} />
         <select
           className="form-select"
           style={{ width: 160 }}
@@ -640,6 +733,7 @@ export default function PartyLedger() {
           onChange={(e) => setStatusFilter(e.target.value)}
         >
           <option value="All">All Statuses</option>
+          <option value="Pending">Pending</option>
           <option value="In Progress">In Progress</option>
           <option value="Completed">Completed</option>
         </select>
@@ -741,6 +835,7 @@ export default function PartyLedger() {
                               handleRowStatusChange(l, e.target.value)
                             }
                           >
+                            <option value="Pending">Pending</option>
                             <option value="In Progress">In Progress</option>
                             <option value="Completed">Completed</option>
                           </select>
@@ -794,10 +889,20 @@ export default function PartyLedger() {
                           </span>
                         )}
                       </td>
-                      <td>{pe.notes}</td>
                       <td>
-                        <button
-                          onClick={() => openEdit(l)}
+                        {pe.notes}
+                        {pe.amountChangeNote && (
+                          <div style={{ fontSize: 11, color: "#92400e", marginTop: 4 }}>
+                            Amount changed: ₨{Number(pe.amountChangeNote.previousAmount || 0).toLocaleString()} to ₨{Number(pe.amountChangeNote.updatedAmount || 0).toLocaleString()}
+                          </div>
+                        )}
+                      </td>
+                      <td>
+                        {displayStatus === "Completed" && !isAdmin ? (
+                          <span style={{ fontSize: 12, color: "var(--text-muted)" }}>Admin only</span>
+                        ) : (
+                          <button
+                            onClick={() => openEdit(l)}
                           style={{
                             padding: "4px 12px",
                             fontSize: 12,
@@ -809,9 +914,10 @@ export default function PartyLedger() {
                             border: "1px solid #BFDBFE",
                             fontFamily: "Inter, sans-serif",
                           }}
-                        >
-                          Edit
-                        </button>
+                          >
+                            Edit
+                          </button>
+                        )}
                       </td>
                     </tr>
                   );
@@ -1009,11 +1115,12 @@ export default function PartyLedger() {
                   setEditForm((f) => ({
                     ...f,
                     status: next,
-                    ...(next === "In Progress" ? { completeDate: "" } : {}),
+                    ...(next !== "Completed" ? { completeDate: "" } : {}),
                   }));
                   setLedgerFormErrors({});
                 }}
               >
+                <option value="Pending">Pending</option>
                 <option value="In Progress">In Progress</option>
                 <option value="Completed">Completed</option>
               </select>

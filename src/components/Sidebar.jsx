@@ -1,5 +1,6 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 
 const navItems = [
   {
@@ -62,11 +63,15 @@ const navItems = [
 ];
 
 export default function Sidebar({ sidebarOpen, setSidebarOpen }) {
+  const { user, isAdmin, logout } = useAuth();
   const handleNavClick = () => {
     if (window.innerWidth <= 768) {
       setSidebarOpen(false);
     }
   };
+  const visibleNavItems = navItems.filter((item) => (
+    isAdmin || ['/', '/party-ledger', '/payments'].includes(item.to)
+  ));
 
   return (
     <aside style={{
@@ -119,7 +124,7 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen }) {
 
       {/* Nav */}
       <nav style={{ padding: '14px 10px', flex: 1 }}>
-        {navItems.map(item => (
+        {visibleNavItems.map(item => (
           <NavLink
             key={item.to}
             to={item.to}
@@ -148,7 +153,32 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen }) {
       </nav>
 
       {/* Footer */}
-      <div style={{ padding: '14px 18px', borderTop: '1px solid rgba(255,255,255,0.07)', fontSize: 11, color: '#475569' }}>
+      <div style={{ padding: '14px 18px', borderTop: '1px solid rgba(255,255,255,0.07)', fontSize: 11, color: '#64748b' }}>
+        {user && (
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ color: '#e2e8f0', fontSize: 12, fontWeight: 700 }}>{user.name}</div>
+            <div style={{ marginTop: 2, textTransform: 'capitalize' }}>
+              {user.role}{user.partyName ? ` · ${user.partyName}` : ''}
+            </div>
+            <button
+              type="button"
+              onClick={logout}
+              style={{
+                marginTop: 10,
+                width: '100%',
+                padding: '7px 10px',
+                borderRadius: 8,
+                border: '1px solid rgba(255,255,255,0.12)',
+                background: 'rgba(255,255,255,0.06)',
+                color: '#cbd5e1',
+                cursor: 'pointer',
+                fontSize: 12,
+              }}
+            >
+              Logout
+            </button>
+          </div>
+        )}
         © 2025 Ghausia Collection
       </div>
     </aside>

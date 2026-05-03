@@ -4,6 +4,7 @@ import { useApp } from '../context/AppContext';
 import { Modal, FormGroup, StatusBadge, ActionBtn, SearchBar, EmptyState, ConfirmDialog } from '../components/UI';
 import Loader from '../components/Loader';
 import LoaderDashboard from '../components/LoaderDashboard';
+import { DateRangeSelect, isWithinDateRange, latestDateFrom } from '../utils/dateFilters';
 
 const FABRICS = ['Lawn', 'Velvet', 'Cambric'];
 const COLOR_OPTIONS = Array.from({ length: 13 }, (_, i) => i);
@@ -213,7 +214,7 @@ function LotForm({ initial, onSave, onClose, parties, saving }) {
 }
 
 export default function GhausiaCollection() {
-  const { ghausiaLots, addLot, updateLot, deleteLot, parties, getPartyName, payments, addPayment, deletePayment, updatePartyEdit, initialDataLoading } = useApp();
+  const { ghausiaLots, addLot, updateLot, deleteLot, parties, getPartyName, partyEdits, payments, addPayment, deletePayment, updatePartyEdit, initialDataLoading } = useApp();
   const PAGE_SIZE = 10;
   const [modal, setModal] = useState(null);
   const [editing, setEditing] = useState(null);
@@ -223,6 +224,8 @@ export default function GhausiaCollection() {
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
+  const [partyFilter, setPartyFilter] = useState('All');
+  const [dateRange, setDateRange] = useState('all');
   const [lotTableTab, setLotTableTab] = useState('others');
   const [payModal, setPayModal] = useState(false);
   const [payForm, setPayForm] = useState({ type: 'Received', amount: '', party: 'Owner', date: '', note: '', linkedLot: '' });
@@ -267,11 +270,11 @@ export default function GhausiaCollection() {
   };
 
   const promptBillAmountForCompletion = (lot, options = {}) => new Promise((resolve) => {
-    const rawBill = Number(lot.billAmount || 0);
+    const rawBill = Number(options.billAmountOverride ?? lot.billAmount ?? 0);
     completeBillResolveRef.current = resolve;
     setCompleteBillInput(rawBill > 0 ? String(rawBill) : '');
     setCompleteBillError('');
-    setCompleteBillModal({ lot, fromBillable: !!options.fromBillable });
+    setCompleteBillModal({ lot, fromBillable: !!options.fromBillable, billAmountOverride: options.billAmountOverride });
   });
 
   const persistLotCompletedWithPayment = async (lot, billAmount, options = {}) => {
@@ -282,7 +285,7 @@ export default function GhausiaCollection() {
       const lotUpdate = {
         status: 'completed',
         receivedBackDate: today,
-        billAmount,
+        billAmount: fromBillable && partyEdits[lot.id]?.amountChangeNote ? Number(lot.billAmount || 0) : billAmount,
         ...(fromBillable ? { completedFromBillable: false } : {}),
       };
       try {
@@ -323,7 +326,7 @@ export default function GhausiaCollection() {
   };
 
   const handleCompleteFromBillable = async (lot) => {
-    const amount = await promptBillAmountForCompletion(lot, { fromBillable: true });
+    const amount = await promptBillAmountForCompletion(lot, { fromBillable: true, billAmountOverride: getBillableAmount(lot) });
     if (amount == null) return;
     await persistLotCompletedWithPayment(lot, amount, { fromBillable: true });
   };
@@ -403,12 +406,14 @@ export default function GhausiaCollection() {
       const lotLabel = (l.lotNumber || l.lotNo || '').toLowerCase();
       const matchQ = !q || lotLabel.includes(q) || l.designNo.toLowerCase().includes(q) || l.description.toLowerCase().includes(q);
       if (!matchQ) return false;
+      if (partyFilter !== 'All' && String(l.partyId || '') !== String(partyFilter)) return false;
+      if (!isWithinDateRange(latestDateFrom(l, ['updatedAt', 'createdAt', 'receivedBackDate', 'dispatchDate', 'allotDate', 'receivedDate']), dateRange)) return false;
       if (lotTableTab === 'completed') return l.status === 'completed';
       if (l.status === 'completed') return false;
       return statusFilter === 'All' || l.status === statusFilter;
     });
     return [...list].sort(compareLotsNewestFirst);
-  }, [ghausiaLots, search, statusFilter, lotTableTab]);
+  }, [ghausiaLots, search, partyFilter, dateRange, statusFilter, lotTableTab]);
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safeCurrentPage = Math.min(currentPage, totalPages);
   const pageStart = (safeCurrentPage - 1) * PAGE_SIZE;
@@ -416,7 +421,7 @@ export default function GhausiaCollection() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [search, statusFilter, lotTableTab]);
+  }, [search, partyFilter, dateRange, statusFilter, lotTableTab]);
 
   useEffect(() => {
     if (currentPage > totalPages) {
@@ -424,17 +429,32 @@ export default function GhausiaCollection() {
     }
   }, [currentPage, totalPages]);
 
-  const completedLotsCount = useMemo(
-    () => ghausiaLots.filter((l) => l.status === 'completed').length,
-    [ghausiaLots],
+  const visibleLots = useMemo(
+    () => ghausiaLots.filter((l) => {
+      if (partyFilter !== 'All' && String(l.partyId || '') !== String(partyFilter)) return false;
+      return isWithinDateRange(latestDateFrom(l, ['updatedAt', 'createdAt', 'receivedBackDate', 'dispatchDate', 'allotDate', 'receivedDate']), dateRange);
+    }),
+    [ghausiaLots, partyFilter, dateRange],
   );
-  const otherLotsCount = ghausiaLots.length - completedLotsCount;
+
+  const completedLotsCount = useMemo(
+    () => visibleLots.filter((l) => l.status === 'completed').length,
+    [visibleLots],
+  );
+  const otherLotsCount = visibleLots.length - completedLotsCount;
 
   const billable = useMemo(
-    () => [...ghausiaLots.filter((l) => l.status === 'received back')].sort(compareLotsNewestFirst),
-    [ghausiaLots],
+    () => [...visibleLots.filter((l) => l.status === 'received back')].sort(compareLotsNewestFirst),
+    [visibleLots],
   );
-  const billableTotal = billable.reduce((s, l) => s + Number(l.billAmount || 0), 0);
+  const getBillableAmount = (lot) => {
+    const change = partyEdits[lot.id]?.amountChangeNote;
+    if (change) {
+      return Math.max(Number(change.difference || 0), 0);
+    }
+    return Number(lot.billAmount || 0);
+  };
+  const billableTotal = billable.reduce((s, l) => s + getBillableAmount(l), 0);
   const ownerIn = payments.filter(p => p.type === 'Received').reduce((s, p) => s + p.amount, 0);
   const ownerPaidToOwner = payments
     .filter((p) => p.type === 'Paid' && p.party === 'Owner')
@@ -645,7 +665,7 @@ export default function GhausiaCollection() {
         )}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
           {[
-            { label: 'Total Lots', value: ghausiaLots.length, color: '#1e40af' },
+            { label: 'Total Lots', value: visibleLots.length, color: '#1e40af' },
             { label: 'Billable Lots', value: billable.length, color: '#dc2626' },
             { label: 'Billable Amount', value: `₨${billableTotal.toLocaleString()}`, color: '#dc2626' },
             {
@@ -737,7 +757,16 @@ export default function GhausiaCollection() {
                   {l.lotNumber || l.lotNo} / {l.designNo} — <span style={{ color: '#92600A' }}>{l.partyName || '—'}</span>
                 </span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
-                  <strong style={{ color: '#92600A' }}>₨{Number(l.billAmount || 0).toLocaleString()}</strong>
+                  {partyEdits[l.id]?.amountChangeNote ? (
+                    <div style={{ textAlign: 'right', color: '#92600A' }}>
+                      <strong>₨{getBillableAmount(l).toLocaleString()}</strong>
+                      <div style={{ fontSize: 11, color: '#92400e', marginTop: 2 }}>
+                        Previous ₨{Number(partyEdits[l.id].amountChangeNote.previousAmount || 0).toLocaleString()} → Updated ₨{Number(partyEdits[l.id].amountChangeNote.updatedAmount || 0).toLocaleString()}
+                      </div>
+                    </div>
+                  ) : (
+                    <strong style={{ color: '#92600A' }}>₨{Number(l.billAmount || 0).toLocaleString()}</strong>
+                  )}
                   <button
                     type="button"
                     className="responsive-btn"
@@ -763,6 +792,13 @@ export default function GhausiaCollection() {
       {/* Toolbar */}
       <div className="toolbar">
         <SearchBar value={search} onChange={setSearch} placeholder="Search lot no., design, description..." />
+        <select className="form-select" style={{ width: 190 }} value={partyFilter} onChange={e => setPartyFilter(e.target.value)}>
+          <option value="All">All Parties</option>
+          {parties.map(p => (
+            <option key={p.id} value={String(p.id)}>{p.name}</option>
+          ))}
+        </select>
+        <DateRangeSelect value={dateRange} onChange={setDateRange} />
         {lotTableTab === 'others' ? (
           <select className="form-select" style={{ width: 160 }} value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
             <option value="All">All Statuses</option>
@@ -931,7 +967,7 @@ export default function GhausiaCollection() {
       {completeBillModal && (() => {
         const lot = completeBillModal.lot;
         const fromBillable = !!completeBillModal.fromBillable;
-        const rawBill = Number(lot.billAmount || 0);
+        const rawBill = Number(completeBillModal.billAmountOverride ?? lot.billAmount ?? 0);
         const confirmAmt = Number(completeBillInput);
         const amountForOwnerCheck = (!Number.isNaN(confirmAmt) && confirmAmt > 0 ? confirmAmt : rawBill);
         const amountBill = rawBill.toLocaleString();
@@ -1035,12 +1071,14 @@ export default function GhausiaCollection() {
             </FormGroup>
             <FormGroup label={payForm.type === 'Received' ? 'Received From' : 'Paid To *'}>
               {payForm.type === 'Received' ? (
-                <input
-                  className="form-input"
+                <select
+                  className="form-select"
                   value={payForm.party}
                   onChange={e => setPayForm(f => ({ ...f, party: e.target.value }))}
-                  placeholder="Owner name"
-                />
+                >
+                  <option value="Owner">Owner</option>
+                  {parties.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
+                </select>
               ) : (
                 <>
                   <select

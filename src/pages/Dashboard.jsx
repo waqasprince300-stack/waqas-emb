@@ -1,13 +1,36 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useApp } from '../context/AppContext';
+import { useAuth } from '../context/AuthContext';
 import { StatusBadge } from '../components/UI';
 import LoaderDashboard from '../components/LoaderDashboard';
+import { DateRangeSelect, isWithinDateRange, latestDateFrom } from '../utils/dateFilters';
 
 const toTitleCase = (s) =>
   String(s || '').split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
 
 export default function Dashboard() {
   const { ghausiaLots, partyEdits, payments, getPartyName, parties, initialDataLoading } = useApp();
+  const { isParty, user } = useAuth();
+  const [dateRange, setDateRange] = useState('all');
+  const partyUserId = String(user?.partyId || '');
+
+  const scopedLots = useMemo(() => {
+    const lots = isParty && partyUserId
+      ? ghausiaLots.filter((lot) => String(lot.partyId || '') === partyUserId)
+      : ghausiaLots;
+    return lots.filter((lot) => isWithinDateRange(
+      latestDateFrom(lot, ['updatedAt', 'createdAt', 'receivedBackDate', 'dispatchDate', 'allotDate', 'receivedDate']),
+      dateRange,
+    ));
+  }, [ghausiaLots, isParty, partyUserId, dateRange]);
+
+  const scopedPayments = useMemo(() => {
+    const partyName = String(user?.partyName || '').trim();
+    const list = isParty && partyName
+      ? payments.filter((payment) => String(payment.party || '').trim() === partyName)
+      : payments;
+    return list.filter((payment) => isWithinDateRange(payment.updatedAt || payment.date, dateRange));
+  }, [payments, isParty, user?.partyName, dateRange]);
 
   if (initialDataLoading) {
     return (
@@ -18,15 +41,15 @@ export default function Dashboard() {
   }
 
   // Lots use lowercase status: 'pending', 'dispatched', 'received back', 'completed'
-  const byStatus = (s) => ghausiaLots.filter(l => l.status === s).length;
+  const byStatus = (s) => scopedLots.filter(l => l.status === s).length;
 
-  const billable = ghausiaLots.filter(l => l.status === 'received back');
+  const billable = scopedLots.filter(l => l.status === 'received back');
   const billableTotal = billable.reduce((s, l) => s + Number(l.billAmount || 0), 0);
-  const completedTotal = ghausiaLots.filter(l => l.status === 'completed').reduce((s, l) => s + Number(l.billAmount || 0), 0);
-  const totalLotValue = ghausiaLots.reduce((s, l) => s + Number(l.billAmount || 0), 0);
+  const completedTotal = scopedLots.filter(l => l.status === 'completed').reduce((s, l) => s + Number(l.billAmount || 0), 0);
+  const totalLotValue = scopedLots.reduce((s, l) => s + Number(l.billAmount || 0), 0);
 
-  const ownerIn = payments.filter(p => p.type === 'Received').reduce((s, p) => s + Number(p.amount || 0), 0);
-  const partyOut = payments.filter(p => p.type === 'Paid').reduce((s, p) => s + Number(p.amount || 0), 0);
+  const ownerIn = scopedPayments.filter(p => p.type === 'Received').reduce((s, p) => s + Number(p.amount || 0), 0);
+  const partyOut = scopedPayments.filter(p => p.type === 'Paid').reduce((s, p) => s + Number(p.amount || 0), 0);
   const balance = ownerIn - partyOut;
 
   /** Sort lots by recency (newest first) using modification date, then created date, then ID */
@@ -52,10 +75,10 @@ export default function Dashboard() {
     return String(b.id || '').localeCompare(String(a.id || ''));
   }
 
-  const recentLots = [...ghausiaLots].sort(compareLotsNewestFirst).slice(0, 12);
+  const recentLots = [...scopedLots].sort(compareLotsNewestFirst).slice(0, 12);
 
   const partyStats = parties.map(p => {
-    const lots = ghausiaLots.filter(l => String(l.partyId ?? '') === String(p.id ?? ''));
+    const lots = scopedLots.filter(l => String(l.partyId ?? '') === String(p.id ?? ''));
     return {
       name: p.name,
       total: lots.length,
@@ -68,7 +91,7 @@ export default function Dashboard() {
   const maxVal = Math.max(...partyStats.map(p => p.value), 1);
 
   const statCards = [
-    { label: 'Total Lots',     value: ghausiaLots.length,       color: '#1e40af', sub: 'All assigned lots' },
+    { label: 'Total Lots',     value: scopedLots.length,       color: '#1e40af', sub: 'All assigned lots' },
     { label: 'Pending',        value: byStatus('pending'),       color: '#d97706', sub: 'Awaiting dispatch' },
     { label: 'Dispatched',     value: byStatus('dispatched'),    color: '#0284c7', sub: 'Currently with party' },
     { label: 'Received Back',  value: byStatus('received back'), color: '#dc2626', sub: 'Ready to bill owner' },
@@ -77,7 +100,7 @@ export default function Dashboard() {
   ];
 
   const paidToNonOwnerParties = useMemo(() => {
-      const sum = payments
+      const sum = scopedPayments
         .filter(
           (p) =>
             p.type === "Paid" && String(p.party || "").toLowerCase() !== "owner",
@@ -85,7 +108,7 @@ export default function Dashboard() {
         .reduce((s, p) => s + p.amount, 0);
       console.log("Sum of Paid payments to non-Owner parties:", sum);
       return sum;
-    }, [payments]);
+    }, [scopedPayments]);
 
   const profit = completedTotal - paidToNonOwnerParties;
 
@@ -105,6 +128,7 @@ export default function Dashboard() {
           <div className="page-title">Dashboard</div>
           <div className="page-subtitle">Overview of all production and financial activity</div>
         </div>
+        <DateRangeSelect value={dateRange} onChange={setDateRange} />
       </div>
 
       {/* Lot Status Cards */}
@@ -146,7 +170,7 @@ export default function Dashboard() {
                 <div style={{ width: 110, fontSize: 13, color: 'var(--text-secondary)', flexShrink: 0 }}>{s.label}</div>
                 <div style={{ flex: 1, background: '#F3F4F6', borderRadius: 6, height: 14, overflow: 'hidden' }}>
                   <div style={{
-                    width: `${ghausiaLots.length ? (s.count / ghausiaLots.length) * 100 : 0}%`,
+                    width: `${scopedLots.length ? (s.count / scopedLots.length) * 100 : 0}%`,
                     background: s.color, height: '100%', borderRadius: 6,
                     transition: 'width 0.6s ease',
                   }} />
@@ -251,7 +275,7 @@ export default function Dashboard() {
       <div className="card">
         <div className="card-header"><span className="card-title">Recent Payments</span></div>
         <div className="card-body" style={{ padding: 0 }}>
-          {payments.length === 0 ? (
+          {scopedPayments.length === 0 ? (
             <p style={{ padding: 20, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>No payments recorded</p>
           ) : (
             <table>
@@ -266,7 +290,7 @@ export default function Dashboard() {
                 </tr>
               </thead>
               <tbody>
-                {[...payments].sort((a, b) => {
+                {[...scopedPayments].sort((a, b) => {
                   const da = new Date(a.date || 0).getTime();
                   const db = new Date(b.date || 0).getTime();
                   if (db !== da) return db - da;

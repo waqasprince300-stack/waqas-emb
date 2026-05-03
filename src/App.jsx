@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Navigate, Routes, Route } from 'react-router-dom';
 import { AppProvider } from './context/AppContext';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import Sidebar from './components/Sidebar';
 import Dashboard from './pages/Dashboard';
 import GhausiaCollection from './pages/GhausiaCollection';
@@ -8,6 +9,8 @@ import PartyLedger from './pages/PartyLedger';
 import Parties from './pages/Parties';
 import Payments from './pages/Payments';
 import RateCalculations from './pages/RateCalculations';
+import Login from './pages/Login';
+import Signup from './pages/Signup';
 
 function Layout({ children, sidebarOpen, setSidebarOpen }) {
   return (
@@ -77,23 +80,100 @@ function Layout({ children, sidebarOpen, setSidebarOpen }) {
   );
 }
 
-export default function App() {
+function RequireAuth({ children, adminOnly = false }) {
+  const { isAuthenticated, isAdmin } = useAuth();
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+
+  if (adminOnly && !isAdmin) {
+    return <Navigate to="/" replace />;
+  }
+
+  return children;
+}
+
+function AppRoutes() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  
+
+  return (
+    <Routes>
+      <Route path="/login" element={<Login />} />
+      <Route path="/signup" element={<Signup />} />
+      <Route
+        path="/"
+        element={(
+          <RequireAuth>
+            <Layout sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen}>
+              <Dashboard />
+            </Layout>
+          </RequireAuth>
+        )}
+      />
+      <Route
+        path="/ghausia"
+        element={(
+          <RequireAuth adminOnly>
+            <Layout sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen}>
+              <GhausiaCollection />
+            </Layout>
+          </RequireAuth>
+        )}
+      />
+      <Route
+        path="/party-ledger"
+        element={(
+          <RequireAuth>
+            <Layout sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen}>
+              <PartyLedger />
+            </Layout>
+          </RequireAuth>
+        )}
+      />
+      <Route
+        path="/parties"
+        element={(
+          <RequireAuth adminOnly>
+            <Layout sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen}>
+              <Parties />
+            </Layout>
+          </RequireAuth>
+        )}
+      />
+      <Route
+        path="/payments"
+        element={(
+          <RequireAuth>
+            <Layout sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen}>
+              <Payments />
+            </Layout>
+          </RequireAuth>
+        )}
+      />
+      <Route
+        path="/rate-calculations"
+        element={(
+          <RequireAuth adminOnly>
+            <Layout sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen}>
+              <RateCalculations />
+            </Layout>
+          </RequireAuth>
+        )}
+      />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  );
+}
+
+export default function App() {
   return (
     <AppProvider>
-      <BrowserRouter>
-        <Layout sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen}>
-          <Routes>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/ghausia" element={<GhausiaCollection />} />
-            <Route path="/party-ledger" element={<PartyLedger />} />
-            <Route path="/parties" element={<Parties />} />
-            <Route path="/payments" element={<Payments />} />
-            <Route path="/rate-calculations" element={<RateCalculations />} />
-          </Routes>
-        </Layout>
-      </BrowserRouter>
+      <AuthProvider>
+        <BrowserRouter>
+          <AppRoutes />
+        </BrowserRouter>
+      </AuthProvider>
     </AppProvider>
   );
 }

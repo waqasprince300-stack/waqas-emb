@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from "react";
 import Swal from "sweetalert2";
 import { useApp } from "../context/AppContext";
+import { useAuth } from "../context/AuthContext";
 import { Modal, FormGroup, EmptyState } from "../components/UI";
 import Loader from "../components/Loader";
 import LoaderDashboard from "../components/LoaderDashboard";
@@ -42,6 +43,7 @@ export default function Payments() {
     parties,
     initialDataLoading,
   } = useApp();
+  const { isAdmin, isParty, user } = useAuth();
   const PAGE_SIZE = 10;
   const [modal, setModal] = useState(false);
   const [typeFilter, setTypeFilter] = useState("All");
@@ -57,9 +59,22 @@ export default function Payments() {
   const [paymentSaving, setPaymentSaving] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
 
+  const visiblePayments = useMemo(() => {
+    if (!isParty) return payments;
+    const partyName = String(user?.partyName || "").trim();
+    return payments.filter((p) => String(p.party || "").trim() === partyName);
+  }, [payments, isParty, user?.partyName]);
+
   const filtered = useMemo(
-    () => payments.filter((p) => typeFilter === "All" || p.type === typeFilter),
-    [payments, typeFilter],
+    () =>
+      visiblePayments.filter((p) => {
+        if (typeFilter === "All") return true;
+        if (typeFilter === "Bill") {
+          return p.type === "Paid" && String(p.party || "").toLowerCase() === "owner";
+        }
+        return p.type === typeFilter;
+      }),
+    [visiblePayments, typeFilter],
   );
   const sortedFiltered = useMemo(
     () =>
@@ -93,21 +108,21 @@ export default function Payments() {
   const usedReceivedLotKeys = useMemo(
     () =>
       new Set(
-        payments
+        visiblePayments
           .filter((p) => p.type === "Received" && p.linkedLot)
           .map((p) => normalizeLotKey(p.linkedLot)),
       ),
-    [payments],
+    [visiblePayments],
   );
 
   const usedPaidLotKeys = useMemo(
     () =>
       new Set(
-        payments
+        visiblePayments
           .filter((p) => p.type === "Paid" && p.linkedLot)
           .map((p) => normalizeLotKey(p.linkedLot)),
       ),
-    [payments],
+    [visiblePayments],
   );
 
   const linkedLotOptions = useMemo(() => {
@@ -145,7 +160,7 @@ export default function Payments() {
   ]);
 
   const paidToNonOwnerParties = useMemo(() => {
-    const sum = payments
+    const sum = visiblePayments
       .filter(
         (p) =>
           p.type === "Paid" && String(p.party || "").toLowerCase() !== "owner",
@@ -153,11 +168,11 @@ export default function Payments() {
       .reduce((s, p) => s + p.amount, 0);
     console.log("Sum of Paid payments to non-Owner parties:", sum);
     return sum;
-  }, [payments]);
-  const ownerIn = payments
+  }, [visiblePayments]);
+  const ownerIn = visiblePayments
     .filter((p) => p.type === "Received")
     .reduce((s, p) => s + p.amount, 0);
-  const partyOut = payments
+  const partyOut = visiblePayments
     .filter((p) => p.type === "Paid")
     .reduce((s, p) => s + p.amount, 0);
   const balance = ownerIn - paidToNonOwnerParties;
@@ -170,7 +185,7 @@ export default function Payments() {
       newErrors.party = "Please select a party";
     if (form.linkedLot) {
       const key = normalizeLotKey(form.linkedLot);
-      const dup = payments.some(
+      const dup = visiblePayments.some(
         (p) =>
           p.type === form.type &&
           p.linkedLot &&
@@ -211,6 +226,7 @@ export default function Payments() {
   };
 
   const handleDelete = async (id) => {
+    if (!isAdmin) return;
     const result = await Swal.fire({
       title: "Delete Payment?",
       text: "This action cannot be undone.",
@@ -263,7 +279,7 @@ export default function Payments() {
             Track all money received from owner and paid to parties
           </div>
         </div>
-        <button className="btn btn-success" onClick={() => setModal(true)}>
+        {isAdmin && <button className="btn btn-success" onClick={() => setModal(true)}>
           <svg
             width="15"
             height="15"
@@ -276,7 +292,7 @@ export default function Payments() {
             <line x1="5" y1="12" x2="19" y2="12" />
           </svg>
           Record Payment
-        </button>
+        </button>}
       </div>
 
       {/* Summary */}
@@ -310,7 +326,7 @@ export default function Payments() {
           },
           {
             label: "Total Transactions",
-            value: payments.length,
+            value: visiblePayments.length,
             color: "#1e40af",
             isCount: true,
           },
@@ -363,7 +379,7 @@ export default function Payments() {
       </div>
 
       {/* Balance visual */}
-      {payments.length > 0 && (
+      {/* {visiblePayments.length > 0 && (
         <div
           style={{
             background: "#fff",
@@ -470,7 +486,7 @@ export default function Payments() {
             </div>
           </div>
         </div>
-      )}
+      )} */}
 
       {/* Filter */}
       <div className="toolbar">
@@ -483,6 +499,7 @@ export default function Payments() {
           <option value="All">All Types</option>
           <option>Received</option>
           <option>Paid</option>
+          <option>Bill</option>
         </select>
         <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>
           {filtered.length} records
@@ -579,6 +596,8 @@ export default function Payments() {
                         className="btn-icon"
                         onClick={() => handleDelete(p.id)}
                         title="Delete payment"
+                        disabled={!isAdmin}
+                        style={!isAdmin ? { opacity: 0.45, cursor: "not-allowed" } : undefined}
                       >
                         <svg
                           width="14"
@@ -699,14 +718,20 @@ export default function Payments() {
               label={form.type === "Received" ? "Received From" : "Paid To *"}
             >
               {form.type === "Received" ? (
-                <input
-                  className="form-input"
+                <select
+                  className="form-select"
                   value={form.party}
                   onChange={(e) =>
                     setForm((f) => ({ ...f, party: e.target.value }))
                   }
-                  placeholder="Owner name"
-                />
+                >
+                  <option value="Owner">Owner</option>
+                  {parties.map((p) => (
+                    <option key={p.id} value={p.name}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
               ) : (
                 <>
                   <select

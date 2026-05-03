@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { Modal, FormGroup, SearchBar, EmptyState, ConfirmDialog } from '../components/UI';
 import Loader from '../components/Loader';
 import LoaderDashboard from '../components/LoaderDashboard';
+import { DateRangeSelect, isWithinDateRange, latestDateFrom } from '../utils/dateFilters';
 
 function toPartyFormFields(initial) {
   if (!initial) return { name: '', phone: '', address: '' };
@@ -80,8 +81,22 @@ export default function Parties() {
   const [partySaving, setPartySaving] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [search, setSearch] = useState('');
+  const [dateRange, setDateRange] = useState('all');
   const [transactionParty, setTransactionParty] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
+
+  const rangedLots = useMemo(
+    () => ghausiaLots.filter((lot) => isWithinDateRange(
+      latestDateFrom(lot, ['updatedAt', 'createdAt', 'receivedBackDate', 'dispatchDate', 'allotDate', 'receivedDate']),
+      dateRange,
+    )),
+    [ghausiaLots, dateRange],
+  );
+
+  const rangedPayments = useMemo(
+    () => payments.filter((payment) => isWithinDateRange(payment.updatedAt || payment.date, dateRange)),
+    [payments, dateRange],
+  );
 
   const filtered = parties.filter(p => {
     const q = search.toLowerCase();
@@ -94,7 +109,7 @@ export default function Parties() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [search]);
+  }, [search, dateRange]);
 
   useEffect(() => {
     if (currentPage > totalPages) {
@@ -117,7 +132,7 @@ export default function Parties() {
 
   const getLotStats = (partyId) => {
     const pid = String(partyId ?? '');
-    const lots = ghausiaLots.filter(l => String(l.partyId ?? '') === pid);
+    const lots = rangedLots.filter(l => String(l.partyId ?? '') === pid);
     const partyName = getPartyName(partyId);
     let activeAmount = 0;
     let completedAmount = 0;
@@ -127,7 +142,7 @@ export default function Parties() {
       else activeAmount += amt;
     }
     const totalPayable = lots.reduce((s, l) => s + lotBillAmount(l), 0);
-    const totalPaid = payments.filter(p => {
+    const totalPaid = rangedPayments.filter(p => {
       if (p.type !== 'Paid') return false;
       if (p.partyId != null && String(p.partyId).trim() !== '') {
         return String(p.partyId) === pid;
@@ -218,13 +233,13 @@ export default function Parties() {
           {
             label: 'Active Parties',
             value: parties.filter(p =>
-              ghausiaLots.some(l =>
+              rangedLots.some(l =>
                 String(l.partyId ?? '') === String(p.id ?? '') && lotStatusKey(l) !== 'completed'
               )
             ).length,
             color: '#d97706',
           },
-          { label: 'Total Lots Assigned', value: ghausiaLots.filter(l => String(l.partyId || '').trim()).length, color: '#7c3aed' },
+          { label: 'Total Lots Assigned', value: rangedLots.filter(l => String(l.partyId || '').trim()).length, color: '#7c3aed' },
           // { label: 'Total Bill Value', value: `₨${ghausiaLots.reduce((s, l) => s + Number(l.billAmount || 0), 0).toLocaleString()}`, color: '#0284c7' },
         ].map(c => (
           <div key={c.label} className="stat-card">
@@ -237,6 +252,7 @@ export default function Parties() {
       {/* Search */}
       <div className="toolbar">
         <SearchBar value={search} onChange={setSearch} placeholder="Search party name, phone, address..." />
+        <DateRangeSelect value={dateRange} onChange={setDateRange} />
       </div>
 
       {/* Cards Grid */}
@@ -382,8 +398,8 @@ export default function Parties() {
         <Modal title={`Transaction History — ${transactionParty.name}`} onClose={() => setTransactionParty(null)}>
           <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
             {(() => {
-              const partyPayments = payments.filter(p => String(p.party || '').trim() === String(transactionParty.name || '').trim());
-              const partyLots = ghausiaLots.filter(l => String(l.partyId ?? '') === String(transactionParty.id ?? transactionParty._id ?? ''));
+              const partyPayments = rangedPayments.filter(p => String(p.party || '').trim() === String(transactionParty.name || '').trim());
+              const partyLots = rangedLots.filter(l => String(l.partyId ?? '') === String(transactionParty.id ?? transactionParty._id ?? ''));
               const transactions = [
                 ...partyPayments.map(p => ({ ...p, rowKind: 'payment' })),
                 ...partyLots.map(l => {
