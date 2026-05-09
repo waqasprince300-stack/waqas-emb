@@ -280,6 +280,9 @@ export default function PartyLedger() {
   };
 
   const getDisplayStatus = (l) => {
+    const ls = String(l.status || "").trim().toLowerCase();
+    if (ls === "pending approval") return "Pending review";
+    if (ls === "rejected") return "Rejected";
     const pe = ledgerPartyEdits[l.id] || {};
     // If overrideStatus explicitly set to Completed, honour it
     if (pe.overrideStatus && pe.overrideStatus.toLowerCase() === "completed")
@@ -343,7 +346,13 @@ export default function PartyLedger() {
   const openEdit = (lot, initialStatus) => {
     const pe = ledgerPartyEdits[lot.id] || {};
     const statusForForm = initialStatus || getDisplayStatus(lot);
-    if (statusForForm === "Completed" && !isAdmin) return;
+    // Party users: block editing rows that are already approved or awaiting review.
+    // Do NOT block opening with initialStatus "Completed" — that is the submit-for-approval flow.
+    if (!isAdmin) {
+      const rowDisplay = getDisplayStatus(lot);
+      if (rowDisplay === "Pending review") return;
+      if (rowDisplay === "Completed") return;
+    }
     const existingComplete =
       formatYmd(pe.completeDate) || formatYmd(lot.receivedBackDate) || "";
     setLedgerFormErrors({});
@@ -435,11 +444,11 @@ export default function PartyLedger() {
           partyBillAmount: Number(editForm.billAmount) || 0,
           receipt: editForm.receipt,
           notes: editForm.notes,
-          overrideStatus: "Completed",
+          overrideStatus: "Pending Approval",
           ...(amountChangeNote ? { amountChangeNote } : {}),
         }, lotWorkspaceOpts(lot));
         const lotUpdates = {
-          status: "received back",
+          status: "pending approval",
           receivedBackDate:
             editForm.completeDate || new Date().toISOString().slice(0, 10),
         };
@@ -484,6 +493,15 @@ export default function PartyLedger() {
       }
 
       setEditingId(null);
+    } catch (e) {
+      const msg =
+        e?.message ||
+        (typeof e === "string" ? e : "Save failed. Please try again.");
+      await Swal.fire({
+        icon: "error",
+        title: "Could not save",
+        text: msg,
+      });
     } finally {
       setLedgerSaving(false);
     }
@@ -743,6 +761,8 @@ export default function PartyLedger() {
           <option value="All">All Statuses</option>
           <option value="Pending">Pending</option>
           <option value="In Progress">In Progress</option>
+          <option value="Pending review">Pending review</option>
+          <option value="Rejected">Rejected</option>
           <option value="Completed">Completed</option>
         </select>
       </div>
@@ -829,23 +849,49 @@ export default function PartyLedger() {
                           >
                             Completed
                           </span>
+                        ) : displayStatus === "Pending review" ? (
+                          <span
+                            style={{
+                              fontSize: 12,
+                              color: "#92400e",
+                              marginTop: 3,
+                              fontWeight: 600,
+                              padding: "2px 8px",
+                              borderRadius: 6,
+                              background: "#FEF3C7",
+                              border: "1px solid #FCD34D",
+                            }}
+                          >
+                            Pending review
+                          </span>
                         ) : (
                           <select
                             className="form-select"
                             style={{
-                              width: 140,
-                              minWidth: 140,
+                              width: 150,
+                              minWidth: 150,
                               fontSize: 12,
                               padding: "5px 8px",
                             }}
-                            value={displayStatus}
+                            value={displayStatus === "Rejected" ? "Rejected" : displayStatus}
                             onChange={(e) =>
                               handleRowStatusChange(l, e.target.value)
                             }
                           >
+                            {displayStatus === "Rejected" && (
+                              <option
+                                value="Rejected"
+                                disabled
+                                style={{ fontWeight: 600, color: "#b91c1c" }}
+                              >
+                                Rejected
+                              </option>
+                            )}
                             <option value="Pending">Pending</option>
                             <option value="In Progress">In Progress</option>
-                            <option value="Completed">Completed</option>
+                            <option value="Completed">
+                              {isParty ? "Submit for admin approval" : "Completed"}
+                            </option>
                           </select>
                         )}
                       </td>
@@ -899,6 +945,19 @@ export default function PartyLedger() {
                       </td>
                       <td>
                         {pe.notes}
+                        {displayStatus === "Rejected" && l.rejectionNote ? (
+                          <div
+                            style={{
+                              fontSize: 12,
+                              color: "#b91c1c",
+                              marginTop: 6,
+                              fontWeight: 600,
+                              lineHeight: 1.4,
+                            }}
+                          >
+                            Admin: {l.rejectionNote}
+                          </div>
+                        ) : null}
                         {pe.amountChangeNote && (
                           <div style={{ fontSize: 11, color: "#92400e", marginTop: 4 }}>
                             Amount changed: ₨{Number(pe.amountChangeNote.previousAmount || 0).toLocaleString()} to ₨{Number(pe.amountChangeNote.updatedAmount || 0).toLocaleString()}
@@ -908,6 +967,8 @@ export default function PartyLedger() {
                       <td>
                         {displayStatus === "Completed" && !isAdmin ? (
                           <span style={{ fontSize: 12, color: "var(--text-muted)" }}>Admin only</span>
+                        ) : displayStatus === "Pending review" && !isAdmin ? (
+                          <span style={{ fontSize: 12, color: "var(--text-muted)" }}>Awaiting admin</span>
                         ) : (
                           <button
                             onClick={() => openEdit(l)}
@@ -1130,7 +1191,7 @@ export default function PartyLedger() {
               >
                 <option value="Pending">Pending</option>
                 <option value="In Progress">In Progress</option>
-                <option value="Completed">Completed</option>
+                <option value="Completed">{isParty ? "Submit for admin approval" : "Completed"}</option>
               </select>
             </FormGroup>
             {editForm.status === "Completed" && (
@@ -1265,9 +1326,8 @@ export default function PartyLedger() {
 
           {editForm.status === "Completed" && (
             <div className="alert alert-warning">
-              <strong>Note:</strong> Marking as Completed will update the
-              Ghausia lot status to "Received Back".
-            </div>
+            <strong>Note:</strong> Submitting completes the ledger entry and sends this lot to the admin for approval. Once approved it becomes billable to the owner (<strong>Received back</strong>). If rejected, you will see the admin&apos;s feedback on this row.
+          </div>
           )}
         </Modal>
       )}

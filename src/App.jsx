@@ -14,6 +14,7 @@ import Signup from './pages/Signup';
 import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
 import UserApprovals from './pages/UserApprovals';
+import ReviewLots from './pages/ReviewLots';
 
 function Layout({ children, sidebarOpen, setSidebarOpen }) {
   return (
@@ -172,6 +173,16 @@ function AppRoutes() {
           <RequireAuth adminOnly>
             <Layout sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen}>
               <UserApprovals />
+            </Layout>
+          </RequireAuth>
+        )}
+      />
+      <Route
+        path="/review-lots"
+        element={(
+          <RequireAuth adminOnly>
+            <Layout sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen}>
+              <ReviewLots />
             </Layout>
           </RequireAuth>
         )}

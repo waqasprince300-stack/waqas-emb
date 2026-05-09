@@ -53,6 +53,7 @@ const normalizeLotData = (lot) => {
     receivedDate: normalizeDateString(lot.receivedDate),
     status: status || 'Pending',
     notes: lot.notes || '',
+    rejectionNote: lot.rejectionNote ? String(lot.rejectionNote).trim() : '',
   };
 };
 
@@ -312,6 +313,60 @@ export function AppProvider({ children }) {
     }
   };
 
+  const mergeLotAcrossCollections = (raw) => {
+    const normalized = normalizeLotData(raw);
+    const idStr = String(normalized.id);
+    const apply = (arr) =>
+      arr.some((x) => String(x.id) === idStr)
+        ? arr.map((x) => (String(x.id) === idStr ? normalized : x))
+        : arr;
+    setGhausiaLots(apply);
+    if (user?.role === 'admin') {
+      setAdminReportingLots(apply);
+    }
+    if (user?.role === 'party') {
+      setPartyCrossLots(apply);
+    }
+    return normalized;
+  };
+
+  const approveLotCompletion = async (lotId, opts = {}) => {
+    const { businessOwnerId } = opts;
+    const raw = await apiService.approveLotCompletion(lotId, businessOwnerId);
+    const normalized = mergeLotAcrossCollections(raw);
+    const idStr = String(lotId);
+    const mergePe = (prev) => ({
+      ...prev,
+      [idStr]: {
+        ...(prev[idStr] || {}),
+        overrideStatus: 'Completed',
+        completeDate: normalized.receivedBackDate || prev[idStr]?.completeDate,
+      },
+    });
+    setPartyEdits(mergePe);
+    setAdminReportingPartyEdits(mergePe);
+    setPartyCrossPartyEdits(mergePe);
+    return normalized;
+  };
+
+  const rejectLotCompletion = async (lotId, rejectionNote, opts = {}) => {
+    const { businessOwnerId } = opts;
+    const raw = await apiService.rejectLotCompletion(lotId, rejectionNote, businessOwnerId);
+    const normalized = mergeLotAcrossCollections(raw);
+    const idStr = String(lotId);
+    const mergePe = (prev) => ({
+      ...prev,
+      [idStr]: {
+        ...(prev[idStr] || {}),
+        overrideStatus: 'Rejected',
+      },
+    });
+    setPartyEdits(mergePe);
+    setAdminReportingPartyEdits(mergePe);
+    setPartyCrossPartyEdits(mergePe);
+    return normalized;
+  };
+
   const updatePartyEdit = async (lotId, data, opts = {}) => {
     const { businessOwnerId } = opts;
     try {
@@ -331,28 +386,13 @@ export function AppProvider({ children }) {
       return normalizedEdit;
     } catch (error) {
       console.error('Error updating party edit:', error);
-      const fallback = { ...data, lotId };
-      setPartyEdits((prev) => ({
-        ...prev,
-        [lotId]: { ...(prev[lotId] || {}), ...fallback },
-      }));
-      if (user?.role === 'admin') {
-        setAdminReportingPartyEdits((prev) => ({
-          ...prev,
-          [lotId]: { ...(prev[lotId] || {}), ...fallback },
-        }));
-      }
-      if (user?.role === 'party') {
-        setPartyCrossPartyEdits((prev) => ({
-          ...prev,
-          [lotId]: { ...(prev[lotId] || {}), ...fallback },
-        }));
-      }
+      throw error;
     }
   };
 
-  const addPayment = async (p) => {
-    const payment = await apiService.createPayment({ ...p, amount: Number(p.amount) });
+  const addPayment = async (p, opts = {}) => {
+    const { businessOwnerId } = opts;
+    const payment = await apiService.createPayment({ ...p, amount: Number(p.amount) }, businessOwnerId);
     setPayments((arr) => [...arr, payment]);
     if (user?.role === 'admin') {
       setAdminReportingPayments((arr) => [...arr, payment]);
@@ -390,6 +430,7 @@ export function AppProvider({ children }) {
     <AppContext.Provider value={{
       parties, addParty, updateParty, deleteParty,
       ghausiaLots, addLot, updateLot, deleteLot,
+      approveLotCompletion, rejectLotCompletion,
       partyEdits, updatePartyEdit,
       payments, addPayment, deletePayment,
       reportingLots, reportingPayments, reportingPartyEdits,

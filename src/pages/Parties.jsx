@@ -51,6 +51,44 @@ function PartyForm({ initial, onSave, onClose, saving }) {
   );
 }
 
+function formatMoney(n) {
+  return `₨${Number(n).toLocaleString()}`;
+}
+
+function dayOrdinal(day) {
+  const v = day % 100;
+  if (v >= 11 && v <= 13) return `${day}th`;
+  switch (day % 10) {
+    case 1:
+      return `${day}st`;
+    case 2:
+      return `${day}nd`;
+    case 3:
+      return `${day}rd`;
+    default:
+      return `${day}th`;
+  }
+}
+
+function formatTxnDateTime(date) {
+  const d = date instanceof Date ? date : new Date(date);
+  if (!d || Number.isNaN(d.getTime())) return '—';
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const t = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+  return `${dayOrdinal(d.getDate())} ${months[d.getMonth()]}, ${t}`;
+}
+
+/** Party payment filter: match getLotStats (partyId preferred, else exact name). */
+function paymentMatchesParty(p, party, getPartyName) {
+  const pid = String(party.id ?? party._id ?? '');
+  const pname = String(getPartyName(pid) || party.name || '').trim();
+  if (p.type !== 'Paid') return false;
+  if (p.partyId != null && String(p.partyId).trim() !== '') {
+    return String(p.partyId) === pid;
+  }
+  return String(p.party || '').trim() === pname;
+}
+
 function PartyStatTile({ label, count, amountStr, accent, borderTint, bgTint }) {
   return (
     <div
@@ -69,7 +107,7 @@ function PartyStatTile({ label, count, amountStr, accent, borderTint, bgTint }) 
       <div style={{ fontSize: 26, fontWeight: 800, color: accent, lineHeight: 1.1 }}>{count}</div>
       <div style={{ fontSize: 13, fontWeight: 600, color: accent, opacity: 0.9 }}>{amountStr}</div>
     </div>
-  );
+  )
 }
 
 export default function Parties() {
@@ -117,12 +155,15 @@ export default function Parties() {
     }
   }, [currentPage, totalPages]);
 
-  /** Align with Party Ledger: "received back" counts as completed for party stats. */
+  /** Align with Party Ledger: exclude pending_review from party "completed" bill stats. */
   const lotStatusKey = (l) => {
+    const ls = String(l.status || '').toLowerCase().trim();
+    if (ls === 'pending approval') return 'pending_approval';
+    if (ls === 'rejected') return 'rejected';
     const pe = reportingPartyEdits[l.id] || {};
     const raw = String(pe.overrideStatus || l.status || '').toLowerCase();
     if (raw === 'received back') return 'completed';
-    return raw;
+    return raw.replace(/\s+/g, '_').replace('/', '_');
   };
 
   const lotBillAmount = (l) => {
@@ -208,8 +249,6 @@ export default function Parties() {
     ['#EFF6FF', '#1e40af'], ['#F0FDF4', '#15803d'], ['#FFF7ED', '#c2410c'],
     ['#F5F3FF', '#6d28d9'], ['#FEF2F2', '#991B1B'], ['#F0F9FF', '#075985'],
   ];
-
-  const formatMoney = (n) => `₨${Number(n).toLocaleString()}`;
 
   return (
     <div>
@@ -336,7 +375,7 @@ export default function Parties() {
                       <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Paid</div>
                       <div style={{ fontSize: 15, fontWeight: 800, color: '#047857', marginTop: 6, lineHeight: 1.2, wordBreak: 'break-word' }}>{formatMoney(stats.paid)}</div>
                     </div>
-                    <div style={{ background:`${stats.remaining >= 0 ? '#FEF2F2': 'rgb(189, 248, 212)' }`, border: '1px solidrgb(202, 254, 223)', borderRadius: 12, padding: '10px 12px', minWidth: 0 }}>
+                    <div style={{ background: stats.remaining >= 0 ? '#FEF2F2' : '#d1fae5', border: stats.remaining >= 0 ? '1px solid #FECACA' : '1px solid #A7F3D0', borderRadius: 12, padding: '10px 12px', minWidth: 0 }}>
                       <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{stats.remaining >= 0 ? 'Remaining' : 'Advance'}</div>
                       <div style={{ fontSize: 15, fontWeight: 800, color: stats.remaining >= 0 ? '#b91c1c' : '#047857', marginTop: 6, lineHeight: 1.2, wordBreak: 'break-word' }}>{formatMoney(stats.remaining)}</div>
                     </div>
@@ -395,75 +434,181 @@ export default function Parties() {
       )}
 
       {transactionParty && (
-        <Modal title={`Transaction History — ${transactionParty.name}`} onClose={() => setTransactionParty(null)}>
-          <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
+        <Modal wide title={`${transactionParty.name} — Ledger`} onClose={() => setTransactionParty(null)}>
+          <div style={{ maxHeight: 'min(70vh, 560px)', overflowY: 'auto' }}>
             {(() => {
-              const partyPayments = rangedPayments.filter(p => String(p.party || '').trim() === String(transactionParty.name || '').trim());
-              const partyLots = rangedLots.filter(l => String(l.partyId ?? '') === String(transactionParty.id ?? transactionParty._id ?? ''));
-              const transactions = [
-                ...partyPayments.map(p => ({ ...p, rowKind: 'payment' })),
-                ...partyLots.map(l => {
-                  const pe = reportingPartyEdits[l.id] || {};
-                  return {
-                    id: l.id,
-                    date: l.allotDate,
-                    rowKind: 'lot',
-                    lotNo: l.lotNo,
-                    designNo: l.designNo,
-                    amount: pe.partyBillAmount !== undefined ? pe.partyBillAmount : l.billAmount,
-                    status: pe.overrideStatus || l.status,
-                  };
-                }),
-              ].sort((a, b) => new Date(b.date) - new Date(a.date));
+              const pid = String(transactionParty.id ?? transactionParty._id ?? '');
+              const partyPayments = rangedPayments.filter((p) => paymentMatchesParty(p, transactionParty, getPartyName));
+              const partyLots = rangedLots.filter(l => String(l.partyId ?? '') === pid);
 
-              if (transactions.length === 0) {
-                return <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>No transactions found</div>;
+              const raw = [];
+
+              partyPayments.forEach((p) => {
+                const when = latestDateFrom(p, ['updatedAt', 'date']);
+                const sortMs = when ? when.getTime() : 0;
+                raw.push({
+                  rowKey: `paid-${p.id || p._id}`,
+                  kind: 'paid',
+                  id: p.id || p._id,
+                  sortMs,
+                  whenDate: when,
+                  note: (p.note || '').trim(),
+                  linkedLot: (p.linkedLot || '').trim(),
+                  paymentType: p.type || 'Paid',
+                  diye: Number(p.amount || 0),
+                  liye: 0,
+                });
+              });
+
+              partyLots.forEach((l) => {
+                const pe = reportingPartyEdits[l.id] || {};
+                const bill = Number(pe.partyBillAmount !== undefined ? pe.partyBillAmount : (l.billAmount || 0));
+                const when = latestDateFrom(l, ['updatedAt', 'createdAt', 'receivedBackDate', 'dispatchDate', 'allotDate', 'receivedDate']);
+                const sortMs = when ? when.getTime() : 0;
+                raw.push({
+                  rowKey: `lot-${l.id}`,
+                  kind: 'lot',
+                  id: l.id,
+                  sortMs,
+                  whenDate: when,
+                  lotNo: l.lotNo || l.lotNumber,
+                  designNo: l.designNo,
+                  status: pe.overrideStatus || l.status,
+                  diye: 0,
+                  liye: bill,
+                });
+              });
+
+              raw.sort((a, b) => {
+                const d = (a.sortMs || 0) - (b.sortMs || 0);
+                if (d !== 0) return d;
+                return String(a.rowKey).localeCompare(String(b.rowKey));
+              });
+
+              /** Net amount still owed to this party after each row is applied (lots add, payments subtract). */
+              let owedRunning = 0;
+              const withBalance = [];
+              for (const row of raw) {
+                owedRunning += row.liye - row.diye;
+                withBalance.push({ ...row, balanceAfter: owedRunning });
+              }
+
+              const displayRows = [...withBalance].reverse();
+              const netBalance = withBalance.length ? withBalance[withBalance.length - 1].balanceAfter : 0;
+
+              if (!displayRows.length) {
+                return <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>No transactions in this period</div>;
               }
 
               return (
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                  <thead>
-                    <tr style={{ background: '#F8FAFC', borderBottom: '1px solid var(--border)' }}>
-                      <th style={{ padding: '8px 12px', textAlign: 'left', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>Date</th>
-                      <th style={{ padding: '8px 12px', textAlign: 'left', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>Type</th>
-                      <th style={{ padding: '8px 12px', textAlign: 'left', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>Details</th>
-                      <th style={{ padding: '8px 12px', textAlign: 'right', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>Amount</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {transactions.map((t) => (
-                      <tr key={`${t.rowKind}-${t.id}`} style={{ borderBottom: '1px solid #F3F4F6' }}>
-                        <td style={{ padding: '8px 12px', fontSize: 13 }}>{t.date}</td>
-                        <td style={{ padding: '8px 12px' }}>
-                          <span style={{
-                            background: t.rowKind === 'payment' ? '#F0FDF4' : '#EFF6FF',
-                            color: t.rowKind === 'payment' ? '#166534' : '#1e40af',
-                            border: `1px solid ${t.rowKind === 'payment' ? '#BBF7D0' : '#BFDBFE'}`,
-                            borderRadius: 12, padding: '2px 8px', fontSize: 11, fontWeight: 600,
-                          }}>
-                            {t.rowKind === 'payment' ? 'Payment' : 'Lot'}
-                          </span>
-                        </td>
-                        <td style={{ padding: '8px 12px', fontSize: 13 }}>
-                          {t.rowKind === 'payment' ? (
-                            <div>
-                              <div style={{ fontWeight: 500 }}>{t.note || 'Payment'}</div>
-                              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t.type || 'Paid'} • {t.linkedLot || 'No lot'}</div>
+                <div style={{ padding: '0 0 8px' }}>
+                  <div style={{
+                    background: '#FFFFFF',
+                    border: '1px solid #FECACA',
+                    borderRadius: 12,
+                    padding: '14px 16px',
+                    marginBottom: 16,
+                  }}>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Net balance</div>
+                    <div style={{
+                      fontSize: 26,
+                      fontWeight: 800,
+                      color: netBalance >= 0 ? '#b91c1c' : '#047857',
+                      marginTop: 4,
+                    }}>
+                      {formatMoney(netBalance)}
+                    </div>
+                    <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4 }}>
+                      {netBalance > 0
+                        ? 'You owe this party (work billed − paid out).'
+                        : netBalance < 0
+                          ? 'Paid more than billed — advance with this party.'
+                          : 'Settled up in this period.'}
+                    </div>
+                  </div>
+
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'minmax(120px, 1fr) minmax(88px, 0.95fr) minmax(88px, 0.95fr)',
+                    gap: 8,
+                    padding: '8px 10px',
+                    background: '#F8FAFC',
+                    borderRadius: 8,
+                    marginBottom: 6,
+                    fontSize: 11,
+                    fontWeight: 700,
+                    color: 'var(--text-secondary)',
+                    borderBottom: '1px solid var(--border)',
+                    alignItems: 'end',
+                  }}>
+                    <div>Date</div>
+                    <div style={{ color: '#b91c1c', textAlign: 'center' }}>
+                      Maine diye
+                      <div style={{ fontWeight: 500, opacity: 0.85 }}>(Paid out)</div>
+                    </div>
+                    <div style={{ color: '#047857', textAlign: 'center' }}>
+                      Maine liye
+                      <div style={{ fontWeight: 500, opacity: 0.85 }}>(Work billed)</div>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {displayRows.map((t) => {
+                      const when = t.whenDate && !Number.isNaN(new Date(t.whenDate).getTime())
+                        ? new Date(t.whenDate)
+                        : null;
+                      const subtitle = t.kind === 'paid'
+                        ? [t.note || 'Payment', t.linkedLot ? `Lot: ${t.linkedLot}` : ''].filter(Boolean).join(' · ') || `${t.paymentType}`
+                        : `Lot ${t.lotNo || '—'} / ${t.designNo || '—'} · ${t.status || ''}`;
+                      const diye = t.diye > 0 ? t.diye : null;
+                      const liye = t.liye > 0 ? t.liye : null;
+
+                      return (
+                        <div
+                          key={t.rowKey}
+                          style={{
+                            display: 'grid',
+                            gridTemplateColumns: 'minmax(120px, 1fr) minmax(88px, 0.95fr) minmax(88px, 0.95fr)',
+                            gap: 8,
+                            alignItems: 'stretch',
+                            padding: '10px 10px',
+                            borderBottom: '1px solid #F3F4F6',
+                            fontSize: 13,
+                          }}
+                        >
+                          <div>
+                            <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{when ? formatTxnDateTime(when) : '—'}</div>
+                            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4, lineHeight: 1.35 }}>{subtitle}</div>
+                            <div style={{
+                              display: 'inline-block',
+                              marginTop: 8,
+                              fontSize: 11,
+                              fontWeight: 700,
+                              padding: '3px 8px',
+                              borderRadius: 999,
+                              background: '#FCE7F3',
+                              color: '#be185d',
+                              border: '1px solid #FBCFE8',
+                            }}
+                            >
+                              Bal. {formatMoney(t.balanceAfter)}
                             </div>
-                          ) : (
-                            <div>
-                              <div style={{ fontWeight: 500 }}>{t.lotNo} / {t.designNo}</div>
-                              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Status: {t.status}</div>
-                            </div>
-                          )}
-                        </td>
-                        <td style={{ padding: '8px 12px', textAlign: 'right', fontSize: 13, fontWeight: 600, color: t.rowKind === 'payment' ? '#dc2626' : '#1e40af' }}>
-                          {t.rowKind === 'payment' ? '-' : ''}₨{Number(t.amount || 0).toLocaleString()}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                          </div>
+                          <div style={{ textAlign: 'center', fontWeight: 800, alignSelf: 'center', fontVariantNumeric: 'tabular-nums', color: diye ? '#b91c1c' : 'var(--text-muted)' }}>
+                            {diye ? formatMoney(diye) : '—'}
+                          </div>
+                          <div style={{ textAlign: 'center', fontWeight: 800, alignSelf: 'center', fontVariantNumeric: 'tabular-nums', color: liye ? '#047857' : 'var(--text-muted)' }}>
+                            {liye ? formatMoney(liye) : '—'}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <p style={{ margin: '14px 0 0', fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                    Newest entries first; running balance is after each transaction in date order ({dateRange === 'all' ? 'all time' : `${dateRange}`} filter applies).
+                  </p>
+                </div>
               );
             })()}
           </div>

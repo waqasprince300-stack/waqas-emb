@@ -234,6 +234,20 @@ class ApiService {
     }, { businessOwnerId });
   }
 
+  async approveLotCompletion(id, businessOwnerId) {
+    return this.request(`/ghausiaLots/${id}/approve-completion`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    }, { businessOwnerId });
+  }
+
+  async rejectLotCompletion(id, rejectionNote, businessOwnerId) {
+    return this.request(`/ghausiaLots/${id}/reject-completion`, {
+      method: 'POST',
+      body: JSON.stringify({ rejectionNote }),
+    }, { businessOwnerId });
+  }
+
   async deleteGhausiaLot(id, businessOwnerId) {
     return this.request(`/ghausiaLots/${id}`, {
       method: 'DELETE',
@@ -297,11 +311,11 @@ class ApiService {
     return this.request(`/payments?partyId=${partyId}`);
   }
 
-  async createPayment(data) {
+  async createPayment(data, businessOwnerId) {
     return this.request('/payments', {
       method: 'POST',
       body: JSON.stringify(data),
-    });
+    }, { businessOwnerId });
   }
 
   async updatePayment(id, data) {

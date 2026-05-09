@@ -8,29 +8,120 @@ import { DateRangeSelect, isWithinDateRange, latestDateFrom } from '../utils/dat
 const toTitleCase = (s) =>
   String(s || '').split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
 
+function lotBelongsToPartyUser(lot, partyId, partyName) {
+  const pid = String(partyId || '').trim();
+  const pname = String(partyName || '').trim();
+  if (!pid && !pname) return false;
+  if (pid && String(lot.partyId || '').trim() === pid) return true;
+  if (pname && String(lot.partyName || '').trim() === pname) return true;
+  return false;
+}
+
+function paymentBelongsToPartyUser(payment, partyId, partyName) {
+  const pid = String(partyId || '').trim();
+  const pname = String(partyName || '').trim();
+  if (payment.partyId != null && String(payment.partyId).trim() !== '') {
+    return String(payment.partyId) === pid;
+  }
+  return String(payment.party || '').trim() === pname;
+}
+
 export default function Dashboard() {
-  const { reportingLots, reportingPayments, getPartyName, parties, initialDataLoading } = useApp();
+  const {
+    reportingLots,
+    reportingPayments,
+    parties,
+    initialDataLoading,
+    partyCrossLots,
+    partyCrossPayments,
+    payments,
+  } = useApp();
   const { isParty, user } = useAuth();
   const [dateRange, setDateRange] = useState('all');
   const partyUserId = String(user?.partyId || '');
+  const partyNameTrim = String(user?.partyName || '').trim();
+
+  const lotsPool = useMemo(() => {
+    if (!isParty) return reportingLots;
+    return partyCrossLots.length ? partyCrossLots : reportingLots;
+  }, [isParty, partyCrossLots, reportingLots]);
+
+  const paymentsPool = useMemo(() => {
+    if (!isParty) return reportingPayments;
+    return partyCrossPayments.length ? partyCrossPayments : payments;
+  }, [isParty, partyCrossPayments, reportingPayments, payments]);
 
   const scopedLots = useMemo(() => {
-    const lots = isParty && partyUserId
-      ? reportingLots.filter((lot) => String(lot.partyId || '') === partyUserId)
-      : reportingLots;
+    const lots =
+      isParty && (partyUserId || partyNameTrim)
+        ? lotsPool.filter((lot) =>
+            lotBelongsToPartyUser(lot, partyUserId, partyNameTrim),
+          )
+        : lotsPool;
     return lots.filter((lot) => isWithinDateRange(
       latestDateFrom(lot, ['updatedAt', 'createdAt', 'receivedBackDate', 'dispatchDate', 'allotDate', 'receivedDate']),
       dateRange,
     ));
-  }, [reportingLots, isParty, partyUserId, dateRange]);
+  }, [lotsPool, isParty, partyUserId, partyNameTrim, dateRange]);
 
   const scopedPayments = useMemo(() => {
-    const partyName = String(user?.partyName || '').trim();
-    const list = isParty && partyName
-      ? reportingPayments.filter((payment) => String(payment.party || '').trim() === partyName)
-      : reportingPayments;
+    const list =
+      isParty && (partyUserId || partyNameTrim)
+        ? paymentsPool.filter((p) =>
+            paymentBelongsToPartyUser(p, partyUserId, partyNameTrim),
+          )
+        : paymentsPool;
     return list.filter((payment) => isWithinDateRange(payment.updatedAt || payment.date, dateRange));
-  }, [reportingPayments, isParty, user?.partyName, dateRange]);
+  }, [paymentsPool, isParty, partyUserId, partyNameTrim, dateRange]);
+
+  /** Minimal party dashboard stats (counts + paid total); null for admin views */
+  const partyMiniStatsCards = useMemo(() => {
+    if (!isParty) return null;
+    const by = (s) => scopedLots.filter((l) => l.status === s).length;
+    const paidTotal = scopedPayments
+      .filter((p) => p.type === 'Paid')
+      .reduce((s, p) => s + Number(p.amount || 0), 0);
+    const partyApprovedDone = by('received back') + by('completed');
+    const partyNeedsAttention = by('pending approval') + by('rejected');
+    const partyInProgressRough =
+      by('pending') +
+      by('dispatched') +
+      scopedLots.filter((l) =>
+        String(l.status || '').toLowerCase().trim().includes('in progress'),
+      ).length;
+    return [
+      {
+        label: 'My lots',
+        value: scopedLots.length,
+        color: '#1e40af',
+        sub: 'In selected period',
+      },
+      {
+        label: 'Active work',
+        value: partyInProgressRough,
+        color: '#0284c7',
+        sub: 'Pending + dispatched + in progress',
+      },
+      {
+        label: 'Needs review / rework',
+        value: partyNeedsAttention,
+        color: '#ca8a04',
+        sub: 'Awaiting approval + rejected',
+      },
+      {
+        label: 'Approved finished',
+        value: partyApprovedDone,
+        color: '#15803d',
+        sub: 'Received back + completed',
+      },
+      {
+        label: 'Paid to you',
+        display: `₨${paidTotal.toLocaleString()}`,
+        color: '#166534',
+        sub: 'From business (payments marked Paid)',
+      },
+    ];
+  }, [isParty, scopedLots, scopedPayments]);
 
   const paidToNonOwnerParties = useMemo(() => {
     return scopedPayments
@@ -97,12 +188,12 @@ export default function Dashboard() {
     };
   }).filter(p => p.total > 0);
 
-  const maxVal = Math.max(...partyStats.map(p => p.value), 1);
-
   const statCards = [
     { label: 'Total Lots',     value: scopedLots.length,       color: '#1e40af', sub: 'All assigned lots' },
     { label: 'Pending',        value: byStatus('pending'),       color: '#d97706', sub: 'Awaiting dispatch' },
     { label: 'Dispatched',     value: byStatus('dispatched'),    color: '#0284c7', sub: 'Currently with party' },
+    { label: 'Awaiting approval', value: byStatus('pending approval'), color: '#ca8a04', sub: 'Party submitted completion' },
+    { label: 'Rejected',       value: byStatus('rejected'),      color: '#b91c1c', sub: 'Needs rework' },
     { label: 'Received Back',  value: byStatus('received back'), color: '#dc2626', sub: 'Ready to bill owner' },
     { label: 'Completed',      value: byStatus('completed'),     color: '#15803d', sub: 'Fully done' },
     { label: 'Active Parties', value: partyStats.length,         color: '#7c3aed', sub: 'With assigned lots' },
@@ -124,11 +215,31 @@ export default function Dashboard() {
       <div className="page-header">
         <div>
           <div className="page-title">Dashboard</div>
-          <div className="page-subtitle">Overview of all production and financial activity</div>
+          <div className="page-subtitle">
+            {isParty
+              ? `Welcome back${partyNameTrim ? `, ${partyNameTrim}` : ''}. Summary of your lots.`
+              : 'Overview of all production and financial activity'}
+          </div>
         </div>
         <DateRangeSelect value={dateRange} onChange={setDateRange} />
       </div>
 
+      {partyMiniStatsCards?.length ? (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 14, marginBottom: 28 }}>
+          {partyMiniStatsCards.map((c) => (
+            <div key={c.label} className="stat-card">
+              <div className="stat-label">{c.label}</div>
+              <div className="stat-value" style={{ color: c.color }}>
+                {'display' in c ? c.display : c.value}
+              </div>
+              <div className="stat-sub">{c.sub}</div>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      {!isParty && (
+        <>
       {/* Lot Status Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 14, marginBottom: 24 }}>
         {statCards.map(c => (
@@ -215,33 +326,10 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
+        </>
+      )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 18, marginBottom: 24 }}>
-        {/* Party Performance */}
-        {/* <div className="card">
-          <div className="card-header"><span className="card-title">Party Performance</span></div>
-          <div className="card-body">
-            {partyStats.length === 0 ? (
-              <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>No data yet</p>
-            ) : partyStats.map(p => (
-              <div key={p.name} style={{ marginBottom: 14 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 4 }}>
-                  <span style={{ fontWeight: 600 }}>{p.name}</span>
-                  <span style={{ color: 'var(--text-secondary)' }}>{p.total} lots · ₨{p.value.toLocaleString()}</span>
-                </div>
-                <div style={{ background: '#F3F4F6', borderRadius: 5, height: 10, overflow: 'hidden' }}>
-                  <div style={{
-                    width: `${(p.value / maxVal) * 100}%`,
-                    background: 'linear-gradient(90deg, #3b82f6, #1e40af)',
-                    height: '100%', borderRadius: 5,
-                  }} />
-                </div>
-              </div>
-            ))}
-          </div>
-        </div> */}
-
-        {/* Recent Lots */}
+      <div style={{ marginBottom: 24 }}>
         <div className="card">
           <div className="card-header"><span className="card-title">Recent Lots</span></div>
           <div className="card-body" style={{ padding: 0 }}>
@@ -250,7 +338,7 @@ export default function Dashboard() {
                 <tr>
                   <th>Lot</th>
                   <th>Design</th>
-                  <th>Party</th>
+                  {!isParty && <th>Party</th>}
                   <th>Status</th>
                 </tr>
               </thead>
@@ -259,7 +347,9 @@ export default function Dashboard() {
                   <tr key={l.id}>
                     <td style={{ fontWeight: 600 }}>{l.lotNo || l.lotNumber}</td>
                     <td>{l.designNo}</td>
-                    <td style={{ color: 'var(--text-secondary)', fontSize: 12 }}>{l.partyName}</td>
+                    {!isParty && (
+                      <td style={{ color: 'var(--text-secondary)', fontSize: 12 }}>{l.partyName}</td>
+                    )}
                     <td><StatusBadge status={toTitleCase(l.status)} /></td>
                   </tr>
                 ))}
@@ -269,7 +359,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Recent Payments */}
+      {!isParty && (
       <div className="card">
         <div className="card-header"><span className="card-title">Recent Payments</span></div>
         <div className="card-body" style={{ padding: 0 }}>
@@ -317,6 +407,7 @@ export default function Dashboard() {
           )}
         </div>
       </div>
+      )}
     </div>
   );
 }

@@ -5,6 +5,7 @@ import { useAuth } from "../context/AuthContext";
 import { Modal, FormGroup, EmptyState } from "../components/UI";
 import Loader from "../components/Loader";
 import LoaderDashboard from "../components/LoaderDashboard";
+import { latestDateFrom } from "../utils/dateFilters";
 
 function normalizeLotKey(linkedLot) {
   return String(linkedLot || "")
@@ -16,10 +17,65 @@ function lotDisplayRef(l) {
   return String(l.lotNumber ?? l.lotNo ?? "").trim();
 }
 
-function findLotByLinkedValue(ghausiaLots, linkedLotValue) {
-  if (!linkedLotValue) return undefined;
+/** Admin-approved / billable lot for party statement (mirrors Party Ledger “completed” side). */
+function isLotPartyBillableStatus(status) {
+  const s = String(status || "").toLowerCase().trim();
+  return s === "received back" || s === "completed";
+}
+
+function partyRecordMatchesUser(partyIdOnRow, partyNameOnRow, userPartyId, userPartyName) {
+  const pid = String(userPartyId || "").trim();
+  const pname = String(userPartyName || "").trim();
+  if (partyIdOnRow != null && String(partyIdOnRow).trim() !== "") {
+    return String(partyIdOnRow) === pid;
+  }
+  return String(partyNameOnRow || "").trim() === pname;
+}
+
+/** How a row appears in the table (party users see admin payouts as Received). */
+function presentationType(row, isParty) {
+  if (row._synthetic && row.type === "Bill") return "Bill";
+  if (
+    isParty &&
+    row.type === "Paid" &&
+    String(row.party || "").toLowerCase().trim() !== "owner"
+  ) {
+    return "Received";
+  }
+  return row.type;
+}
+
+function findLotByLinkedValue(reportingLots, linkedLotValue) {
+  if (!linkedLotValue || !reportingLots?.length) return undefined;
   const key = normalizeLotKey(linkedLotValue);
-  return ghausiaLots.find((l) => normalizeLotKey(lotDisplayRef(l)) === key);
+  return reportingLots.find((l) => normalizeLotKey(lotDisplayRef(l)) === key);
+}
+
+/** Lot number + resolved design No for linked payments / synthetic bills */
+function resolveLinkedLotDesignDisplay(payment, lotsPool) {
+  const linked = String(payment?.linkedLot || "").trim();
+  if (!linked) return { lotLabel: "", designLabel: "" };
+  if (payment._synthetic && payment.linkedDesignNo) {
+    return { lotLabel: linked, designLabel: String(payment.linkedDesignNo).trim() };
+  }
+  const lot = findLotByLinkedValue(lotsPool, linked);
+  const design =
+    lot?.designNo != null ? String(lot.designNo).trim() : "";
+  return { lotLabel: linked, designLabel: design };
+}
+
+function businessOwnerDisplayName(owner) {
+  return String(owner?.name || "").trim() || "Untitled";
+}
+
+function paymentBusinessOwnerId(p) {
+  return p?.businessOwnerId != null ? String(p.businessOwnerId) : "";
+}
+
+function parseDateFlexible(ymd) {
+  if (!ymd) return null;
+  const d = typeof ymd === "string" ? new Date(ymd) : new Date(ymd);
+  return Number.isNaN(d.getTime()) ? null : d;
 }
 
 const paymentToast = (icon, title) => {
@@ -44,11 +100,17 @@ export default function Payments() {
     ghausiaLots,
     parties,
     initialDataLoading,
+    businessOwners,
+    activeBusinessOwnerId,
+    partyCrossPayments,
+    partyCrossLots,
+    partyCrossPartyEdits,
   } = useApp();
   const { isAdmin, isParty, user } = useAuth();
   const PAGE_SIZE = 10;
   const [modal, setModal] = useState(false);
   const [typeFilter, setTypeFilter] = useState("All");
+  const [ownerNameFilter, setOwnerNameFilter] = useState("All");
   const [form, setForm] = useState({
     type: "Received",
     amount: "",
@@ -56,28 +118,120 @@ export default function Payments() {
     date: "",
     note: "",
     linkedLot: "",
+    ownerWorkspaceId: "",
   });
   const [errors, setErrors] = useState({});
   const [paymentSaving, setPaymentSaving] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
 
-  const visiblePayments = useMemo(() => {
-    const source = isParty ? payments : reportingPayments;
-    if (!isParty) return source;
-    const partyName = String(user?.partyName || "").trim();
-    return source.filter((p) => String(p.party || "").trim() === partyName);
-  }, [payments, reportingPayments, isParty, user?.partyName]);
+  const visibleDbPayments = useMemo(() => {
+    if (!isParty) return reportingPayments;
+    const pool = partyCrossPayments.length ? partyCrossPayments : payments;
+    const pid = String(user?.partyId || "").trim();
+    const pname = String(user?.partyName || "").trim();
+    return pool.filter((p) => partyRecordMatchesUser(p.partyId, p.party, pid, pname));
+  }, [isParty, reportingPayments, partyCrossPayments, payments, user?.partyId, user?.partyName]);
+
+  const syntheticPartyBills = useMemo(() => {
+    if (!isParty) return [];
+    const pid = String(user?.partyId || "").trim();
+    const pname = String(user?.partyName || "").trim();
+    const lotsPool = partyCrossLots.length ? partyCrossLots : ghausiaLots;
+    const linkedLotKeys = new Set(
+      visibleDbPayments
+        .filter(
+          (p) =>
+            p.type === "Paid" &&
+            p.linkedLot &&
+            String(p.party || "").toLowerCase().trim() !== "owner",
+        )
+        .map((p) => normalizeLotKey(p.linkedLot)),
+    );
+    const rows = [];
+    for (const l of lotsPool) {
+      const match =
+        String(l.partyId || "") === pid ||
+        String(l.partyName || "").trim() === pname;
+      if (!match) continue;
+      if (!isLotPartyBillableStatus(l.status)) continue;
+      const ref = lotDisplayRef(l);
+      if (ref && linkedLotKeys.has(normalizeLotKey(ref))) continue;
+
+      const pe = partyCrossPartyEdits[l.id] || {};
+      const amt = Number(
+        pe.partyBillAmount !== undefined ? pe.partyBillAmount : l.billAmount || 0,
+      );
+      if (amt <= 0) continue;
+
+      const when =
+        latestDateFrom(l, [
+          "updatedAt",
+          "createdAt",
+          "receivedBackDate",
+          "dispatchDate",
+          "allotDate",
+          "receivedDate",
+        ]) || parseDateFlexible(l.allotDate || l.receivedDate);
+      rows.push({
+        id: `__bill__${l.id}`,
+        _synthetic: true,
+        type: "Bill",
+        amount: amt,
+        party: pname || "Party",
+        date: when instanceof Date ? when.toISOString().slice(0, 10) : String(l.allotDate || ""),
+        updatedAt: when instanceof Date ? when.toISOString() : undefined,
+        note: `Work bill (${ref || "lot"})`,
+        linkedLot: ref || "",
+        linkedLotId: l.id,
+        linkedDesignNo:
+          l.designNo != null ? String(l.designNo).trim() : "",
+      });
+    }
+    return rows;
+  }, [
+    isParty,
+    user?.partyId,
+    user?.partyName,
+    partyCrossLots,
+    ghausiaLots,
+    visibleDbPayments,
+    partyCrossPartyEdits,
+  ]);
+
+  const combinedRows = useMemo(() => {
+    if (!isParty) return visibleDbPayments;
+    return [...visibleDbPayments, ...syntheticPartyBills];
+  }, [isParty, visibleDbPayments, syntheticPartyBills]);
+
+  const lotsLookupForLinks = useMemo(() => {
+    if (isParty) return partyCrossLots.length ? partyCrossLots : ghausiaLots;
+    return reportingLots;
+  }, [isParty, partyCrossLots, ghausiaLots, reportingLots]);
 
   const filtered = useMemo(
     () =>
-      visiblePayments.filter((p) => {
-        if (typeFilter === "All") return true;
-        if (typeFilter === "Bill") {
-          return p.type === "Paid" && String(p.party || "").toLowerCase() === "owner";
+      combinedRows.filter((p) => {
+        const pt = presentationType(p, isParty);
+        if (typeFilter === "All") {
+          // no type restriction
+        } else if (typeFilter === "Bill") {
+          if (isParty) {
+            if (pt !== "Bill") return false;
+          } else if (!(p.type === "Paid" && String(p.party || "").toLowerCase() === "owner")) {
+            return false;
+          }
+        } else if (typeFilter === "Received") {
+          if (pt !== "Received") return false;
+        } else if (typeFilter === "Paid") {
+          if (isParty) return false;
+          if (p.type !== "Paid") return false;
         }
-        return p.type === typeFilter;
+        if (isAdmin && ownerNameFilter !== "All") {
+          if (paymentBusinessOwnerId(p) !== ownerNameFilter) return false;
+        }
+        return true;
       }),
-    [visiblePayments, typeFilter],
+    [combinedRows, typeFilter, ownerNameFilter, isAdmin, isParty],
   );
   const sortedFiltered = useMemo(
     () =>
@@ -100,7 +254,11 @@ export default function Payments() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [typeFilter]);
+  }, [typeFilter, ownerNameFilter]);
+
+  useEffect(() => {
+    if (isParty && typeFilter === "Paid") setTypeFilter("All");
+  }, [isParty, typeFilter]);
 
   useEffect(() => {
     if (currentPage > totalPages) {
@@ -111,26 +269,36 @@ export default function Payments() {
   const usedReceivedLotKeys = useMemo(
     () =>
       new Set(
-        visiblePayments
+        reportingPayments
           .filter((p) => p.type === "Received" && p.linkedLot)
           .map((p) => normalizeLotKey(p.linkedLot)),
       ),
-    [visiblePayments],
+    [reportingPayments],
   );
 
   const usedPaidLotKeys = useMemo(
     () =>
       new Set(
-        visiblePayments
+        reportingPayments
           .filter((p) => p.type === "Paid" && p.linkedLot)
           .map((p) => normalizeLotKey(p.linkedLot)),
       ),
-    [visiblePayments],
+    [reportingPayments],
   );
+
+  const lotsForLinkedReceived = useMemo(() => {
+    if (form.type !== "Received") return ghausiaLots;
+    if (isAdmin && form.party === "Owner" && form.ownerWorkspaceId) {
+      return reportingLots.filter(
+        (l) => String(l.businessOwnerId || "") === String(form.ownerWorkspaceId),
+      );
+    }
+    return ghausiaLots;
+  }, [form.type, form.party, form.ownerWorkspaceId, isAdmin, reportingLots, ghausiaLots]);
 
   const linkedLotOptions = useMemo(() => {
     if (form.type === "Received") {
-      return ghausiaLots.filter(
+      return lotsForLinkedReceived.filter(
         (l) =>
           l.status !== "completed" &&
           !usedReceivedLotKeys.has(normalizeLotKey(lotDisplayRef(l))),
@@ -156,28 +324,41 @@ export default function Payments() {
   }, [
     form.type,
     form.party,
+    lotsForLinkedReceived,
     ghausiaLots,
     parties,
     usedReceivedLotKeys,
     usedPaidLotKeys,
   ]);
 
+  const partyStatementSummary = useMemo(() => {
+    if (!isParty) return null;
+    const billed = syntheticPartyBills.reduce(
+      (s, r) => s + Number(r.amount || 0),
+      0,
+    );
+    const paidFromAdmin = visibleDbPayments
+      .filter((p) => p.type === "Paid")
+      .reduce((s, p) => s + Number(p.amount || 0), 0);
+    const due = billed - paidFromAdmin;
+    return { billed, paidFromAdmin, due };
+  }, [isParty, syntheticPartyBills, visibleDbPayments]);
+
   const paidToNonOwnerParties = useMemo(() => {
-    const sum = visiblePayments
+    const sum = reportingPayments
       .filter(
         (p) =>
           p.type === "Paid" && String(p.party || "").toLowerCase() !== "owner",
       )
-      .reduce((s, p) => s + p.amount, 0);
-    console.log("Sum of Paid payments to non-Owner parties:", sum);
+      .reduce((s, p) => s + Number(p.amount || 0), 0);
     return sum;
-  }, [visiblePayments]);
-  const ownerIn = visiblePayments
+  }, [reportingPayments]);
+  const ownerIn = reportingPayments
     .filter((p) => p.type === "Received")
-    .reduce((s, p) => s + p.amount, 0);
-  const partyOut = visiblePayments
+    .reduce((s, p) => s + Number(p.amount || 0), 0);
+  const partyOut = reportingPayments
     .filter((p) => p.type === "Paid")
-    .reduce((s, p) => s + p.amount, 0);
+    .reduce((s, p) => s + Number(p.amount || 0), 0);
   const balance = ownerIn - paidToNonOwnerParties;
 
   const validateForm = () => {
@@ -186,9 +367,18 @@ export default function Payments() {
     if (!form.date) newErrors.date = "Date is required";
     if (form.type === "Paid" && !form.party)
       newErrors.party = "Please select a party";
+    if (
+      isAdmin &&
+      form.type === "Received" &&
+      form.party === "Owner" &&
+      !String(form.ownerWorkspaceId || "").trim()
+    ) {
+      newErrors.ownerWorkspaceId =
+        "Select which business owner this payment belongs to.";
+    }
     if (form.linkedLot) {
       const key = normalizeLotKey(form.linkedLot);
-      const dup = visiblePayments.some(
+      const dup = reportingPayments.some(
         (p) =>
           p.type === form.type &&
           p.linkedLot &&
@@ -209,7 +399,22 @@ export default function Payments() {
     if (!validateForm()) return;
     setPaymentSaving(true);
     try {
-      await addPayment(form);
+      const payload = {
+        type: form.type,
+        amount: form.amount,
+        party: form.party,
+        date: form.date,
+        note: form.note || "",
+        linkedLot: form.linkedLot || "",
+      };
+      const targetBiz =
+        isAdmin &&
+        form.type === "Received" &&
+        form.party === "Owner" &&
+        String(form.ownerWorkspaceId || "").trim()
+          ? form.ownerWorkspaceId
+          : activeBusinessOwnerId;
+      await addPayment(payload, { businessOwnerId: targetBiz });
       setForm({
         type: "Received",
         amount: "",
@@ -217,6 +422,7 @@ export default function Payments() {
         date: "",
         note: "",
         linkedLot: "",
+        ownerWorkspaceId: activeBusinessOwnerId || "",
       });
       setErrors({});
       setModal(false);
@@ -254,7 +460,29 @@ export default function Payments() {
       date: "",
       note: "",
       linkedLot: "",
+      ownerWorkspaceId: activeBusinessOwnerId || "",
     });
+  };
+
+  const businessOwnersSorted = useMemo(
+    () =>
+      [...businessOwners].sort((a, b) =>
+        businessOwnerDisplayName(a).localeCompare(
+          businessOwnerDisplayName(b),
+          undefined,
+          { sensitivity: "base" },
+        ),
+      ),
+    [businessOwners],
+  );
+
+  const paymentOwnerColumn = (payment) => {
+    const bid = paymentBusinessOwnerId(payment);
+    if (!bid) return "—";
+    const bo = businessOwners.find(
+      (b) => String(b.id ?? b._id) === bid,
+    );
+    return bo ? businessOwnerDisplayName(bo) : "—";
   };
 
   if (initialDataLoading) {
@@ -279,10 +507,28 @@ export default function Payments() {
         <div>
           <div className="page-title">Payments</div>
           <div className="page-subtitle">
-            Track all money received from owner and paid to parties
+            {isParty
+              ? "Your completed work bills, and payments sent to you by the business"
+              : "Track all money received from owner and paid to parties"}
           </div>
         </div>
-        {isAdmin && <button className="btn btn-success" onClick={() => setModal(true)}>
+        {isAdmin && (
+          <button
+            className="btn btn-success"
+            onClick={() => {
+              setErrors({});
+              setForm({
+                type: "Received",
+                amount: "",
+                party: "Owner",
+                date: "",
+                note: "",
+                linkedLot: "",
+                ownerWorkspaceId: activeBusinessOwnerId || "",
+              });
+              setModal(true);
+            }}
+          >
           <svg
             width="15"
             height="15"
@@ -295,7 +541,8 @@ export default function Payments() {
             <line x1="5" y1="12" x2="19" y2="12" />
           </svg>
           Record Payment
-        </button>}
+        </button>
+        )}
       </div>
 
       {/* Summary */}
@@ -307,7 +554,96 @@ export default function Payments() {
           marginBottom: 24,
         }}
       >
-        {[
+        {isParty && partyStatementSummary
+          ? [
+              {
+                label: "Work billed (completed lots)",
+                value: partyStatementSummary.billed,
+                color: "#dc2626",
+                icon: "↑",
+              },
+              {
+                label: "Received from business",
+                value: partyStatementSummary.paidFromAdmin,
+                color: "#15803d",
+                icon: "↓",
+                note: "Payments the admin marked as Paid to you",
+              },
+              {
+                label: "Due (bill − paid)",
+                value: Math.abs(partyStatementSummary.due),
+                color:
+                  partyStatementSummary.due > 0
+                    ? "#b91c1c"
+                    : partyStatementSummary.due < 0
+                      ? "#047857"
+                      : "#64748b",
+                icon:
+                  partyStatementSummary.due > 0
+                    ? "!"
+                    : partyStatementSummary.due < 0
+                      ? "✓"
+                      : "=",
+                note:
+                  partyStatementSummary.due > 0
+                    ? "Outstanding from business"
+                    : partyStatementSummary.due < 0
+                      ? "You were paid ahead of billed work"
+                      : "Balanced billed vs paid",
+              },
+              {
+                label: "Total rows",
+                value: combinedRows.length,
+                color: "#1e40af",
+                isCount: true,
+              },
+            ].map((c) => (
+              <div
+                key={c.label}
+                style={{
+                  background: "#fff",
+                  border: "1px solid var(--border)",
+                  borderRadius: 12,
+                  padding: "18px 20px",
+                  boxShadow: "var(--shadow)",
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 600,
+                    color: "var(--text-secondary)",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.04em",
+                    marginBottom: 8,
+                  }}
+                >
+                  {c.label}
+                </div>
+                <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+                  {c.icon && !c.isCount && (
+                    <span style={{ fontSize: 18, fontWeight: 700, color: c.color }}>
+                      {c.icon}
+                    </span>
+                  )}
+                  <span style={{ fontSize: 22, fontWeight: 700, color: c.color }}>
+                    {c.isCount ? c.value : `₨${Number(c.value).toLocaleString()}`}
+                  </span>
+                </div>
+                {c.note && (
+                  <div
+                    style={{
+                      fontSize: 11,
+                      color: "var(--text-muted)",
+                      marginTop: 3,
+                    }}
+                  >
+                    {c.note}
+                  </div>
+                )}
+              </div>
+            ))
+          : [
           {
             label: "Received from Owner",
             value: ownerIn,
@@ -329,7 +665,7 @@ export default function Payments() {
           },
           {
             label: "Total Transactions",
-            value: visiblePayments.length,
+            value: reportingPayments.length,
             color: "#1e40af",
             isCount: true,
           },
@@ -492,7 +828,15 @@ export default function Payments() {
       )} */}
 
       {/* Filter */}
-      <div className="toolbar">
+      <div
+        className="toolbar"
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 12,
+          flexWrap: "wrap",
+        }}
+      >
         <select
           className="form-select"
           style={{ width: 160 }}
@@ -501,9 +845,28 @@ export default function Payments() {
         >
           <option value="All">All Types</option>
           <option>Received</option>
-          <option>Paid</option>
+          {!isParty && <option>Paid</option>}
           <option>Bill</option>
         </select>
+        {isAdmin && businessOwners.length > 0 && (
+          <select
+            className="form-select"
+            style={{ minWidth: 200, maxWidth: 280 }}
+            value={ownerNameFilter}
+            onChange={(e) => setOwnerNameFilter(e.target.value)}
+            aria-label="Filter by owner name"
+          >
+            <option value="All">All owners</option>
+            {businessOwnersSorted.map((o) => {
+              const id = String(o.id ?? o._id);
+              return (
+                <option key={id} value={id}>
+                  {businessOwnerDisplayName(o)}
+                </option>
+              );
+            })}
+          </select>
+        )}
         <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>
           {filtered.length} records
         </span>
@@ -518,8 +881,9 @@ export default function Payments() {
                 <th>#</th>
                 <th>Date</th>
                 <th>Type</th>
-                <th>Party / From</th>
-                <th>Linked Lot</th>
+                {!isParty && <th>Party / From</th>}
+                {isAdmin && <th>Owner Name</th>}
+                <th>Lot · Design</th>
                 <th>Note</th>
                 <th style={{ textAlign: "right" }}>Amount (₨)</th>
                 <th>Actions</th>
@@ -528,13 +892,42 @@ export default function Payments() {
             <tbody>
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={8}>
+                  <td colSpan={7 + (isParty ? 0 : 1) + (isAdmin ? 1 : 0)}>
                     <EmptyState message="No payment records found" />
                   </td>
                 </tr>
               ) : (
-                paginatedPayments.map((p, i) => (
-                  <tr key={p.id}>
+                paginatedPayments.map((p, i) => {
+                  const pt = presentationType(p, isParty);
+                  const partyReceived = isParty && pt === "Received";
+                  const partyWorkBill = isParty && pt === "Bill";
+                  const badgeGreen = isParty ? partyReceived : p.type === "Received";
+
+                  const typeLabel =
+                    !isParty &&
+                    String(p.party || "").toLowerCase() === "owner" &&
+                    p.type === "Paid"
+                      ? "Bill"
+                      : pt === "Bill" && isParty
+                        ? "Work bill"
+                        : pt;
+
+                  const amt = Number(p.amount ?? 0);
+                  const showPlus = isParty
+                    ? pt === "Received" || pt === "Bill"
+                    : p.type !== "Paid";
+                  const amtColor =
+                    partyWorkBill ? "#dc2626"
+                    : partyReceived ? "#15803d"
+                    : showPlus ? "#15803d" : "#dc2626";
+
+                  const { lotLabel, designLabel } = resolveLinkedLotDesignDisplay(
+                    p,
+                    lotsLookupForLinks,
+                  );
+
+                  return (
+                  <tr key={`${String(p.id)}-${p._synthetic ? "b" : "p"}`}>
                     <td style={{ color: "var(--text-muted)", fontWeight: 500 }}>
                       {filtered.length - (pageStart + i)}
                     </td>
@@ -542,38 +935,54 @@ export default function Payments() {
                     <td>
                       <span
                         style={{
-                          background:
-                            p.type === "Received" ? "#F0FDF4" : "#FEF2F2",
-                          color: p.type === "Received" ? "#166534" : "#991B1B",
-                          border: `1px solid ${p.type === "Received" ? "#BBF7D0" : "#FECACA"}`,
+                          background: badgeGreen ? "#F0FDF4" : "#FEF2F2",
+                          color: badgeGreen ? "#166534" : "#991B1B",
+                          border: `1px solid ${badgeGreen ? "#BBF7D0" : "#FECACA"}`,
                           borderRadius: 20,
                           padding: "3px 12px",
                           fontSize: 12,
                           fontWeight: 600,
                         }}
                       >
-                        {p.party.toLowerCase() === "owner" &&
-                        p.type.toLowerCase() === "paid"
-                          ? "Bill"
-                          : p.type}
+                        {typeLabel}
                       </span>
                     </td>
-                    <td style={{ fontWeight: 500 }}>{p.party}</td>
+                    {!isParty && (
+                      <td style={{ fontWeight: 500 }}>{String(p.party || "—")}</td>
+                    )}
+                    {isAdmin && (
+                      <td style={{ color: "var(--text-secondary)", fontSize: 13 }}>
+                        {p._synthetic ? "—" : paymentOwnerColumn(p)}
+                      </td>
+                    )}
                     <td>
-                      {p.linkedLot ? (
-                        <span
+                      {lotLabel ? (
+                        <div
                           style={{
                             background: "#EFF6FF",
                             color: "#1e40af",
                             border: "1px solid #BFDBFE",
                             borderRadius: 6,
-                            padding: "2px 8px",
+                            padding: "4px 8px",
                             fontSize: 12,
                             fontWeight: 600,
+                            lineHeight: 1.35,
                           }}
                         >
-                          {p.linkedLot}
-                        </span>
+                          <div>{lotLabel}</div>
+                          {designLabel ? (
+                            <div
+                              style={{
+                                fontSize: 11,
+                                fontWeight: 600,
+                                opacity: 0.9,
+                                marginTop: 3,
+                              }}
+                            >
+                              Design: {designLabel}
+                            </div>
+                          ) : null}
+                        </div>
                       ) : (
                         <span style={{ color: "var(--text-muted)" }}>—</span>
                       )}
@@ -588,19 +997,23 @@ export default function Payments() {
                         textAlign: "right",
                         fontWeight: 700,
                         fontSize: 14,
-                        color: p.type === "Received" ? "#15803d" : "#dc2626",
+                        color: amtColor,
                       }}
                     >
-                      {p.type === "Paid" ? "-" : "+"}₨
-                      {p.amount.toLocaleString()}
+                      {showPlus ? "+" : "-"}₨
+                      {amt.toLocaleString()}
                     </td>
                     <td>
                       <button
                         className="btn-icon"
                         onClick={() => handleDelete(p.id)}
                         title="Delete payment"
-                        disabled={!isAdmin}
-                        style={!isAdmin ? { opacity: 0.45, cursor: "not-allowed" } : undefined}
+                        disabled={!isAdmin || p._synthetic}
+                        style={
+                          !isAdmin || p._synthetic
+                            ? { opacity: 0.45, cursor: "not-allowed" }
+                            : undefined
+                        }
                       >
                         <svg
                           width="14"
@@ -619,7 +1032,8 @@ export default function Payments() {
                       </button>
                     </td>
                   </tr>
-                ))
+                  );
+                })
               )}
             </tbody>
           </table>
@@ -709,8 +1123,16 @@ export default function Payments() {
                     party: newType === "Received" ? "Owner" : "",
                     linkedLot: "",
                     amount: "",
+                    ownerWorkspaceId:
+                      newType === "Received" && isAdmin
+                        ? activeBusinessOwnerId || ""
+                        : "",
                   }));
-                  setErrors((prev) => ({ ...prev, party: undefined }));
+                  setErrors((prev) => ({
+                    ...prev,
+                    party: undefined,
+                    ownerWorkspaceId: undefined,
+                  }));
                 }}
               >
                 <option>Received</option>
@@ -724,9 +1146,23 @@ export default function Payments() {
                 <select
                   className="form-select"
                   value={form.party}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, party: e.target.value }))
-                  }
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setForm((f) => ({
+                      ...f,
+                      party: v,
+                      linkedLot: "",
+                      amount: "",
+                      ownerWorkspaceId:
+                        v === "Owner" && isAdmin
+                          ? f.ownerWorkspaceId || activeBusinessOwnerId || ""
+                          : "",
+                    }));
+                    setErrors((prev) => ({
+                      ...prev,
+                      ownerWorkspaceId: undefined,
+                    }));
+                  }}
                 >
                   <option value="Owner">Owner</option>
                   {parties.map((p) => (
@@ -773,6 +1209,47 @@ export default function Payments() {
                 </>
               )}
             </FormGroup>
+            {isAdmin &&
+              form.type === "Received" &&
+              form.party === "Owner" && (
+                <FormGroup label="Business owner *">
+                  <select
+                    className={`form-select${errors.ownerWorkspaceId ? " input-error" : ""}`}
+                    value={form.ownerWorkspaceId}
+                    onChange={(e) => {
+                      setForm((f) => ({
+                        ...f,
+                        ownerWorkspaceId: e.target.value,
+                        linkedLot: "",
+                        amount: "",
+                      }));
+                      setErrors((prev) => ({
+                        ...prev,
+                        ownerWorkspaceId: undefined,
+                      }));
+                    }}
+                  >
+                    <option value="">— Select business / collection —</option>
+                    {businessOwners.map((o) => (
+                      <option key={o.id || o._id} value={o.id || o._id}>
+                        {businessOwnerDisplayName(o)}
+                      </option>
+                    ))}
+                  </select>
+                  {errors.ownerWorkspaceId && (
+                    <span
+                      style={{
+                        color: "#dc2626",
+                        fontSize: 11,
+                        marginTop: 3,
+                        display: "block",
+                      }}
+                    >
+                      {errors.ownerWorkspaceId}
+                    </span>
+                  )}
+                </FormGroup>
+              )}
             <FormGroup label="Linked Lot (optional)">
               <select
                 className={`form-select${errors.linkedLot ? " input-error" : ""}`}
@@ -792,7 +1269,13 @@ export default function Payments() {
                     amount: undefined,
                   }));
                 }}
-                disabled={form.type === "Paid" && !form.party}
+                disabled={
+                  (form.type === "Paid" && !form.party) ||
+                  (isAdmin &&
+                    form.type === "Received" &&
+                    form.party === "Owner" &&
+                    !form.ownerWorkspaceId)
+                }
               >
                 <option value="">None</option>
                 {linkedLotOptions.map((l) => (
@@ -825,6 +1308,21 @@ export default function Payments() {
                 >
                   Lots that already have a linked Received payment are hidden.
                   Use None when the payment is not tied to a single lot.
+                </span>
+              )}
+              {form.type === "Received" &&
+                isAdmin &&
+                form.party === "Owner" &&
+                !form.ownerWorkspaceId && (
+                <span
+                  style={{
+                    color: "var(--text-muted)",
+                    fontSize: 11,
+                    marginTop: 4,
+                    display: "block",
+                  }}
+                >
+                  Choose a business owner to load open lots for that collection.
                 </span>
               )}
               {form.type === "Paid" && !form.party && (

@@ -47,13 +47,22 @@ export default function BusinessOwnerSwitcher({ compact = false }) {
   return (
     <>
       {compact ? (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', flex: '1 1 auto' }}>
           <select
             className="form-select"
-            style={{ minWidth: 220 }}
+            style={{
+              minWidth: 200,
+              flex: '1 1 220px',
+              maxWidth: 400,
+              fontWeight: 600,
+              borderRadius: 10,
+              border: '1px solid var(--border)',
+              background: '#f8fafc',
+            }}
             value={activeBusinessOwnerId}
             onChange={(event) => selectBusinessOwner(event.target.value)}
-            title="Active business owner"
+            title="Switch workspace"
+            aria-label="Switch workspace"
           >
             {businessOwners.map((owner) => (
               <option key={owner.id || owner._id} value={owner.id || owner._id}>
@@ -61,8 +70,18 @@ export default function BusinessOwnerSwitcher({ compact = false }) {
               </option>
             ))}
           </select>
-          <button className="btn btn-primary" type="button" onClick={() => setModalOpen(true)}>
-            Add New Business
+          <button
+            className="btn btn-ghost"
+            type="button"
+            onClick={() => setModalOpen(true)}
+            style={{
+              border: '1px solid var(--border)',
+              background: '#fff',
+              fontWeight: 600,
+              whiteSpace: 'nowrap',
+            }}
+          >
+            + New workspace
           </button>
         </div>
       ) : (
@@ -82,10 +101,19 @@ export default function BusinessOwnerSwitcher({ compact = false }) {
           }}
         >
           <div>
-            <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              Active Business Owner
+            <div style={{ fontSize: 10, color: 'var(--primary)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em' }}>
+              Active business owner
             </div>
-            <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--text-primary)' }}>
+            <div
+              style={{
+                fontSize: 19,
+                fontWeight: 800,
+                letterSpacing: '-0.03em',
+                color: 'var(--text-primary)',
+                marginTop: 4,
+                lineHeight: 1.25,
+              }}
+            >
               {activeOwner?.name || 'Select business owner'}
             </div>
           </div>

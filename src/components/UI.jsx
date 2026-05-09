@@ -32,6 +32,8 @@ export function StatusBadge({ status }) {
     'Received Back': 'badge badge-received',
     'Completed':     'badge badge-completed',
     'In Progress':   'badge badge-inprogress',
+    'Pending Approval': 'badge badge-inprogress',
+    'Rejected':       'badge badge-dispatched',
   };
   return <span className={map[status] || 'badge'}>{status}</span>;
 }
