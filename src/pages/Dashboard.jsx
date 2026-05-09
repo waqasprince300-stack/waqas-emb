@@ -9,28 +9,28 @@ const toTitleCase = (s) =>
   String(s || '').split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
 
 export default function Dashboard() {
-  const { ghausiaLots, partyEdits, payments, getPartyName, parties, initialDataLoading } = useApp();
+  const { reportingLots, reportingPayments, getPartyName, parties, initialDataLoading } = useApp();
   const { isParty, user } = useAuth();
   const [dateRange, setDateRange] = useState('all');
   const partyUserId = String(user?.partyId || '');
 
   const scopedLots = useMemo(() => {
     const lots = isParty && partyUserId
-      ? ghausiaLots.filter((lot) => String(lot.partyId || '') === partyUserId)
-      : ghausiaLots;
+      ? reportingLots.filter((lot) => String(lot.partyId || '') === partyUserId)
+      : reportingLots;
     return lots.filter((lot) => isWithinDateRange(
       latestDateFrom(lot, ['updatedAt', 'createdAt', 'receivedBackDate', 'dispatchDate', 'allotDate', 'receivedDate']),
       dateRange,
     ));
-  }, [ghausiaLots, isParty, partyUserId, dateRange]);
+  }, [reportingLots, isParty, partyUserId, dateRange]);
 
   const scopedPayments = useMemo(() => {
     const partyName = String(user?.partyName || '').trim();
     const list = isParty && partyName
-      ? payments.filter((payment) => String(payment.party || '').trim() === partyName)
-      : payments;
+      ? reportingPayments.filter((payment) => String(payment.party || '').trim() === partyName)
+      : reportingPayments;
     return list.filter((payment) => isWithinDateRange(payment.updatedAt || payment.date, dateRange));
-  }, [payments, isParty, user?.partyName, dateRange]);
+  }, [reportingPayments, isParty, user?.partyName, dateRange]);
 
   const paidToNonOwnerParties = useMemo(() => {
     return scopedPayments

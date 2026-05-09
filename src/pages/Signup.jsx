@@ -1,27 +1,23 @@
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
 import AuthCard from '../components/AuthCard';
-import { useApp } from '../context/AppContext';
-import { useAuth } from '../context/AuthContext';
+import { useAuth, normalizeAuthResponse } from '../context/AuthContext';
+import { getRegistrationEmailError } from '../utils/registrationEmail';
 
 export default function Signup() {
-  const { parties } = useApp();
-  const { isAuthenticated, signup } = useAuth();
+  const { isAuthenticated, signup, refreshSession } = useAuth();
   const navigate = useNavigate();
   const [form, setForm] = useState({
     name: '',
     email: '',
     password: '',
-    role: 'admin',
-    partyId: '',
+    role: 'party',
+    partyName: '',
+    adminEmail: '',
   });
   const [error, setError] = useState('');
+  const [message, setMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const selectedParty = useMemo(
-    () => parties.find((party) => String(party.id) === String(form.partyId)),
-    [parties, form.partyId],
-  );
 
   if (isAuthenticated) {
     return <Navigate to="/" replace />;
@@ -30,21 +26,55 @@ export default function Signup() {
   const handleSubmit = async (event) => {
     event.preventDefault();
     setError('');
-    if (form.role === 'party' && !form.partyId) {
-      setError('Select the party this account belongs to.');
-      return;
-    }
+    setMessage('');
     if (form.password.length < 8) {
       setError('Password must be at least 8 characters.');
       return;
     }
+    const mainEmailErr = getRegistrationEmailError(form.email);
+    if (mainEmailErr) {
+      setError(mainEmailErr);
+      return;
+    }
+    if (form.role === 'party') {
+      const adminErr = getRegistrationEmailError(form.adminEmail);
+      if (adminErr) {
+        setError(`Business administrator: ${adminErr}`);
+        return;
+      }
+    }
+    if (form.role === 'party' && !String(form.adminEmail || '').trim()) {
+      setError('Enter your business administrator\'s email so they can approve your account.');
+      return;
+    }
     setIsSubmitting(true);
     try {
-      await signup({
-        ...form,
-        partyName: selectedParty?.name || '',
+      const raw = await signup(form);
+      const payload = raw?.data || raw || {};
+      const token = payload.token || payload.accessToken;
+
+      if (token) {
+        refreshSession(normalizeAuthResponse(raw));
+        navigate('/', { replace: true });
+        return;
+      }
+
+      const u = payload.user;
+      const baseMsg = payload.message;
+
+      if (u?.role === 'party' && u?.status === 'pending') {
+        setMessage(
+          `${baseMsg || 'Account created and waiting for approval.'} You can log in after your business administrator approves your account.`,
+        );
+      } else if (u?.role === 'admin' && u?.status === 'approved') {
+        setMessage(baseMsg || 'Organization administrator created — you can sign in.');
+      } else {
+        setMessage(baseMsg || 'Account created.');
+      }
+
+      setForm({
+        name: '', email: '', password: '', role: 'party', partyName: '', adminEmail: '',
       });
-      navigate('/', { replace: true });
     } catch (err) {
       setError(err.message || 'Unable to create account');
     } finally {
@@ -55,9 +85,9 @@ export default function Signup() {
   return (
     <AuthCard
       title="Create account"
-      subtitle="Set up secure access for admins or party users."
-      sideTitle="Give every party the right view of work and payments."
-      sideText="Create accounts for staff and parties while keeping admin-only pages protected."
+      subtitle="The first account is the organization administrator. After that, everyone else joins as a party user with the admin's email."
+      sideTitle="One admin manages multiple businesses (workspaces); each business keeps its own lots, payments, and ledgers."
+      sideText="Party users enter their administrator's email and are approved only by that admin."
       footer={<>Already have an account? <Link className="auth-inline-link" to="/login">Login</Link></>}
     >
       <form className="auth-form" onSubmit={handleSubmit}>
@@ -66,6 +96,39 @@ export default function Signup() {
             {error}
           </div>
         )}
+
+        {message && (
+          <div className="alert alert-success">
+            {message}
+          </div>
+        )}
+
+        <fieldset className="auth-label" style={{ border: 'none', padding: 0, margin: 0 }}>
+          <legend className="auth-label-text" style={{ marginBottom: 8 }}>Account type</legend>
+          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontWeight: 500 }}>
+              <input
+                type="radio"
+                name="role"
+                checked={form.role === 'party'}
+                onChange={() => setForm((f) => ({ ...f, role: 'party' }))}
+              />
+              Party
+            </label>
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontWeight: 500 }}>
+              <input
+                type="radio"
+                name="role"
+                checked={form.role === 'admin'}
+                onChange={() => setForm((f) => ({ ...f, role: 'admin' }))}
+              />
+              Business administrator
+            </label>
+          </div>
+          <p style={{ fontSize: 12, color: 'var(--text-muted, #64748b)', marginTop: 8, marginBottom: 0 }}>
+            If no administrator exists yet, choose Business administrator to create the one org admin. Only one administrator is allowed; additional staff sign up as party users.
+          </p>
+        </fieldset>
 
         <label className="auth-label">
           <span className="auth-label-text">Name</span>
@@ -104,33 +167,29 @@ export default function Signup() {
           />
         </label>
 
-        <label className="auth-label">
-          <span className="auth-label-text">Account Type</span>
-          <select
-            className="form-select"
-            value={form.role}
-            onChange={(e) => setForm((f) => ({ ...f, role: e.target.value, partyId: '' }))}
-          >
-            <option value="admin">Admin</option>
-            <option value="party">Party</option>
-          </select>
-        </label>
-
         {form.role === 'party' && (
-          <label className="auth-label">
-            <span className="auth-label-text">Party</span>
-            <select
-              className="form-select"
-              value={form.partyId}
-              onChange={(e) => setForm((f) => ({ ...f, partyId: e.target.value }))}
-              required
-            >
-              <option value="">Select party</option>
-              {parties.map((party) => (
-                <option key={party.id} value={party.id}>{party.name}</option>
-              ))}
-            </select>
-          </label>
+          <>
+            <label className="auth-label">
+              <span className="auth-label-text">Business administrator email *</span>
+              <input
+                className="form-input"
+                type="email"
+                placeholder="Email of the admin whose organization you are joining"
+                value={form.adminEmail}
+                onChange={(e) => setForm((f) => ({ ...f, adminEmail: e.target.value }))}
+                required
+              />
+            </label>
+            <label className="auth-label">
+              <span className="auth-label-text">Party / company name</span>
+              <input
+                className="form-input"
+                placeholder="Name your admin will recognize"
+                value={form.partyName}
+                onChange={(e) => setForm((f) => ({ ...f, partyName: e.target.value }))}
+              />
+            </label>
+          </>
         )}
 
         <button className="btn btn-primary" type="submit" disabled={isSubmitting} style={{ width: '100%', justifyContent: 'center' }}>

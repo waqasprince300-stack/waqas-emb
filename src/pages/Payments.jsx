@@ -37,6 +37,8 @@ const paymentToast = (icon, title) => {
 export default function Payments() {
   const {
     payments,
+    reportingPayments,
+    reportingLots,
     addPayment,
     deletePayment,
     ghausiaLots,
@@ -60,10 +62,11 @@ export default function Payments() {
   const [currentPage, setCurrentPage] = useState(1);
 
   const visiblePayments = useMemo(() => {
-    if (!isParty) return payments;
+    const source = isParty ? payments : reportingPayments;
+    if (!isParty) return source;
     const partyName = String(user?.partyName || "").trim();
-    return payments.filter((p) => String(p.party || "").trim() === partyName);
-  }, [payments, isParty, user?.partyName]);
+    return source.filter((p) => String(p.party || "").trim() === partyName);
+  }, [payments, reportingPayments, isParty, user?.partyName]);
 
   const filtered = useMemo(
     () =>
@@ -776,7 +779,7 @@ export default function Payments() {
                 value={form.linkedLot}
                 onChange={(e) => {
                   const v = e.target.value;
-                  const lot = findLotByLinkedValue(ghausiaLots, v);
+                  const lot = findLotByLinkedValue(reportingLots, v);
                   const bill = lot ? Number(lot.billAmount || 0) : 0;
                   setForm((f) => ({
                     ...f,

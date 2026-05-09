@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import Swal from 'sweetalert2';
 import { useApp } from '../context/AppContext';
+import BusinessOwnerSwitcher from '../components/BusinessOwnerSwitcher';
 import { Modal, FormGroup, StatusBadge, ActionBtn, SearchBar, EmptyState, ConfirmDialog } from '../components/UI';
 import Loader from '../components/Loader';
 import LoaderDashboard from '../components/LoaderDashboard';
@@ -22,11 +23,23 @@ function lotSaveErrorToast(title) {
   });
 }
 
+function normalizeLotNumberKey(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
 function messageFromLotSaveError(err) {
   const msg = String(err?.message || err || '');
+  const httpMatch = msg.match(/^HTTP (\d+):\s*(.*)$/is);
+  if (httpMatch) {
+    const status = Number(httpMatch[1]);
+    const body = (httpMatch[2] || '').trim();
+    if (status === 409 && body) return body;
+    if (body && (status === 400 || status === 403)) return body;
+  }
+  if (/already exists in this collection/i.test(msg)) return msg;
   if (/E11000|duplicate key|dup key/i.test(msg)) {
     if (/lotNumber/i.test(msg)) {
-      return 'A lot with this lot number already exists. Use a different lot number.';
+      return 'A lot with this lot number already exists in this business collection. Use a different number, or switch collection if you meant another workspace.';
     }
     return 'Duplicate record: this value is already in use.';
   }
@@ -214,7 +227,7 @@ function LotForm({ initial, onSave, onClose, parties, saving }) {
 }
 
 export default function GhausiaCollection() {
-  const { ghausiaLots, addLot, updateLot, deleteLot, parties, getPartyName, partyEdits, payments, addPayment, deletePayment, updatePartyEdit, initialDataLoading } = useApp();
+  const { ghausiaLots, addLot, updateLot, deleteLot, parties, getPartyName, partyEdits, payments, addPayment, deletePayment, updatePartyEdit, initialDataLoading, activeBusinessOwnerId } = useApp();
   const PAGE_SIZE = 10;
   const [modal, setModal] = useState(null);
   const [editing, setEditing] = useState(null);
@@ -289,7 +302,7 @@ export default function GhausiaCollection() {
         ...(fromBillable ? { completedFromBillable: false } : {}),
       };
       try {
-        await updateLot(lot.id, lotUpdate);
+        await updateLot(lot.id, lotUpdate, { businessOwnerId: activeBusinessOwnerId });
       } catch (e) {
         Swal.fire({ icon: 'error', title: 'Could not update lot', text: 'Please try again.' });
         return;
@@ -376,7 +389,7 @@ export default function GhausiaCollection() {
       if (newStatus === 'received back') lotUpdate.receivedBackDate = today;
 
       try {
-        await updateLot(lot.id, lotUpdate);
+        await updateLot(lot.id, lotUpdate, { businessOwnerId: activeBusinessOwnerId });
       } catch (e) {
         Swal.fire({ icon: 'error', title: 'Could not update lot', text: 'Please try again.' });
         return;
@@ -490,11 +503,29 @@ export default function GhausiaCollection() {
       recordOwnerPaymentAfterSave = true;
     }
 
+    const lotKey = normalizeLotNumberKey(saveForm.lotNumber ?? saveForm.lotNo);
+    if (lotKey) {
+      const ownerKey = String(activeBusinessOwnerId ?? '');
+      if (!ownerKey.trim()) {
+        lotSaveErrorToast('Select a business collection before saving lots.');
+        return;
+      }
+      const dupLocal = ghausiaLots.some((l) => {
+        if (prev && String(l.id) === String(prev.id)) return false;
+        if (String(l.businessOwnerId ?? '') !== ownerKey) return false;
+        return normalizeLotNumberKey(l.lotNumber ?? l.lotNo) === lotKey;
+      });
+      if (dupLocal) {
+        lotSaveErrorToast('A lot with this number already exists in this collection. Try a different number.');
+        return;
+      }
+    }
+
     const today = new Date().toISOString().slice(0, 10);
     setLotSaving(true);
     try {
       if (prev) {
-        await updateLot(prev.id, saveForm);
+        await updateLot(prev.id, saveForm, { businessOwnerId: activeBusinessOwnerId });
         if (saveForm.status === 'completed') {
           await updatePartyEdit(prev.id, {
             overrideStatus: 'Completed',
@@ -513,7 +544,7 @@ export default function GhausiaCollection() {
           }
         }
       } else {
-        const created = await addLot(saveForm);
+        const created = await addLot(saveForm, { businessOwnerId: activeBusinessOwnerId });
         if (saveForm.status === 'completed') {
           await updatePartyEdit(created.id, {
             overrideStatus: 'Completed',
@@ -560,7 +591,7 @@ export default function GhausiaCollection() {
         partyName: selectedParty ? selectedParty.name : '',
         status: partyId ? 'dispatched' : 'pending',
         dispatchDate: partyId ? currentDate : '',
-      });
+      }, { businessOwnerId: activeBusinessOwnerId });
       if (partyId) {
         await updatePartyEdit(lotId, {
           overrideStatus: 'In Progress',
@@ -630,13 +661,16 @@ export default function GhausiaCollection() {
     <div>
       <div className="page-header">
         <div>
-          <div className="page-title">Ghausia Collection</div>
-          <div className="page-subtitle">Manage all design lots assigned to parties</div>
+          <div className="page-title">Business Owner Collection</div>
+          <div className="page-subtitle">Manage design lots for the selected business owner</div>
         </div>
-        <button className="btn btn-primary" onClick={openAdd}>
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
-          Add Lot
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <BusinessOwnerSwitcher compact />
+          <button className="btn btn-primary" onClick={openAdd}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+            Add Lot
+          </button>
+        </div>
       </div>
 
       {/* Summary */}

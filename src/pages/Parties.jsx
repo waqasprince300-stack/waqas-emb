@@ -73,7 +73,7 @@ function PartyStatTile({ label, count, amountStr, accent, borderTint, bgTint }) 
 }
 
 export default function Parties() {
-  const { parties, addParty, updateParty, deleteParty, ghausiaLots, getPartyName, partyEdits, payments, initialDataLoading } = useApp();
+  const { parties, addParty, updateParty, deleteParty, reportingLots, reportingPayments, reportingPartyEdits, getPartyName, initialDataLoading } = useApp();
   const PAGE_SIZE = 8;
   const [modal, setModal] = useState(null);
   const [editing, setEditing] = useState(null);
@@ -86,16 +86,16 @@ export default function Parties() {
   const [currentPage, setCurrentPage] = useState(1);
 
   const rangedLots = useMemo(
-    () => ghausiaLots.filter((lot) => isWithinDateRange(
+    () => reportingLots.filter((lot) => isWithinDateRange(
       latestDateFrom(lot, ['updatedAt', 'createdAt', 'receivedBackDate', 'dispatchDate', 'allotDate', 'receivedDate']),
       dateRange,
     )),
-    [ghausiaLots, dateRange],
+    [reportingLots, dateRange],
   );
 
   const rangedPayments = useMemo(
-    () => payments.filter((payment) => isWithinDateRange(payment.updatedAt || payment.date, dateRange)),
-    [payments, dateRange],
+    () => reportingPayments.filter((payment) => isWithinDateRange(payment.updatedAt || payment.date, dateRange)),
+    [reportingPayments, dateRange],
   );
 
   const filtered = parties.filter(p => {
@@ -119,14 +119,14 @@ export default function Parties() {
 
   /** Align with Party Ledger: "received back" counts as completed for party stats. */
   const lotStatusKey = (l) => {
-    const pe = partyEdits[l.id] || {};
+    const pe = reportingPartyEdits[l.id] || {};
     const raw = String(pe.overrideStatus || l.status || '').toLowerCase();
     if (raw === 'received back') return 'completed';
     return raw;
   };
 
   const lotBillAmount = (l) => {
-    const pe = partyEdits[l.id] || {};
+    const pe = reportingPartyEdits[l.id] || {};
     return Number(pe.partyBillAmount !== undefined ? pe.partyBillAmount : (l.billAmount || 0));
   };
 
@@ -403,7 +403,7 @@ export default function Parties() {
               const transactions = [
                 ...partyPayments.map(p => ({ ...p, rowKind: 'payment' })),
                 ...partyLots.map(l => {
-                  const pe = partyEdits[l.id] || {};
+                  const pe = reportingPartyEdits[l.id] || {};
                   return {
                     id: l.id,
                     date: l.allotDate,

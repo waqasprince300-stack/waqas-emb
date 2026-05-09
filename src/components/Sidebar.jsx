@@ -52,11 +52,23 @@ const navItems = [
     ),
   },
   {
-    to: '/rate-calculations', label: 'Rate Calculations',
+    to: '/rate-calculations',
+    label: 'Rate Calculations',
+    partyLabel: 'Rate Calculator',
     icon: (
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
         <line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/>
         <line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/>
+      </svg>
+    ),
+  },
+  {
+    to: '/users', label: 'Users / Approvals',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+        <circle cx="8.5" cy="7" r="4"/>
+        <polyline points="17 11 19 13 23 9"/>
       </svg>
     ),
   },
@@ -69,9 +81,12 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen }) {
       setSidebarOpen(false);
     }
   };
-  const visibleNavItems = navItems.filter((item) => (
-    isAdmin || ['/', '/party-ledger', '/payments'].includes(item.to)
-  ));
+  const visibleNavItems = navItems.filter((item) => {
+    if (isAdmin) {
+      return true;
+    }
+    return ['/', '/party-ledger', '/payments', '/rate-calculations'].includes(item.to);
+  });
 
   return (
     <aside style={{
@@ -147,7 +162,7 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen }) {
             })}
           >
             <span style={{ opacity: 0.85 }}>{item.icon}</span>
-            {item.label}
+            {!isAdmin && item.partyLabel ? item.partyLabel : item.label}
           </NavLink>
         ))}
       </nav>
@@ -158,7 +173,7 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen }) {
           <div style={{ marginBottom: 12 }}>
             <div style={{ color: '#e2e8f0', fontSize: 12, fontWeight: 700 }}>{user.name}</div>
             <div style={{ marginTop: 2, textTransform: 'capitalize' }}>
-              {user.role}{user.partyName ? ` · ${user.partyName}` : ''}
+              {String(user.role || '').replace('_', ' ')}{user.partyName ? ` · ${user.partyName}` : ''}
             </div>
             <button
               type="button"

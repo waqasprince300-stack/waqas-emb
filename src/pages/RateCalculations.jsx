@@ -1,11 +1,13 @@
 import { useState, useEffect } from "react";
 import Swal from "sweetalert2";
 import { Modal, FormGroup, ActionBtn } from "../components/UI";
+import { useAuth } from "../context/AuthContext";
 import { apiService } from "../services/api";
 import "./calculator.css";
 import Loader from "../components/Loader";
 
 export default function StitchCalculator() {
+  const { isParty } = useAuth();
   const [rows, setRows] = useState([{ baseStitches: "", repeat: 1 }]);
   const [rate, setRate] = useState("");
   const [pieces, setPieces] = useState(1);
@@ -48,10 +50,11 @@ export default function StitchCalculator() {
   const format = (num) =>
     Number(num).toLocaleString(undefined, { maximumFractionDigits: 2 });
 
-  // Load saved designs on component mount
   useEffect(() => {
-    loadSavedDesigns();
-  }, []);
+    if (!isParty) {
+      loadSavedDesigns();
+    }
+  }, [isParty]);
 
   const loadSavedDesigns = async () => {
     setLoading(true);
@@ -229,18 +232,20 @@ export default function StitchCalculator() {
             <span>{format(totalCost)}</span>
           </div>
 
-          <button
-            onClick={() => setSaveModal(true)}
-            className="saveBtn"
-            disabled={!grandTotal || !rate}
-          >
-            💾 Save Design
-          </button>
+          {!isParty && (
+            <button
+              onClick={() => setSaveModal(true)}
+              className="saveBtn"
+              disabled={!grandTotal || !rate}
+            >
+              💾 Save Design
+            </button>
+          )}
         </div>
       </div>
 
       {/* Save Design Modal */}
-      {saveModal && (
+      {!isParty && saveModal && (
         <Modal
           title="Save Design"
           onClose={() => setSaveModal(false)}
@@ -294,7 +299,8 @@ export default function StitchCalculator() {
         </Modal>
       )}
 
-      {/* Saved Designs Section */}
+      {/* Saved Designs — admin only */}
+      {!isParty && (
       <div className="card-calculator" style={{ marginTop: 24 }}>
         <h2 className="title">📚 Saved Designs</h2>
 
@@ -379,7 +385,8 @@ export default function StitchCalculator() {
           </>
         }
       </div>
-      {saveDesignModal && (
+      )}
+      {!isParty && saveDesignModal && (
         <Modal
           title="Save Design"
           onClose={() => setSaveDesignModal(false)}

@@ -4,6 +4,7 @@
 // Localhost
 const API_BASE_URL = 'http://localhost:3001/api';
 const AUTH_SESSION_KEY = 'waqas_emb_auth_session';
+const BUSINESS_OWNER_KEY = 'waqas_emb_business_owner_id';
 
 const readAuthToken = () => {
   try {
@@ -14,20 +15,37 @@ const readAuthToken = () => {
   }
 };
 
+const readBusinessOwnerId = () => {
+  try {
+    const raw = localStorage.getItem(BUSINESS_OWNER_KEY);
+    const trimmed = raw != null ? String(raw).trim() : '';
+    return trimmed || '';
+  } catch {
+    return '';
+  }
+};
+
 class ApiService {
   constructor() {
     this.baseURL = API_BASE_URL;
   }
 
-  async request(endpoint, options = {}) {
+  async request(endpoint, options = {}, meta = {}) {
     const url = `${this.baseURL}${endpoint}`;
     const token = readAuthToken();
+    const headerBiz =
+      meta.businessOwnerId != null && String(meta.businessOwnerId).trim() !== ''
+        ? String(meta.businessOwnerId).trim()
+        : readBusinessOwnerId() || '';
+    const mergedHeaders = {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(headerBiz ? { 'x-business-owner-id': headerBiz } : {}),
+      ...(options.headers || {}),
+    };
     const config = {
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
       ...options,
+      headers: mergedHeaders,
     };
 
     try {
@@ -74,6 +92,53 @@ class ApiService {
 
   async resetPassword(token, data) {
     return this.request(`/reset-password/${token}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
+
+  // Users / Approvals
+  async getUsers() {
+    return this.request('/users');
+  }
+
+  async getPendingUsers() {
+    return this.request('/users/pending');
+  }
+
+  async approveUser(id, data) {
+    return this.request(`/users/${id}/approve`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async rejectUser(id) {
+    return this.request(`/users/${id}/reject`, {
+      method: 'PATCH',
+    });
+  }
+
+  async disableUser(id) {
+    return this.request(`/users/${id}/disable`, {
+      method: 'PATCH',
+    });
+  }
+
+  // Business Owners
+  async getBusinessOwners() {
+    return this.request('/businessOwners');
+  }
+
+  async createBusinessOwner(data) {
+    return this.request('/businessOwners', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateBusinessOwner(id, data) {
+    return this.request(`/businessOwners/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(data),
     });
@@ -143,37 +208,45 @@ class ApiService {
   }
 
   // Ghausia Lots
-  async getGhausiaLots() {
-    return this.request('/ghausiaLots');
+  async getGhausiaLots(opts = {}) {
+    const qs = new URLSearchParams();
+    if (opts.scope === 'all') qs.set('scope', 'all');
+    if (opts.partyScope === 'all') qs.set('partyScope', 'all');
+    const q = qs.toString();
+    return this.request(`/ghausiaLots${q ? `?${q}` : ''}`);
   }
 
   async getGhausiaLot(id) {
     return this.request(`/ghausiaLots/${id}`);
   }
 
-  async createGhausiaLot(data) {
+  async createGhausiaLot(data, businessOwnerId) {
     return this.request('/ghausiaLots', {
       method: 'POST',
       body: JSON.stringify(data),
-    });
+    }, { businessOwnerId });
   }
 
-  async updateGhausiaLot(id, data) {
+  async updateGhausiaLot(id, data, businessOwnerId) {
     return this.request(`/ghausiaLots/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(data),
-    });
+    }, { businessOwnerId });
   }
 
-  async deleteGhausiaLot(id) {
+  async deleteGhausiaLot(id, businessOwnerId) {
     return this.request(`/ghausiaLots/${id}`, {
       method: 'DELETE',
-    });
+    }, { businessOwnerId });
   }
 
   // Party Edits
-  async getPartyEdits() {
-    return this.request('/partyEdits');
+  async getPartyEdits(opts = {}) {
+    const qs = new URLSearchParams();
+    if (opts.scope === 'all') qs.set('scope', 'all');
+    if (opts.partyScope === 'all') qs.set('partyScope', 'all');
+    const q = qs.toString();
+    return this.request(`/partyEdits${q ? `?${q}` : ''}`);
   }
 
   async createPartyEdit(data) {
@@ -190,11 +263,11 @@ class ApiService {
     });
   }
 
-  async upsertPartyEditByLotId(lotId, data) {
+  async upsertPartyEditByLotId(lotId, data, businessOwnerId) {
     return this.request(`/partyEdits/lot/${lotId}`, {
       method: 'PUT',
       body: JSON.stringify(data),
-    });
+    }, { businessOwnerId });
   }
 
   // Party Ledger
@@ -211,8 +284,13 @@ class ApiService {
   }
 
   // Payments
-  async getPayments() {
-    return this.request('/payments');
+  async getPayments(filters = {}) {
+    const qs = new URLSearchParams();
+    if (filters.scope === 'all') qs.set('scope', 'all');
+    if (filters.partyScope === 'all') qs.set('partyScope', 'all');
+    if (filters.partyId) qs.set('partyId', filters.partyId);
+    const q = qs.toString();
+    return this.request(`/payments${q ? `?${q}` : ''}`);
   }
 
   async getPartyPayments(partyId) {

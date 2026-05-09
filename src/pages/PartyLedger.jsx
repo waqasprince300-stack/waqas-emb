@@ -217,17 +217,24 @@ function ReceiptThumbButton({ receipt, lotLabel, onOpen }) {
 export default function PartyLedger() {
   const {
     ghausiaLots,
-    updateLot,
+    payments,
     partyEdits,
+    partyCrossLots,
+    partyCrossPayments,
+    partyCrossPartyEdits,
+    updateLot,
     updatePartyEdit,
     parties,
-    payments,
     initialDataLoading,
   } = useApp();
   const { isAdmin, isParty, user } = useAuth();
+
+  const ledgerLots = isParty ? partyCrossLots : ghausiaLots;
+  const ledgerPayments = isParty ? partyCrossPayments : payments;
+  const ledgerPartyEdits = isParty ? partyCrossPartyEdits : partyEdits;
   const PAGE_SIZE = 10;
   const [search, setSearch] = useState("");
-  const [partyFilter, setPartyFilter] = useState(() => (user?.role === "party" && user?.partyId ? String(user.partyId) : "All"));
+  const [partyFilter, setPartyFilter] = useState("All");
   const [statusFilter, setStatusFilter] = useState("All");
   const [dateRange, setDateRange] = useState("all");
   const [editingId, setEditingId] = useState(null);
@@ -240,20 +247,23 @@ export default function PartyLedger() {
   const samePartyId = (a, b) =>
     String(a ?? "").trim() === String(b ?? "").trim();
 
-  // Only lots assigned to a party
+  const lotWorkspaceOpts = (lot) =>
+    lot?.businessOwnerId ? { businessOwnerId: lot.businessOwnerId } : {};
+
   const assignedLots = useMemo(
     () =>
-      ghausiaLots.filter(
-        (l) =>
-          String(l.partyId || "").trim() || String(l.partyName || "").trim(),
-      ).filter((lot) => {
-        if (isParty && user?.partyId && !samePartyId(lot.partyId, user.partyId)) return false;
-        return isWithinDateRange(
-          latestDateFrom(lot, ["updatedAt", "createdAt", "receivedBackDate", "dispatchDate", "allotDate", "receivedDate"]),
-          dateRange,
-        );
-      }),
-    [ghausiaLots, isParty, user?.partyId, dateRange],
+      ledgerLots
+        .filter(
+          (l) =>
+            String(l.partyId || "").trim() || String(l.partyName || "").trim(),
+        )
+        .filter((lot) =>
+          isWithinDateRange(
+            latestDateFrom(lot, ["updatedAt", "createdAt", "receivedBackDate", "dispatchDate", "allotDate", "receivedDate"]),
+            dateRange,
+          ),
+        ),
+    [ledgerLots, dateRange],
   );
 
   const formatYmd = (value) => {
@@ -270,7 +280,7 @@ export default function PartyLedger() {
   };
 
   const getDisplayStatus = (l) => {
-    const pe = partyEdits[l.id] || {};
+    const pe = ledgerPartyEdits[l.id] || {};
     // If overrideStatus explicitly set to Completed, honour it
     if (pe.overrideStatus && pe.overrideStatus.toLowerCase() === "completed")
       return "Completed";
@@ -285,7 +295,7 @@ export default function PartyLedger() {
   // Bill amount: prefer explicit partyBillAmount (> 0), else use lot's billAmount
   // let arry = [];
   const getDisplayBill = (l) => {
-    const pe = partyEdits[l.id] || {};
+    const pe = ledgerPartyEdits[l.id] || {};
     if (pe.partyBillAmount != null && Number(pe.partyBillAmount) > 0) {
       return Number(pe.partyBillAmount);
     }
@@ -308,7 +318,7 @@ export default function PartyLedger() {
       return matchQ && matchP && matchS;
     });
     return [...list].sort(compareLotsNewestFirst);
-  }, [assignedLots, search, partyFilter, statusFilter, partyEdits]);
+  }, [assignedLots, search, partyFilter, statusFilter, ledgerPartyEdits]);
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safeCurrentPage = Math.min(currentPage, totalPages);
   const pageStart = (safeCurrentPage - 1) * PAGE_SIZE;
@@ -319,8 +329,8 @@ export default function PartyLedger() {
   }, [search, partyFilter, statusFilter, dateRange]);
 
   useEffect(() => {
-    if (isParty && user?.partyId) {
-      setPartyFilter(String(user.partyId));
+    if (isParty) {
+      setPartyFilter("All");
     }
   }, [isParty, user?.partyId]);
 
@@ -331,7 +341,7 @@ export default function PartyLedger() {
   }, [currentPage, totalPages]);
 
   const openEdit = (lot, initialStatus) => {
-    const pe = partyEdits[lot.id] || {};
+    const pe = ledgerPartyEdits[lot.id] || {};
     const statusForForm = initialStatus || getDisplayStatus(lot);
     if (statusForForm === "Completed" && !isAdmin) return;
     const existingComplete =
@@ -356,7 +366,7 @@ export default function PartyLedger() {
   };
 
   const handleSave = async () => {
-    const lot = ghausiaLots.find((l) => l.id === editingId);
+    const lot = ledgerLots.find((l) => l.id === editingId);
     if (!lot) return;
 
     if (editForm.status === "Completed") {
@@ -427,7 +437,7 @@ export default function PartyLedger() {
           notes: editForm.notes,
           overrideStatus: "Completed",
           ...(amountChangeNote ? { amountChangeNote } : {}),
-        });
+        }, lotWorkspaceOpts(lot));
         const lotUpdates = {
           status: "received back",
           receivedBackDate:
@@ -441,7 +451,7 @@ export default function PartyLedger() {
           lotUpdates.partyId = editForm.partyId;
           lotUpdates.partyName = sel?.name || editForm.partyName;
         }
-        await updateLot(editingId, lotUpdates);
+        await updateLot(editingId, lotUpdates, lotWorkspaceOpts(lot));
       } else {
         const nextOverrideStatus = editForm.status === "Pending" ? "Pending" : "In Progress";
         await updatePartyEdit(editingId, {
@@ -450,7 +460,7 @@ export default function PartyLedger() {
           receipt: editForm.receipt,
           notes: editForm.notes,
           overrideStatus: nextOverrideStatus,
-        });
+        }, lotWorkspaceOpts(lot));
         const lotUpdates = {};
         const lowerStatus = (lot.status || "").toLowerCase();
         if (editForm.status === "Pending") {
@@ -469,7 +479,7 @@ export default function PartyLedger() {
           lotUpdates.partyName = sel?.name || editForm.partyName;
         }
         if (Object.keys(lotUpdates).length > 0) {
-          await updateLot(editingId, lotUpdates);
+          await updateLot(editingId, lotUpdates, lotWorkspaceOpts(lot));
         }
       }
 
@@ -507,12 +517,12 @@ export default function PartyLedger() {
         .length,
       completedAmount,
       inProgressAmount,
-      withReceipt: filtered.filter((l) => partyEdits[l.id]?.receipt).length,
+      withReceipt: filtered.filter((l) => ledgerPartyEdits[l.id]?.receipt).length,
     };
-  }, [filtered, partyEdits]);
+  }, [filtered, ledgerPartyEdits]);
 
   const partyBalanceInfo = useMemo(() => {
-    const pays = payments.filter((p) => p.type === "Paid" && isWithinDateRange(p.updatedAt || p.date, dateRange));
+    const pays = ledgerPayments.filter((p) => p.type === "Paid" && isWithinDateRange(p.updatedAt || p.date, dateRange));
 
   if (partyFilter === "All") {
     const names = [
@@ -558,30 +568,30 @@ export default function PartyLedger() {
       ? `${pname}'s balance`
       : "Total bill value minus paid to party",
   };
-}, [partyFilter, filtered, payments, parties, partyEdits, totals.billTotal, dateRange]);
+}, [partyFilter, filtered, ledgerPayments, parties, ledgerPartyEdits, totals.billTotal, dateRange]);
   const handleRowStatusChange = async (lot, newStatus) => {
     if (newStatus === "Completed") {
       openEdit(lot, "Completed");
       return;
     }
     if (newStatus === "Pending") {
-      await updatePartyEdit(lot.id, { overrideStatus: "Pending", completeDate: "" });
+      await updatePartyEdit(lot.id, { overrideStatus: "Pending", completeDate: "" }, lotWorkspaceOpts(lot));
       if ((lot.status || "").toLowerCase() !== "pending") {
-        await updateLot(lot.id, { status: "pending", dispatchDate: "" });
+        await updateLot(lot.id, { status: "pending", dispatchDate: "" }, lotWorkspaceOpts(lot));
       }
       return;
     }
-    await updatePartyEdit(lot.id, { overrideStatus: "In Progress" });
+    await updatePartyEdit(lot.id, { overrideStatus: "In Progress" }, lotWorkspaceOpts(lot));
     const lowerStatus = (lot.status || "").toLowerCase();
     if (lowerStatus !== "dispatched") {
       await updateLot(lot.id, {
         status: "dispatched",
         dispatchDate: new Date().toISOString().slice(0, 10),
-      });
+      }, lotWorkspaceOpts(lot));
     }
   };
 
-  const editingLot = ghausiaLots.find((l) => l.id === editingId);
+  const editingLot = ledgerLots.find((l) => l.id === editingId);
 
   if (initialDataLoading) {
     return (
@@ -598,9 +608,6 @@ export default function PartyLedger() {
       </div>
     );
   }
-
-  console.log(partyBalanceInfo.paidSum)
-  console.log(totals.completed)
 
   return (
     <div>
@@ -719,7 +726,8 @@ export default function PartyLedger() {
           disabled={isParty}
         >
           {!isParty && <option value="All">All Parties</option>}
-          {parties.map((p) => (
+          {isParty && <option value="All">All collections</option>}
+          {!isParty && parties.map((p) => (
             <option key={p.id} value={String(p.id)}>
               {p.name}
             </option>
@@ -771,7 +779,7 @@ export default function PartyLedger() {
               ) : (
                 paginatedLots.map((l) => {
                   // console.log(l, 'l');
-                  const pe = partyEdits[l.id] || {};
+                  const pe = ledgerPartyEdits[l.id] || {};
                   const displayStatus = getDisplayStatus(l);
                   const displayBill = getDisplayBill(l);
                   const displayComplete = getDisplayCompleteDate(l, pe);

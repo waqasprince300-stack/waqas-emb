@@ -13,6 +13,7 @@ import Login from './pages/Login';
 import Signup from './pages/Signup';
 import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
+import UserApprovals from './pages/UserApprovals';
 
 function Layout({ children, sidebarOpen, setSidebarOpen }) {
   return (
@@ -158,9 +159,19 @@ function AppRoutes() {
       <Route
         path="/rate-calculations"
         element={(
-          <RequireAuth adminOnly>
+          <RequireAuth>
             <Layout sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen}>
               <RateCalculations />
+            </Layout>
+          </RequireAuth>
+        )}
+      />
+      <Route
+        path="/users"
+        element={(
+          <RequireAuth adminOnly>
+            <Layout sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen}>
+              <UserApprovals />
             </Layout>
           </RequireAuth>
         )}

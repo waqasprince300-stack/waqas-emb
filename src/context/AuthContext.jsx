@@ -14,7 +14,7 @@ const safeJsonParse = (value, fallback) => {
 
 const normalizeEmail = (email) => String(email || '').trim().toLowerCase();
 
-const normalizeAuthResponse = (response) => {
+export const normalizeAuthResponse = (response) => {
   const payload = response?.data || response || {};
   const user = payload.user || payload;
   const token = payload.token || payload.accessToken || response?.token || response?.accessToken || '';
@@ -22,7 +22,8 @@ const normalizeAuthResponse = (response) => {
     token,
     user: {
       ...user,
-      role: user?.role || 'admin',
+      role: user?.role ?? 'party',
+      status: user?.status ?? 'approved',
       email: normalizeEmail(user?.email),
     },
   };
@@ -32,7 +33,7 @@ export function AuthProvider({ children }) {
   const [session, setSession] = useState(() => {
     const stored = safeJsonParse(localStorage.getItem(SESSION_KEY), null);
     if (!stored) return null;
-    return stored.user ? stored : { user: stored, token: stored.token || '' };
+    return normalizeAuthResponse(stored.user ? stored : { user: stored, token: stored.token || '' });
   });
 
   const saveSession = useCallback((nextSession) => {
@@ -41,17 +42,17 @@ export function AuthProvider({ children }) {
     return nextSession.user;
   }, []);
 
-  const signup = useCallback(async ({ name, email, password, role, partyId, partyName }) => {
-    const response = await apiService.signup({
+  const signup = useCallback(async ({ name, email, password, role, partyId, partyName, adminEmail }) => {
+    return apiService.signup({
       name: String(name || '').trim(),
       email: normalizeEmail(email),
       password,
       role,
       partyId,
       partyName,
+      adminEmail,
     });
-    return saveSession(normalizeAuthResponse(response));
-  }, [saveSession]);
+  }, []);
 
   const login = useCallback(async ({ email, password }) => {
     const response = await apiService.login({
@@ -78,15 +79,18 @@ export function AuthProvider({ children }) {
 
   const value = useMemo(() => ({
     user,
-    isAuthenticated: !!user,
+    isAuthenticated: !!user && user?.status === 'approved',
+    /** Tenant (business) administrator — owns businesses, parties, operational data */
     isAdmin: user?.role === 'admin',
+    isTenantAdmin: user?.role === 'admin',
     isParty: user?.role === 'party',
     signup,
     login,
     forgotPassword,
     resetPassword,
     logout,
-  }), [forgotPassword, login, logout, resetPassword, signup, user]);
+    refreshSession: saveSession,
+  }), [forgotPassword, login, logout, resetPassword, saveSession, signup, user]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
