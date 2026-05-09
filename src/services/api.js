@@ -1,5 +1,18 @@
 // API utility for Express.js Backend
-const API_BASE_URL = 'https://waqas-emb-backend-1.onrender.com/api';
+// Render
+// const API_BASE_URL = 'https://waqas-emb-backend-1.onrender.com/api';
+// Localhost
+const API_BASE_URL = 'http://localhost:3001/api';
+const AUTH_SESSION_KEY = 'waqas_emb_auth_session';
+
+const readAuthToken = () => {
+  try {
+    const session = JSON.parse(localStorage.getItem(AUTH_SESSION_KEY) || 'null');
+    return session?.token || '';
+  } catch {
+    return '';
+  }
+};
 
 class ApiService {
   constructor() {
@@ -8,9 +21,11 @@ class ApiService {
 
   async request(endpoint, options = {}) {
     const url = `${this.baseURL}${endpoint}`;
+    const token = readAuthToken();
     const config = {
       headers: {
         'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
       ...options,
     };
@@ -33,6 +48,35 @@ class ApiService {
       console.error('API request failed:', error);
       throw error;
     }
+  }
+
+  // Auth
+  async signup(data) {
+    return this.request('/signup', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async login(data) {
+    return this.request('/login', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async forgotPassword(data) {
+    return this.request('/forgot-password', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async resetPassword(token, data) {
+    return this.request(`/reset-password/${token}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
   }
 
   // Dashboard

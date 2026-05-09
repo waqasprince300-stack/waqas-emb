@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
+import AuthCard from '../components/AuthCard';
 import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
 
@@ -15,6 +16,7 @@ export default function Signup() {
     partyId: '',
   });
   const [error, setError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const selectedParty = useMemo(
     () => parties.find((party) => String(party.id) === String(form.partyId)),
@@ -25,38 +27,51 @@ export default function Signup() {
     return <Navigate to="/" replace />;
   }
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault();
     setError('');
     if (form.role === 'party' && !form.partyId) {
       setError('Select the party this account belongs to.');
       return;
     }
-    signup({
-      ...form,
-      partyName: selectedParty?.name || '',
-    });
-    navigate('/', { replace: true });
+    if (form.password.length < 8) {
+      setError('Password must be at least 8 characters.');
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      await signup({
+        ...form,
+        partyName: selectedParty?.name || '',
+      });
+      navigate('/', { replace: true });
+    } catch (err) {
+      setError(err.message || 'Unable to create account');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
-    <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: '#F0F2F5', padding: 20 }}>
-      <form onSubmit={handleSubmit} style={{ width: '100%', maxWidth: 460, background: '#fff', border: '1px solid var(--border)', borderRadius: 16, padding: 28, boxShadow: 'var(--shadow)' }}>
-        <div style={{ marginBottom: 22 }}>
-          <div style={{ fontFamily: "'Playfair Display', serif", fontSize: 26, fontWeight: 700, color: '#111827' }}>Create Account</div>
-          <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4 }}>Frontend-only account for local access control</div>
-        </div>
-
+    <AuthCard
+      title="Create account"
+      subtitle="Set up secure access for admins or party users."
+      sideTitle="Give every party the right view of work and payments."
+      sideText="Create accounts for staff and parties while keeping admin-only pages protected."
+      footer={<>Already have an account? <Link className="auth-inline-link" to="/login">Login</Link></>}
+    >
+      <form className="auth-form" onSubmit={handleSubmit}>
         {error && (
-          <div className="alert alert-warning" style={{ marginBottom: 14 }}>
+          <div className="alert alert-warning">
             {error}
           </div>
         )}
 
-        <label style={{ display: 'block', marginBottom: 12 }}>
-          <span style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>Name</span>
+        <label className="auth-label">
+          <span className="auth-label-text">Name</span>
           <input
             className="form-input"
+            placeholder="Full name"
             value={form.name}
             onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
             required
@@ -64,30 +79,33 @@ export default function Signup() {
           />
         </label>
 
-        <label style={{ display: 'block', marginBottom: 12 }}>
-          <span style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>Email</span>
+        <label className="auth-label">
+          <span className="auth-label-text">Email</span>
           <input
             className="form-input"
             type="email"
+            placeholder="you@example.com"
             value={form.email}
             onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
             required
           />
         </label>
 
-        <label style={{ display: 'block', marginBottom: 12 }}>
-          <span style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>Password</span>
+        <label className="auth-label">
+          <span className="auth-label-text">Password</span>
           <input
             className="form-input"
             type="password"
+            placeholder="Minimum 8 characters"
             value={form.password}
             onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
+            minLength={8}
             required
           />
         </label>
 
-        <label style={{ display: 'block', marginBottom: 12 }}>
-          <span style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>Account Type</span>
+        <label className="auth-label">
+          <span className="auth-label-text">Account Type</span>
           <select
             className="form-select"
             value={form.role}
@@ -99,8 +117,8 @@ export default function Signup() {
         </label>
 
         {form.role === 'party' && (
-          <label style={{ display: 'block', marginBottom: 18 }}>
-            <span style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>Party</span>
+          <label className="auth-label">
+            <span className="auth-label-text">Party</span>
             <select
               className="form-select"
               value={form.partyId}
@@ -115,14 +133,10 @@ export default function Signup() {
           </label>
         )}
 
-        <button className="btn btn-primary" type="submit" style={{ width: '100%', justifyContent: 'center' }}>
-          Sign Up
+        <button className="btn btn-primary" type="submit" disabled={isSubmitting} style={{ width: '100%', justifyContent: 'center' }}>
+          {isSubmitting ? 'Creating account...' : 'Sign Up'}
         </button>
-
-        <div style={{ marginTop: 18, fontSize: 13, textAlign: 'center', color: 'var(--text-secondary)' }}>
-          Already have an account? <Link to="/login">Login</Link>
-        </div>
       </form>
-    </div>
+    </AuthCard>
   );
 }

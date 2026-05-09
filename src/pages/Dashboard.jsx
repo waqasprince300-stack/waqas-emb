@@ -32,6 +32,15 @@ export default function Dashboard() {
     return list.filter((payment) => isWithinDateRange(payment.updatedAt || payment.date, dateRange));
   }, [payments, isParty, user?.partyName, dateRange]);
 
+  const paidToNonOwnerParties = useMemo(() => {
+    return scopedPayments
+      .filter(
+        (p) =>
+          p.type === 'Paid' && String(p.party || '').toLowerCase() !== 'owner',
+      )
+      .reduce((s, p) => s + Number(p.amount || 0), 0);
+  }, [scopedPayments]);
+
   if (initialDataLoading) {
     return (
       <div style={{ textAlign: 'center', display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
@@ -98,17 +107,6 @@ export default function Dashboard() {
     { label: 'Completed',      value: byStatus('completed'),     color: '#15803d', sub: 'Fully done' },
     { label: 'Active Parties', value: partyStats.length,         color: '#7c3aed', sub: 'With assigned lots' },
   ];
-
-  const paidToNonOwnerParties = useMemo(() => {
-      const sum = scopedPayments
-        .filter(
-          (p) =>
-            p.type === "Paid" && String(p.party || "").toLowerCase() !== "owner",
-        )
-        .reduce((s, p) => s + p.amount, 0);
-      console.log("Sum of Paid payments to non-Owner parties:", sum);
-      return sum;
-    }, [scopedPayments]);
 
   const profit = completedTotal - paidToNonOwnerParties;
 

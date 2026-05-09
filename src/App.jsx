@@ -11,6 +11,8 @@ import Payments from './pages/Payments';
 import RateCalculations from './pages/RateCalculations';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
 
 function Layout({ children, sidebarOpen, setSidebarOpen }) {
   return (
@@ -101,6 +103,8 @@ function AppRoutes() {
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/signup" element={<Signup />} />
+      <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/reset-password/:token" element={<ResetPassword />} />
       <Route
         path="/"
         element={(
@@ -168,12 +172,12 @@ function AppRoutes() {
 
 export default function App() {
   return (
-    <AppProvider>
-      <AuthProvider>
+    <AuthProvider>
+      <AppProvider>
         <BrowserRouter>
           <AppRoutes />
         </BrowserRouter>
-      </AuthProvider>
-    </AppProvider>
+      </AppProvider>
+    </AuthProvider>
   );
 }

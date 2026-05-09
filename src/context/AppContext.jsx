@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { apiService } from '../services/api';
+import { useAuth } from './AuthContext';
 
 const AppContext = createContext(null);
 
@@ -73,6 +74,7 @@ const normalizeParty = (p) => {
 };
 
 export function AppProvider({ children }) {
+  const { isAuthenticated, user } = useAuth();
   const [parties, setParties] = useState(INITIAL_PARTIES);
   const [ghausiaLots, setGhausiaLots] = useState(INITIAL_GHAUSIA);
   const [partyEdits, setPartyEdits] = useState(INITIAL_PARTY_EDITS);
@@ -80,7 +82,17 @@ export function AppProvider({ children }) {
   const [initialDataLoading, setInitialDataLoading] = useState(true);
 
   useEffect(() => {
+    if (!isAuthenticated) {
+      setParties(INITIAL_PARTIES);
+      setGhausiaLots(INITIAL_GHAUSIA);
+      setPartyEdits(INITIAL_PARTY_EDITS);
+      setPayments(INITIAL_PAYMENTS);
+      setInitialDataLoading(false);
+      return;
+    }
+
     async function loadAppData() {
+      setInitialDataLoading(true);
       try {
         const [remoteParties, remoteLots, remotePayments, remotePartyEdits] = await Promise.all([
           apiService.getParties(),
@@ -89,15 +101,15 @@ export function AppProvider({ children }) {
           apiService.getPartyEdits(),
         ]);
 
-        if (Array.isArray(remoteParties) && remoteParties.length > 0) {
+        if (Array.isArray(remoteParties)) {
           setParties(remoteParties.map(normalizeParty));
         }
 
-        if (Array.isArray(remoteLots) && remoteLots.length > 0) {
+        if (Array.isArray(remoteLots)) {
           setGhausiaLots(remoteLots.map(normalizeLotData));
         }
 
-        if (Array.isArray(remotePayments) && remotePayments.length > 0) {
+        if (Array.isArray(remotePayments)) {
           setPayments(remotePayments);
         }
 
@@ -119,7 +131,7 @@ export function AppProvider({ children }) {
     }
 
     loadAppData();
-  }, []);
+  }, [isAuthenticated, user?._id]);
 
   const addParty = async (p) => {
     const created = normalizeParty(await apiService.createParty(p));

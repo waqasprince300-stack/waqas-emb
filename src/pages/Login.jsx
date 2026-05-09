@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
+import AuthCard from '../components/AuthCard';
 import { useAuth } from '../context/AuthContext';
 
 export default function Login() {
@@ -7,41 +8,45 @@ export default function Login() {
   const navigate = useNavigate();
   const [form, setForm] = useState({ email: '', password: '' });
   const [error, setError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   if (isAuthenticated) {
     return <Navigate to="/" replace />;
   }
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault();
     setError('');
+    setIsSubmitting(true);
     try {
-      login(form);
+      await login(form);
       navigate('/', { replace: true });
     } catch (err) {
       setError(err.message || 'Unable to login');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   return (
-    <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: '#F0F2F5', padding: 20 }}>
-      <form onSubmit={handleSubmit} style={{ width: '100%', maxWidth: 420, background: '#fff', border: '1px solid var(--border)', borderRadius: 16, padding: 28, boxShadow: 'var(--shadow)' }}>
-        <div style={{ marginBottom: 22 }}>
-          <div style={{ fontFamily: "'Playfair Display', serif", fontSize: 26, fontWeight: 700, color: '#111827' }}>Ghausia</div>
-          <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4 }}>Login with your local admin or party account</div>
-        </div>
-
+    <AuthCard
+      title="Welcome back"
+      subtitle="Sign in to continue managing lots, ledgers, and payments."
+      footer={<>Need an account? <Link className="auth-inline-link" to="/signup">Create one</Link></>}
+    >
+      <form className="auth-form" onSubmit={handleSubmit}>
         {error && (
-          <div className="alert alert-warning" style={{ marginBottom: 14 }}>
+          <div className="alert alert-warning">
             {error}
           </div>
         )}
 
-        <label style={{ display: 'block', marginBottom: 12 }}>
-          <span style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>Email</span>
+        <label className="auth-label">
+          <span className="auth-label-text">Email</span>
           <input
             className="form-input"
             type="email"
+            placeholder="you@example.com"
             value={form.email}
             onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
             required
@@ -49,25 +54,25 @@ export default function Login() {
           />
         </label>
 
-        <label style={{ display: 'block', marginBottom: 18 }}>
-          <span style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>Password</span>
+        <label className="auth-label">
+          <span className="auth-label-row">
+            <span style={{ color: 'var(--text-secondary)' }}>Password</span>
+            <Link className="auth-inline-link" to="/forgot-password">Forgot password?</Link>
+          </span>
           <input
             className="form-input"
             type="password"
+            placeholder="Enter your password"
             value={form.password}
             onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
             required
           />
         </label>
 
-        <button className="btn btn-primary" type="submit" style={{ width: '100%', justifyContent: 'center' }}>
-          Login
+        <button className="btn btn-primary" type="submit" disabled={isSubmitting} style={{ width: '100%', justifyContent: 'center' }}>
+          {isSubmitting ? 'Logging in...' : 'Login'}
         </button>
-
-        <div style={{ marginTop: 18, fontSize: 13, textAlign: 'center', color: 'var(--text-secondary)' }}>
-          Need a local account? <Link to="/signup">Sign up</Link>
-        </div>
       </form>
-    </div>
+    </AuthCard>
   );
 }

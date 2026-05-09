@@ -1,7 +1,7 @@
-import React, { createContext, useContext, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
+import apiService from '../services/api';
 
 const AuthContext = createContext(null);
-const USERS_KEY = 'waqas_emb_auth_users';
 const SESSION_KEY = 'waqas_emb_auth_session';
 
 const safeJsonParse = (value, fallback) => {
@@ -12,55 +12,69 @@ const safeJsonParse = (value, fallback) => {
   }
 };
 
-const readStoredUsers = () => safeJsonParse(localStorage.getItem(USERS_KEY), []);
-
 const normalizeEmail = (email) => String(email || '').trim().toLowerCase();
 
-export function AuthProvider({ children }) {
-  const [user, setUser] = useState(() => safeJsonParse(localStorage.getItem(SESSION_KEY), null));
+const normalizeAuthResponse = (response) => {
+  const payload = response?.data || response || {};
+  const user = payload.user || payload;
+  const token = payload.token || payload.accessToken || response?.token || response?.accessToken || '';
+  return {
+    token,
+    user: {
+      ...user,
+      role: user?.role || 'admin',
+      email: normalizeEmail(user?.email),
+    },
+  };
+};
 
-  const signup = ({ name, email, password, role, partyId, partyName }) => {
-    const users = readStoredUsers();
-    const nextUser = {
-      id: `${Date.now()}`,
+export function AuthProvider({ children }) {
+  const [session, setSession] = useState(() => {
+    const stored = safeJsonParse(localStorage.getItem(SESSION_KEY), null);
+    if (!stored) return null;
+    return stored.user ? stored : { user: stored, token: stored.token || '' };
+  });
+
+  const saveSession = useCallback((nextSession) => {
+    localStorage.setItem(SESSION_KEY, JSON.stringify(nextSession));
+    setSession(nextSession);
+    return nextSession.user;
+  }, []);
+
+  const signup = useCallback(async ({ name, email, password, role, partyId, partyName }) => {
+    const response = await apiService.signup({
       name: String(name || '').trim(),
       email: normalizeEmail(email),
-      password: String(password || ''),
-      role: role === 'party' ? 'party' : 'admin',
-      partyId: role === 'party' ? String(partyId || '') : '',
-      partyName: role === 'party' ? String(partyName || '').trim() : '',
-    };
+      password,
+      role,
+      partyId,
+      partyName,
+    });
+    return saveSession(normalizeAuthResponse(response));
+  }, [saveSession]);
 
-    const existingIndex = users.findIndex((stored) => normalizeEmail(stored.email) === nextUser.email);
-    const nextUsers = existingIndex >= 0
-      ? users.map((stored, index) => (index === existingIndex ? nextUser : stored))
-      : [...users, nextUser];
+  const login = useCallback(async ({ email, password }) => {
+    const response = await apiService.login({
+      email: normalizeEmail(email),
+      password,
+    });
+    return saveSession(normalizeAuthResponse(response));
+  }, [saveSession]);
 
-    localStorage.setItem(USERS_KEY, JSON.stringify(nextUsers));
-    const sessionUser = { ...nextUser, password: undefined };
-    localStorage.setItem(SESSION_KEY, JSON.stringify(sessionUser));
-    setUser(sessionUser);
-    return sessionUser;
-  };
+  const forgotPassword = useCallback(({ email }) => {
+    return apiService.forgotPassword({ email: normalizeEmail(email) });
+  }, []);
 
-  const login = ({ email, password }) => {
-    const emailKey = normalizeEmail(email);
-    const match = readStoredUsers().find(
-      (stored) => normalizeEmail(stored.email) === emailKey && String(stored.password || '') === String(password || ''),
-    );
-    if (!match) {
-      throw new Error('Invalid email or password');
-    }
-    const sessionUser = { ...match, password: undefined };
-    localStorage.setItem(SESSION_KEY, JSON.stringify(sessionUser));
-    setUser(sessionUser);
-    return sessionUser;
-  };
+  const resetPassword = useCallback((token, { password }) => {
+    return apiService.resetPassword(token, { password });
+  }, []);
 
-  const logout = () => {
+  const logout = useCallback(() => {
     localStorage.removeItem(SESSION_KEY);
-    setUser(null);
-  };
+    setSession(null);
+  }, []);
+
+  const user = session?.user || null;
 
   const value = useMemo(() => ({
     user,
@@ -69,8 +83,10 @@ export function AuthProvider({ children }) {
     isParty: user?.role === 'party',
     signup,
     login,
+    forgotPassword,
+    resetPassword,
     logout,
-  }), [user]);
+  }), [forgotPassword, login, logout, resetPassword, signup, user]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
