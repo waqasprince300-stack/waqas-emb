@@ -6,6 +6,34 @@ import Loader from "../components/Loader";
 import LoaderDashboard from "../components/LoaderDashboard";
 import { compareRowsByUpdatedNewestFirst } from "../utils/dateFilters";
 
+function normalizeLotKey(linkedLot) {
+  return String(linkedLot || "").trim().toLowerCase();
+}
+
+function lotKeyFromLot(l) {
+  return String(l.lotNumber ?? l.lotNo ?? "").trim();
+}
+
+function hasOwnerReceivedForLot(lot, payments) {
+  const k = normalizeLotKey(lotKeyFromLot(lot));
+  if (!k || !Array.isArray(payments)) return false;
+  return payments.some(
+    (p) =>
+      p.type === "Received" &&
+      normalizeLotKey(p.linkedLot) === k,
+  );
+}
+
+function pendingRevisionIsReal(pe) {
+  const pr = pe?.pendingRevision;
+  if (!pr) return false;
+  return Number(pr.fromAmount) !== Number(pr.toAmount);
+}
+
+function needsOwnerBillingChoice(lot, pe, payments) {
+  return hasOwnerReceivedForLot(lot, payments) || pendingRevisionIsReal(pe);
+}
+
 function receiptPreviewKind(receipt) {
   const s = String(receipt || "").trim();
   if (!s) return "none";
@@ -104,6 +132,7 @@ export default function ReviewLots() {
   const {
     reportingLots,
     reportingPartyEdits,
+    reportingPayments,
     parties,
     businessOwners,
     approveLotCompletion,
@@ -115,6 +144,8 @@ export default function ReviewLots() {
   const [rejectModal, setRejectModal] = useState(null);
   const [rejectReason, setRejectReason] = useState("");
   const [receiptPreview, setReceiptPreview] = useState(null);
+  const [approveBillingModal, setApproveBillingModal] = useState(null);
+  const [ownerBillingChoice, setOwnerBillingChoice] = useState("sync_party");
 
   const businessName = (bizId) =>
     businessOwners.find((b) => String(b.id ?? b._id) === String(bizId || ""))
@@ -148,20 +179,60 @@ export default function ReviewLots() {
   };
 
   const handleApprove = async (lot) => {
-    const ok = await Swal.fire({
-      title: "Approve completion?",
-      text: `${lot.lotNo || lot.lotNumber} will become billable to owner (received back).`,
-      icon: "question",
-      showCancelButton: true,
-      confirmButtonText: "Approve",
-      cancelButtonText: "Cancel",
-    });
-    if (!ok.isConfirmed) return;
+    const pe = reportingPartyEdits[lot.id] || {};
+    const needsChoice = needsOwnerBillingChoice(lot, pe, reportingPayments);
+    const showDelta = pendingRevisionIsReal(pe);
+
+    if (!needsChoice) {
+      const ok = await Swal.fire({
+        title: "Approve completion?",
+        text: `${lot.lotNo || lot.lotNumber} will become billable to owner (received back).`,
+        icon: "question",
+        showCancelButton: true,
+        confirmButtonText: "Approve",
+        cancelButtonText: "Cancel",
+      });
+      if (!ok.isConfirmed) return;
+      setBusyId(lot.id);
+      try {
+        await approveLotCompletion(lot.id, {
+          businessOwnerId: lot.businessOwnerId,
+        });
+        Swal.fire({
+          toast: true,
+          position: "top-end",
+          icon: "success",
+          title: "Lot approved",
+          showConfirmButton: false,
+          timer: 2200,
+          timerProgressBar: true,
+        });
+      } catch (e) {
+        Swal.fire({
+          icon: "error",
+          title: "Could not approve",
+          text: String(e?.message || e || ""),
+        });
+      } finally {
+        setBusyId(null);
+      }
+      return;
+    }
+
+    setOwnerBillingChoice(showDelta ? "sync_party" : "keep_ghausia");
+    setApproveBillingModal({ lot, pe, showDelta });
+  };
+
+  const submitApproveWithBilling = async () => {
+    if (!approveBillingModal) return;
+    const { lot } = approveBillingModal;
     setBusyId(lot.id);
     try {
       await approveLotCompletion(lot.id, {
         businessOwnerId: lot.businessOwnerId,
+        ownerBillingChoice,
       });
+      setApproveBillingModal(null);
       Swal.fire({
         toast: true,
         position: "top-end",
@@ -321,7 +392,21 @@ export default function ReviewLots() {
                         )}
                       </td>
                       <td style={{ fontSize: 12, maxWidth: 220 }}>
-                        {pe.notes || "—"}
+                        <div>{pe.notes || "—"}</div>
+                        {pendingRevisionIsReal(pe) ? (
+                          <div style={{ fontSize: 11, color: "#92400e", marginTop: 6, lineHeight: 1.35 }}>
+                            Party revised bill: ₨
+                            {Number(pe.pendingRevision.fromAmount).toLocaleString()} → ₨
+                            {Number(pe.pendingRevision.toAmount).toLocaleString()}
+                            {hasOwnerReceivedForLot(l, reportingPayments) ? (
+                              <span> · Owner payment exists for this lot</span>
+                            ) : null}
+                          </div>
+                        ) : hasOwnerReceivedForLot(l, reportingPayments) ? (
+                          <div style={{ fontSize: 11, color: "#0369a1", marginTop: 6 }}>
+                            Owner payment is linked to this lot — choose how Ghausia bill should follow.
+                          </div>
+                        ) : null}
                       </td>
                       <td style={{ whiteSpace: "nowrap" }}>
                         <button
@@ -357,6 +442,151 @@ export default function ReviewLots() {
           </table>
         </div>
       </div>
+
+      {approveBillingModal && (
+        <Modal
+          wide
+          title={`Approve — owner bill (${approveBillingModal.lot.lotNo || approveBillingModal.lot.lotNumber})`}
+          onClose={() => !busyId && setApproveBillingModal(null)}
+          onFormSubmit={() => {
+            void submitApproveWithBilling();
+          }}
+          footer={
+            <>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                disabled={busyId}
+                onClick={() => setApproveBillingModal(null)}
+              >
+                Cancel
+              </button>
+              <button type="submit" className="btn btn-success" disabled={busyId}>
+                {busyId ? (
+                  <>
+                    <Loader /> Approving…
+                  </>
+                ) : (
+                  "Approve with this billing option"
+                )}
+              </button>
+            </>
+          }
+        >
+          {(() => {
+            const { lot, pe, showDelta } = approveBillingModal;
+            const partyBill = peBill(lot.id, lot);
+            const ghausia = Number(lot.billAmount || 0);
+            const pr = pe.pendingRevision;
+            const delta =
+              pr && showDelta
+                ? Math.max(0, Number(pr.toAmount) - Number(pr.fromAmount))
+                : 0;
+            return (
+              <>
+                <p style={{ fontSize: 14, color: "var(--text-secondary)", marginBottom: 16, lineHeight: 1.5 }}>
+                  This lot needs a billing choice for the <strong>owner / Ghausia</strong> side
+                  {showDelta ? " because the party changed the ledger amount while awaiting review" : ""}
+                  {hasOwnerReceivedForLot(lot, reportingPayments)
+                    ? ", and there is already a Received payment recorded against this lot number."
+                    : "."}
+                </p>
+                <div
+                  style={{
+                    fontSize: 13,
+                    marginBottom: 16,
+                    padding: "12px 14px",
+                    background: "#F8FAFC",
+                    borderRadius: 8,
+                    border: "1px solid var(--border)",
+                  }}
+                >
+                  <div>
+                    <strong>Party ledger (approved submission):</strong> ₨
+                    {partyBill.toLocaleString()}
+                  </div>
+                  <div>
+                    <strong>Current Ghausia bill on lot:</strong> ₨{ghausia.toLocaleString()}
+                  </div>
+                  {showDelta && pr ? (
+                    <div style={{ marginTop: 6 }}>
+                      <strong>Party revision:</strong> ₨
+                      {Number(pr.fromAmount).toLocaleString()} → ₨
+                      {Number(pr.toAmount).toLocaleString()} (positive difference ₨
+                      {delta.toLocaleString()})
+                    </div>
+                  ) : null}
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                  <label
+                    style={{
+                      display: "flex",
+                      gap: 10,
+                      alignItems: "flex-start",
+                      cursor: "pointer",
+                      fontSize: 14,
+                    }}
+                  >
+                    <input
+                      type="radio"
+                      name="ownerBilling"
+                      checked={ownerBillingChoice === "sync_party"}
+                      onChange={() => setOwnerBillingChoice("sync_party")}
+                    />
+                    <span>
+                      <strong>Match Ghausia bill to party ledger</strong> — set the lot&apos;s bill
+                      to ₨{partyBill.toLocaleString()} (full party amount drives owner billing).
+                    </span>
+                  </label>
+                  <label
+                    style={{
+                      display: "flex",
+                      gap: 10,
+                      alignItems: "flex-start",
+                      cursor: "pointer",
+                      fontSize: 14,
+                    }}
+                  >
+                    <input
+                      type="radio"
+                      name="ownerBilling"
+                      checked={ownerBillingChoice === "keep_ghausia"}
+                      onChange={() => setOwnerBillingChoice("keep_ghausia")}
+                    />
+                    <span>
+                      <strong>Keep current Ghausia bill</strong> — leave the lot bill at ₨
+                      {ghausia.toLocaleString()} (party ledger still stores the party figure).
+                    </span>
+                  </label>
+                  {showDelta ? (
+                    <label
+                      style={{
+                        display: "flex",
+                        gap: 10,
+                        alignItems: "flex-start",
+                        cursor: "pointer",
+                        fontSize: 14,
+                      }}
+                    >
+                      <input
+                        type="radio"
+                        name="ownerBilling"
+                        checked={ownerBillingChoice === "delta_only"}
+                        onChange={() => setOwnerBillingChoice("delta_only")}
+                      />
+                      <span>
+                        <strong>Owner billed for party increase only</strong> — set the Ghausia bill
+                        to ₨{delta.toLocaleString()} (only the positive change since the party&apos;s
+                        previous figure). If there was no increase, the lot bill is left unchanged.
+                      </span>
+                    </label>
+                  ) : null}
+                </div>
+              </>
+            );
+          })()}
+        </Modal>
+      )}
 
       {rejectModal && (
         <Modal

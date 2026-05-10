@@ -361,8 +361,8 @@ export function AppProvider({ children }) {
   };
 
   const approveLotCompletion = async (lotId, opts = {}) => {
-    const { businessOwnerId } = opts;
-    const raw = await apiService.approveLotCompletion(lotId, businessOwnerId);
+    const { businessOwnerId, ownerBillingChoice } = opts;
+    const raw = await apiService.approveLotCompletion(lotId, { businessOwnerId, ownerBillingChoice });
     const normalized = mergeLotAcrossCollections(raw);
     const idStr = String(lotId);
     const mergePe = (prev) => ({
@@ -371,6 +371,7 @@ export function AppProvider({ children }) {
         ...(prev[idStr] || {}),
         overrideStatus: 'Completed',
         completeDate: normalized.receivedBackDate || prev[idStr]?.completeDate,
+        pendingRevision: undefined,
       },
     });
     setPartyEdits(mergePe);
@@ -389,6 +390,7 @@ export function AppProvider({ children }) {
       [idStr]: {
         ...(prev[idStr] || {}),
         overrideStatus: 'Rejected',
+        pendingRevision: undefined,
       },
     });
     setPartyEdits(mergePe);
@@ -433,8 +435,9 @@ export function AppProvider({ children }) {
     return payment;
   };
 
-  const deletePayment = async (id) => {
-    await apiService.deletePayment(id);
+  const deletePayment = async (id, opts = {}) => {
+    const { businessOwnerId } = opts;
+    await apiService.deletePayment(id, businessOwnerId);
     const idStr = String(id);
     setPayments((arr) => arr.filter((x) => String(x.id) !== idStr));
     if (user?.role === 'admin') {

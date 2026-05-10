@@ -218,6 +218,8 @@ export default function PartyLedger() {
   const [statusFilter, setStatusFilter] = useState("All");
   const [dateRange, setDateRange] = useState("all");
   const [editingId, setEditingId] = useState(null);
+  const [ledgerEditKind, setLedgerEditKind] = useState(null);
+  /** null | 'pendingReview' | 'standard' — pending = awaiting admin, party may still edit */
   const [editForm, setEditForm] = useState({});
   const [ledgerSaving, setLedgerSaving] = useState(false);
   const [ledgerFormErrors, setLedgerFormErrors] = useState({});
@@ -388,13 +390,10 @@ export default function PartyLedger() {
   const openEdit = (lot, initialStatus) => {
     const pe = ledgerPartyEdits[lot.id] || {};
     const statusForForm = initialStatus || getDisplayStatus(lot);
-    // Party users: block editing rows that are already approved or awaiting review.
-    // Do NOT block opening with initialStatus "Completed" — that is the submit-for-approval flow.
-    if (!isAdmin) {
-      const rowDisplay = getDisplayStatus(lot);
-      if (rowDisplay === "Pending review") return;
-      if (rowDisplay === "Completed") return;
-    }
+    const rowDisplay = getDisplayStatus(lot);
+    if (!isAdmin && rowDisplay === "Completed") return;
+    const kind = rowDisplay === "Pending review" ? "pendingReview" : "standard";
+    setLedgerEditKind(kind);
     const existingComplete =
       formatYmd(pe.completeDate) || formatYmd(lot.receivedBackDate) || "";
     setLedgerFormErrors({});
@@ -419,6 +418,101 @@ export default function PartyLedger() {
   const handleSave = async () => {
     const lot = ledgerLots.find((l) => l.id === editingId);
     if (!lot) return;
+
+    if (ledgerEditKind === "pendingReview") {
+      const err = {};
+      if (!String(editForm.partyId || "").trim()) {
+        err.partyId = "Party is required.";
+      }
+      if (!String(editForm.completeDate || "").trim()) {
+        err.completeDate = "Complete date is required.";
+      }
+      if (Object.keys(err).length > 0) {
+        setLedgerFormErrors(err);
+        return;
+      }
+      setLedgerFormErrors({});
+      setLedgerSaving(true);
+      try {
+        const partyChanged =
+          String(editForm.partyId || "").trim() !== "" &&
+          !samePartyId(editForm.partyId, lot.partyId);
+        const previousLedgerAmount = getDisplayBill(lot);
+        const nextLedgerAmount = Number(editForm.billAmount) || 0;
+        const ghausiaAmount = Number(lot.billAmount || 0);
+        let pendingRevisionPayload = null;
+
+        if (previousLedgerAmount !== nextLedgerAmount) {
+          const diff = nextLedgerAmount - previousLedgerAmount;
+          const result = await Swal.fire({
+            title: "Party bill amount change",
+            icon: "question",
+            html: `
+            <div style="text-align:left;font-size:14px;line-height:1.6">
+              <div><strong>Party ledger (old):</strong> ₨${previousLedgerAmount.toLocaleString()}</div>
+              <div><strong>Party ledger (new):</strong> ₨${nextLedgerAmount.toLocaleString()}</div>
+              <div><strong>Difference:</strong> ₨${diff.toLocaleString()}</div>
+              <div><strong>Ghausia / business bill on lot:</strong> ₨${ghausiaAmount.toLocaleString()}</div>
+              <div style="margin-top:10px;color:#92400e">This lot stays <strong>under admin review</strong>. If the owner was already billed for this lot, the admin will choose how to update the business bill when approving.</div>
+            </div>
+          `,
+            showCancelButton: true,
+            confirmButtonText: "Save & keep in review",
+            cancelButtonText: "Cancel",
+          });
+          if (!result.isConfirmed) {
+            return;
+          }
+          pendingRevisionPayload = {
+            fromAmount: previousLedgerAmount,
+            toAmount: nextLedgerAmount,
+            ghausiaAmount,
+            updatedAt: new Date().toISOString(),
+          };
+        }
+
+        await updatePartyEdit(
+          editingId,
+          {
+            completeDate:
+              editForm.completeDate || new Date().toISOString().slice(0, 10),
+            partyBillAmount: nextLedgerAmount,
+            receipt: editForm.receipt,
+            notes: editForm.notes,
+            overrideStatus: "Pending Approval",
+            pendingRevision: pendingRevisionPayload,
+          },
+          lotWorkspaceOpts(lot),
+        );
+
+        if (partyChanged) {
+          const sel = parties.find((p) => samePartyId(p.id, editForm.partyId));
+          await updateLot(
+            editingId,
+            {
+              partyId: editForm.partyId,
+              partyName: sel?.name || editForm.partyName,
+            },
+            lotWorkspaceOpts(lot),
+          );
+        }
+
+        setEditingId(null);
+        setLedgerEditKind(null);
+      } catch (e) {
+        const msg =
+          e?.message ||
+          (typeof e === "string" ? e : "Save failed. Please try again.");
+        await Swal.fire({
+          icon: "error",
+          title: "Could not save",
+          text: msg,
+        });
+      } finally {
+        setLedgerSaving(false);
+      }
+      return;
+    }
 
     if (editForm.status === "Completed") {
       const err = {};
@@ -535,6 +629,7 @@ export default function PartyLedger() {
       }
 
       setEditingId(null);
+      setLedgerEditKind(null);
     } catch (e) {
       const msg =
         e?.message ||
@@ -1154,8 +1249,6 @@ export default function PartyLedger() {
                       <td>
                         {displayStatus === "Completed" && !isAdmin ? (
                           <span style={{ fontSize: 12, color: "var(--text-muted)" }}>Admin only</span>
-                        ) : displayStatus === "Pending review" && !isAdmin ? (
-                          <span style={{ fontSize: 12, color: "var(--text-muted)" }}>Awaiting admin</span>
                         ) : (
                           <button
                             onClick={() => openEdit(l)}
@@ -1228,6 +1321,7 @@ export default function PartyLedger() {
           onClose={() => {
             if (!ledgerSaving) {
               setEditingId(null);
+              setLedgerEditKind(null);
               setLedgerFormErrors({});
             }
           }}
@@ -1241,6 +1335,7 @@ export default function PartyLedger() {
                 className="btn btn-ghost"
                 onClick={() => {
                   setEditingId(null);
+                  setLedgerEditKind(null);
                   setLedgerFormErrors({});
                 }}
                 disabled={ledgerSaving}
@@ -1324,7 +1419,9 @@ export default function PartyLedger() {
           <div className="grid-2">
             <FormGroup
               label={
-                editForm.status === "Completed" ? "Party Name *" : "Party Name"
+                ledgerEditKind === "pendingReview" || editForm.status === "Completed"
+                  ? "Party Name *"
+                  : "Party Name"
               }
             >
               <select
@@ -1367,25 +1464,44 @@ export default function PartyLedger() {
               />
             </FormGroup>
             <FormGroup label="Status">
-              <select
-                className="form-select"
-                value={editForm.status}
-                onChange={(e) => {
-                  const next = e.target.value;
-                  setEditForm((f) => ({
-                    ...f,
-                    status: next,
-                    ...(next !== "Completed" ? { completeDate: "" } : {}),
-                  }));
-                  setLedgerFormErrors({});
-                }}
-              >
-                <option value="Pending">Pending</option>
-                <option value="In Progress">In Progress</option>
-                <option value="Completed">{isParty ? "Submit for admin approval" : "Completed"}</option>
-              </select>
+              {ledgerEditKind === "pendingReview" ? (
+                <div
+                  style={{
+                    fontSize: 13,
+                    fontWeight: 600,
+                    color: "#92400e",
+                    padding: "8px 10px",
+                    background: "#FEF3C7",
+                    borderRadius: 8,
+                    border: "1px solid #FCD34D",
+                  }}
+                >
+                  Pending admin review — you can update bill, receipt, and dates; the lot stays with the admin until approved.
+                </div>
+              ) : (
+                <select
+                  className="form-select"
+                  value={editForm.status}
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    setEditForm((f) => ({
+                      ...f,
+                      status: next,
+                      ...(next !== "Completed" ? { completeDate: "" } : {}),
+                    }));
+                    setLedgerFormErrors({});
+                  }}
+                >
+                  <option value="Pending">Pending</option>
+                  <option value="In Progress">In Progress</option>
+                  <option value="Completed">
+                    {isParty ? "Submit for admin approval" : "Completed"}
+                  </option>
+                </select>
+              )}
             </FormGroup>
-            {editForm.status === "Completed" && (
+            {(editForm.status === "Completed" ||
+              ledgerEditKind === "pendingReview") && (
               <FormGroup label="Complete Date *">
                 <input
                   className="form-input"
@@ -1515,7 +1631,12 @@ export default function PartyLedger() {
             />
           </FormGroup>
 
-          {editForm.status === "Completed" && (
+          {ledgerEditKind === "pendingReview" && (
+            <div className="alert alert-warning">
+              <strong>Note:</strong> Saving updates your submission while it is still with the admin. If you change the bill amount, the admin will see the old and new figures and can choose how the owner (Ghausia) bill should follow when they approve.
+            </div>
+          )}
+          {editForm.status === "Completed" && ledgerEditKind !== "pendingReview" && (
             <div className="alert alert-warning">
             <strong>Note:</strong> Submitting completes the ledger entry and sends this lot to the admin for approval. Once approved it becomes billable to the owner (<strong>Received back</strong>). If rejected, you will see the admin&apos;s feedback on this row.
           </div>

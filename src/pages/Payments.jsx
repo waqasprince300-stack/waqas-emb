@@ -61,6 +61,16 @@ function findLotByLinkedValue(reportingLots, linkedLotValue) {
   return reportingLots.find((l) => normalizeLotKey(lotDisplayRef(l)) === key);
 }
 
+/** Bill for party payout — matches Party Ledger (`partyBillAmount` when set & positive, else lot bill). */
+function partyLedgerBillForLot(lot, partyEditsMap) {
+  if (!lot) return 0;
+  const pe = partyEditsMap[lot.id] || {};
+  if (pe.partyBillAmount != null && Number(pe.partyBillAmount) > 0) {
+    return Number(pe.partyBillAmount);
+  }
+  return Number(lot.billAmount || 0);
+}
+
 /** Lot number + resolved design No for linked payments / synthetic bills */
 function resolveLinkedLotDesignDisplay(payment, lotsPool) {
   const linked = String(payment?.linkedLot || "").trim();
@@ -115,6 +125,7 @@ export default function Payments() {
     partyCrossPayments,
     partyCrossLots,
     partyCrossPartyEdits,
+    reportingPartyEdits,
   } = useApp();
   const { isAdmin, isParty, user } = useAuth();
   const PAGE_SIZE = 10;
@@ -484,8 +495,10 @@ export default function Payments() {
     }
   };
 
-  const handleDelete = async (id) => {
+  const handleDelete = async (paymentRow) => {
     if (!isAdmin) return;
+    const id = paymentRow?.id ?? paymentRow?._id;
+    if (!id) return;
     const result = await Swal.fire({
       title: "Delete Payment?",
       text: "This action cannot be undone.",
@@ -495,8 +508,17 @@ export default function Payments() {
       cancelButtonColor: "#6b7280",
       confirmButtonText: "Yes, delete it",
     });
-    if (result.isConfirmed) {
-      await deletePayment(id).catch(console.error);
+    if (!result.isConfirmed) return;
+    try {
+      await deletePayment(id, {
+        businessOwnerId: paymentRow.businessOwnerId,
+      });
+      paymentToast("success", "Payment deleted");
+    } catch (e) {
+      paymentToast(
+        "error",
+        String(e?.message || e || "Could not delete payment"),
+      );
     }
   };
 
@@ -1073,7 +1095,7 @@ export default function Payments() {
                     <td>
                       <button
                         className="btn-icon"
-                        onClick={() => handleDelete(p.id)}
+                        onClick={() => handleDelete(p)}
                         title="Delete payment"
                         disabled={!isAdmin || p._synthetic}
                         style={
@@ -1337,8 +1359,33 @@ export default function Payments() {
                 value={form.linkedLot}
                 onChange={(e) => {
                   const v = e.target.value;
-                  const lot = findLotByLinkedValue(reportingLots, v);
-                  const bill = lot ? Number(lot.billAmount || 0) : 0;
+                  const paidPool =
+                    form.type === "Paid"
+                      ? isAdmin && String(form.ownerWorkspaceId || "").trim()
+                        ? reportingLots.filter(
+                            (l) =>
+                              String(l.businessOwnerId || "") ===
+                              String(form.ownerWorkspaceId),
+                          )
+                        : ghausiaLots
+                      : null;
+                  const receivedPool =
+                    form.type === "Received" ? lotsForLinkedReceived : null;
+                  const primaryPool = paidPool || receivedPool;
+                  let lot =
+                    v && primaryPool?.length
+                      ? findLotByLinkedValue(primaryPool, v)
+                      : undefined;
+                  if (!lot && v) {
+                    lot = findLotByLinkedValue(reportingLots, v);
+                  }
+                  let bill = 0;
+                  if (lot && v) {
+                    bill =
+                      form.type === "Paid"
+                        ? partyLedgerBillForLot(lot, reportingPartyEdits)
+                        : Number(lot.billAmount || 0);
+                  }
                   setForm((f) => ({
                     ...f,
                     linkedLot: v,
@@ -1455,8 +1502,9 @@ export default function Payments() {
                     display: "block",
                   }}
                 >
-                  Default is the bill amount for this lot — you can change it
-                  before saving.
+                  {form.type === "Paid"
+                    ? "Default is the Party Ledger bill for this lot (not the Ghausia/owner figure) — you can change it before saving."
+                    : "Default is the bill amount on the lot — you can change it before saving."}
                 </span>
               )}
               {errors.amount && (

@@ -234,10 +234,13 @@ class ApiService {
     }, { businessOwnerId });
   }
 
-  async approveLotCompletion(id, businessOwnerId) {
+  async approveLotCompletion(id, opts = {}) {
+    const { businessOwnerId, ownerBillingChoice } = opts || {};
+    const body = {};
+    if (ownerBillingChoice) body.ownerBillingChoice = ownerBillingChoice;
     return this.request(`/ghausiaLots/${id}/approve-completion`, {
       method: 'POST',
-      body: JSON.stringify({}),
+      body: JSON.stringify(body),
     }, { businessOwnerId });
   }
 
@@ -325,10 +328,14 @@ class ApiService {
     });
   }
 
-  async deletePayment(id) {
-    return this.request(`/payments/${id}`, {
-      method: 'DELETE',
-    });
+  async deletePayment(id, businessOwnerId) {
+    return this.request(
+      `/payments/${id}`,
+      {
+        method: 'DELETE',
+      },
+      { businessOwnerId },
+    );
   }
 
   // Rate Calculations

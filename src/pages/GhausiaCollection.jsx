@@ -716,7 +716,11 @@ export default function GhausiaCollection() {
       confirmButtonText: 'Yes, delete it',
     });
     if (result.isConfirmed) {
-      await deletePayment(id);
+      try {
+        await deletePayment(id, { businessOwnerId: activeBusinessOwnerId });
+      } catch (e) {
+        Swal.fire({ icon: 'error', title: 'Error', text: String(e?.message || e || 'Could not delete payment') });
+      }
     }
   };
 
