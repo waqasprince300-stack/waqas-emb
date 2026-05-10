@@ -30,7 +30,13 @@ function PartyForm({ initial, onSave, onClose, saving }) {
     return Object.keys(e).length === 0;
   };
   return (
-    <>
+    <form
+      onSubmit={async (e) => {
+        e.preventDefault();
+        if (!validate()) return;
+        await onSave(form);
+      }}
+    >
       <FormGroup label="Party Name *">
         <input className="form-input" value={form.name} onChange={e => set('name', e.target.value)} placeholder="e.g. Al-Hamra Textiles" />
         {errors.name && <span style={{ color: '#dc2626', fontSize: 11 }}>{errors.name}</span>}
@@ -42,12 +48,12 @@ function PartyForm({ initial, onSave, onClose, saving }) {
         <textarea className="form-textarea" rows={3} value={form.address} onChange={e => set('address', e.target.value)} placeholder="Full address..." style={{ resize: 'vertical' }} />
       </FormGroup>
       <div className="modal-footer" style={{ padding: '16px 0 0', borderTop: '1px solid var(--border)', marginTop: 8 }}>
-        <button className="btn btn-ghost" onClick={onClose} disabled={saving}>Cancel</button>
-        <button className="btn btn-primary" disabled={saving} onClick={async () => { if (validate()) await onSave(form); }} style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+        <button type="button" className="btn btn-ghost" onClick={onClose} disabled={saving}>Cancel</button>
+        <button type="submit" className="btn btn-primary" disabled={saving} style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
           {saving ? <><Loader /> Saving…</> : 'Save Party'}
         </button>
       </div>
-    </>
+    </form>
   );
 }
 

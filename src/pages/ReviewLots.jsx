@@ -4,6 +4,7 @@ import { useApp } from "../context/AppContext";
 import { Modal, FormGroup, EmptyState, SearchBar } from "../components/UI";
 import Loader from "../components/Loader";
 import LoaderDashboard from "../components/LoaderDashboard";
+import { compareRowsByUpdatedNewestFirst } from "../utils/dateFilters";
 
 function receiptPreviewKind(receipt) {
   const s = String(receipt || "").trim();
@@ -126,13 +127,16 @@ export default function ReviewLots() {
 
   const pendingLots = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return reportingLots.filter((l) => {
+    const list = reportingLots.filter((l) => {
       if (String(l.status || "").toLowerCase().trim() !== "pending approval")
         return false;
       if (!q) return true;
       const label = `${l.lotNo || ""} ${l.lotNumber || ""} ${l.designNo || ""} ${l.partyName || ""}`.toLowerCase();
       return label.includes(q);
     });
+    return [...list].sort((a, b) =>
+      compareRowsByUpdatedNewestFirst(a, b, "lot"),
+    );
   }, [reportingLots, search]);
 
   const peBill = (lotId, lot) => {
@@ -358,6 +362,9 @@ export default function ReviewLots() {
         <Modal
           title={`Reject completion — ${rejectModal.lotNo || rejectModal.lotNumber}`}
           onClose={() => !busyId && setRejectModal(null)}
+          onFormSubmit={() => {
+            void submitReject();
+          }}
           footer={
             <>
               <button
@@ -369,11 +376,10 @@ export default function ReviewLots() {
                 Cancel
               </button>
               <button
-                type="button"
+                type="submit"
                 className="btn btn-primary"
                 style={{ background: "#dc2626", borderColor: "#dc2626" }}
                 disabled={busyId}
-                onClick={submitReject}
               >
                 {busyId ? (
                   <>

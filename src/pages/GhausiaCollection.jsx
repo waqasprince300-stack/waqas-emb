@@ -5,7 +5,7 @@ import BusinessOwnerSwitcher from '../components/BusinessOwnerSwitcher';
 import { Modal, FormGroup, StatusBadge, ActionBtn, SearchBar, EmptyState, ConfirmDialog } from '../components/UI';
 import Loader from '../components/Loader';
 import LoaderDashboard from '../components/LoaderDashboard';
-import { DateRangeSelect, isWithinDateRange, latestDateFrom } from '../utils/dateFilters';
+import { DateRangeSelect, isWithinDateRange, latestDateFrom, compareRowsByUpdatedNewestFirst } from '../utils/dateFilters';
 
 const FABRICS = ['Lawn', 'Velvet', 'Cambric'];
 const COLOR_OPTIONS = Array.from({ length: 13 }, (_, i) => i);
@@ -50,32 +50,9 @@ function hasPositiveBillAmount(lot) {
   return Number(lot?.billAmount || 0) > 0;
 }
 
-/** Newest lots first (page 1, top = latest). Uses dates on the lot, then id. */
-function lotRecencyTimestamp(l) {
-  const keys = [l.updatedAt, l.createdAt, l.receivedBackDate, l.dispatchDate, l.allotDate];
-  let max = 0;
-  for (const v of keys) {
-    const t = v ? new Date(v).getTime() : NaN;
-    if (!Number.isNaN(t) && t > max) max = t;
-  }
-  if (max === 0) {
-    const id = String(l.id || '');
-    if (id.length === 24 && /^[a-f0-9]{24}$/i.test(id)) {
-      max = parseInt(id.slice(0, 8), 16) * 1000;
-    }
-  }
-  return max;
-}
-
-function compareLotsNewestFirst(a, b) {
-  const d = lotRecencyTimestamp(b) - lotRecencyTimestamp(a);
-  if (d !== 0) return d;
-  return String(b.id || '').localeCompare(String(a.id || ''));
-}
-
 const newDate = new Date().toISOString().split('T')[0];
 
-function LotForm({ initial, onSave, onClose, parties, saving }) {
+function LotForm({ initial, onSave, onClose, parties, saving, pickWorkspaceForNewLot, workspaceOwnerOptions, defaultNewLotOwnerId }) {
   const blank = {
     lotNumber: '', lotNo: '', designNo: '', description: '', itemType: 'Lawn', fabric: 'Lawn', customFabric: '',
     colors: 0, quantity: '', pieces: '', unit: 'pieces', rate: '', billAmount: '',
@@ -83,6 +60,7 @@ function LotForm({ initial, onSave, onClose, parties, saving }) {
     //  notes: '',
     allotDate: new Date().toISOString().slice(0, 10), partyId: '', partyName: '',
     status: 'pending', dispatchDate: newDate, receivedBackDate: '',
+    saveBusinessOwnerId: defaultNewLotOwnerId || '',
   };
   const [form, setForm] = useState(initial ? {
     ...blank,
@@ -96,6 +74,10 @@ function LotForm({ initial, onSave, onClose, parties, saving }) {
     pieces: initial.pieces ?? '',
     partyId: initial.partyId || (parties.find(p => p.name === (initial.partyName || initial.party))?.id) || '',
     partyName: (parties.find(p => p.id === initial.partyId)?.name) || initial.partyName || '',
+    saveBusinessOwnerId:
+      initial.businessOwnerId != null && initial.businessOwnerId !== ''
+        ? String(initial.businessOwnerId)
+        : (defaultNewLotOwnerId || ''),
   } : blank);
   const [errors, setErrors] = useState({});
 
@@ -105,9 +87,17 @@ function LotForm({ initial, onSave, onClose, parties, saving }) {
     const newErrors = {};
     if (!form.lotNumber.trim()) newErrors.lotNumber = 'Lot Number is required';
     if (!form.designNo.trim()) newErrors.designNo = 'Design Number is required';
+    if (pickWorkspaceForNewLot && !String(form.saveBusinessOwnerId || '').trim()) {
+      newErrors.saveBusinessOwnerId = 'Select a business collection for this lot';
+    }
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
+
+  const saveOwnerForPayload =
+    pickWorkspaceForNewLot
+      ? String(form.saveBusinessOwnerId || '').trim()
+      : (initial?.businessOwnerId ? String(initial.businessOwnerId) : String(defaultNewLotOwnerId || '').trim());
 
   const handleSave = async () => {
     if (!validate()) return;
@@ -120,6 +110,7 @@ function LotForm({ initial, onSave, onClose, parties, saving }) {
 
     await onSave({
       ...form,
+      saveBusinessOwnerId: saveOwnerForPayload,
       fabric: finalType,
       itemType: finalType,
       lotNumber,
@@ -136,8 +127,34 @@ function LotForm({ initial, onSave, onClose, parties, saving }) {
   };
 
   return (
-    <>
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        void handleSave();
+      }}
+    >
       <div className="grid-2">
+        {pickWorkspaceForNewLot && (
+          <FormGroup label="Business collection *">
+            <select
+              className={`form-select${errors.saveBusinessOwnerId ? ' input-error' : ''}`}
+              value={form.saveBusinessOwnerId}
+              onChange={(e) => set('saveBusinessOwnerId', e.target.value)}
+            >
+              <option value="">— Select collection —</option>
+              {(workspaceOwnerOptions || []).map((o) => (
+                <option key={o.id || o._id} value={String(o.id || o._id)}>
+                  {o.name}
+                </option>
+              ))}
+            </select>
+            {errors.saveBusinessOwnerId && (
+              <span style={{ color: '#dc2626', fontSize: 11, marginTop: 3, display: 'block' }}>
+                {errors.saveBusinessOwnerId}
+              </span>
+            )}
+          </FormGroup>
+        )}
         <FormGroup label="Lot Number *">
           <input
             className={`form-input${errors.lotNumber ? ' input-error' : ''}`}
@@ -217,17 +234,52 @@ function LotForm({ initial, onSave, onClose, parties, saving }) {
         )}
       </div>
       <div className="modal-footer" style={{ padding: '16px 0 0', borderTop: '1px solid var(--border)', marginTop: 8 }}>
-        <button className="btn btn-ghost" onClick={onClose} disabled={saving}>Cancel</button>
-        <button className="btn btn-primary" disabled={saving} onClick={handleSave} style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+        <button type="button" className="btn btn-ghost" onClick={onClose} disabled={saving}>Cancel</button>
+        <button type="submit" className="btn btn-primary" disabled={saving} style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
           {saving ? <><Loader /> Saving…</> : 'Save Lot'}
         </button>
       </div>
-    </>
+    </form>
   );
 }
 
 export default function GhausiaCollection() {
-  const { ghausiaLots, addLot, updateLot, deleteLot, parties, getPartyName, partyEdits, payments, addPayment, deletePayment, updatePartyEdit, initialDataLoading, activeBusinessOwnerId, businessOwners } = useApp();
+  const {
+    ghausiaLots,
+    reportingLots,
+    reportingPayments,
+    reportingPartyEdits,
+    addLot,
+    updateLot,
+    deleteLot,
+    parties,
+    getPartyName,
+    partyEdits: partyEditsSingleWorkspace,
+    payments: paymentsSingleWorkspace,
+    addPayment,
+    deletePayment,
+    updatePartyEdit,
+    initialDataLoading,
+    activeBusinessOwnerId,
+    businessOwners,
+    viewAllWorkspaces,
+  } = useApp();
+
+  const collectionLots = useMemo(
+    () => (viewAllWorkspaces ? reportingLots : ghausiaLots),
+    [viewAllWorkspaces, reportingLots, ghausiaLots],
+  );
+  const payments = useMemo(
+    () => (viewAllWorkspaces ? reportingPayments : paymentsSingleWorkspace),
+    [viewAllWorkspaces, reportingPayments, paymentsSingleWorkspace],
+  );
+  const partyEdits = useMemo(
+    () => (viewAllWorkspaces ? reportingPartyEdits : partyEditsSingleWorkspace),
+    [viewAllWorkspaces, reportingPartyEdits, partyEditsSingleWorkspace],
+  );
+
+  /** API business owner id for a row (critical when viewing all workspaces) */
+  const lotBizId = (lot) => String(lot?.businessOwnerId ?? activeBusinessOwnerId ?? '').trim();
   const PAGE_SIZE = 10;
   const [modal, setModal] = useState(null);
   const [editing, setEditing] = useState(null);
@@ -262,8 +314,11 @@ export default function GhausiaCollection() {
   };
 
   const activeWorkspace = useMemo(
-    () => businessOwners.find((o) => String(o.id || o._id) === String(activeBusinessOwnerId)),
-    [businessOwners, activeBusinessOwnerId],
+    () => {
+      if (viewAllWorkspaces) return { name: 'All workspaces' };
+      return businessOwners.find((o) => String(o.id || o._id) === String(activeBusinessOwnerId));
+    },
+    [businessOwners, activeBusinessOwnerId, viewAllWorkspaces],
   );
 
   const dismissCompleteBillModal = () => {
@@ -309,7 +364,7 @@ export default function GhausiaCollection() {
         ...(fromBillable ? { completedFromBillable: false } : {}),
       };
       try {
-        await updateLot(lot.id, lotUpdate, { businessOwnerId: activeBusinessOwnerId });
+        await updateLot(lot.id, lotUpdate, { businessOwnerId: lotBizId(lot) });
       } catch (e) {
         Swal.fire({ icon: 'error', title: 'Could not update lot', text: 'Please try again.' });
         return;
@@ -318,7 +373,7 @@ export default function GhausiaCollection() {
         await updatePartyEdit(lot.id, {
           overrideStatus: 'Completed',
           completeDate: today,
-        });
+        }, { businessOwnerId: lotBizId(lot) });
       } catch (e) {
         console.error(e);
       }
@@ -362,7 +417,7 @@ export default function GhausiaCollection() {
       date: paymentDate,
       linkedLot,
       note: `Lot completed — Party: ${partyName || '—'}; Design: ${designNo}; Type: ${lotRef.itemType || lotRef.fabric || '—'}`,
-    });
+    }, { businessOwnerId: lotBizId(lotRef) });
   };
 
   /** Settlement for billable lots: records Paid → Owner so it appears in Payment Management and reduces Owner Received net. */
@@ -377,7 +432,7 @@ export default function GhausiaCollection() {
       date: paymentDate,
       linkedLot,
       note: `Billable lot settled — Party: ${partyName || '—'}; Design: ${designNo}; Type: ${lotRef.itemType || lotRef.fabric || '—'}`,
-    });
+    }, { businessOwnerId: lotBizId(lotRef) });
   };
 
   const setLotStatus = async (lot, newStatus) => {
@@ -396,7 +451,7 @@ export default function GhausiaCollection() {
       if (newStatus === 'received back') lotUpdate.receivedBackDate = today;
 
       try {
-        await updateLot(lot.id, lotUpdate, { businessOwnerId: activeBusinessOwnerId });
+        await updateLot(lot.id, lotUpdate, { businessOwnerId: lotBizId(lot) });
       } catch (e) {
         Swal.fire({ icon: 'error', title: 'Could not update lot', text: 'Please try again.' });
         return;
@@ -407,7 +462,7 @@ export default function GhausiaCollection() {
         await updatePartyEdit(lot.id, {
           overrideStatus: ledgerStatus,
           completeDate: '',
-        });
+        }, { businessOwnerId: lotBizId(lot) });
       } catch (e) {
         console.error(e);
       }
@@ -421,7 +476,7 @@ export default function GhausiaCollection() {
   };
 
   const filtered = useMemo(() => {
-    const list = ghausiaLots.filter((l) => {
+    const list = collectionLots.filter((l) => {
       const q = search.toLowerCase();
       const lotLabel = (l.lotNumber || l.lotNo || '').toLowerCase();
       const matchQ = !q || lotLabel.includes(q) || l.designNo.toLowerCase().includes(q) || l.description.toLowerCase().includes(q);
@@ -432,8 +487,8 @@ export default function GhausiaCollection() {
       if (l.status === 'completed') return false;
       return statusFilter === 'All' || l.status === statusFilter;
     });
-    return [...list].sort(compareLotsNewestFirst);
-  }, [ghausiaLots, search, partyFilter, dateRange, statusFilter, lotTableTab]);
+    return [...list].sort((a, b) => compareRowsByUpdatedNewestFirst(a, b, 'lot'));
+  }, [collectionLots, search, partyFilter, dateRange, statusFilter, lotTableTab]);
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safeCurrentPage = Math.min(currentPage, totalPages);
   const pageStart = (safeCurrentPage - 1) * PAGE_SIZE;
@@ -441,7 +496,7 @@ export default function GhausiaCollection() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [search, partyFilter, dateRange, statusFilter, lotTableTab]);
+  }, [search, partyFilter, dateRange, statusFilter, lotTableTab, viewAllWorkspaces]);
 
   useEffect(() => {
     if (currentPage > totalPages) {
@@ -450,11 +505,11 @@ export default function GhausiaCollection() {
   }, [currentPage, totalPages]);
 
   const visibleLots = useMemo(
-    () => ghausiaLots.filter((l) => {
+    () => collectionLots.filter((l) => {
       if (partyFilter !== 'All' && String(l.partyId || '') !== String(partyFilter)) return false;
       return isWithinDateRange(latestDateFrom(l, ['updatedAt', 'createdAt', 'receivedBackDate', 'dispatchDate', 'allotDate', 'receivedDate']), dateRange);
     }),
-    [ghausiaLots, partyFilter, dateRange],
+    [collectionLots, partyFilter, dateRange],
   );
 
   const completedLotsCount = useMemo(
@@ -464,7 +519,9 @@ export default function GhausiaCollection() {
   const otherLotsCount = visibleLots.length - completedLotsCount;
 
   const billable = useMemo(
-    () => [...visibleLots.filter((l) => l.status === 'received back')].sort(compareLotsNewestFirst),
+    () => [...visibleLots.filter((l) => l.status === 'received back')].sort((a, b) =>
+      compareRowsByUpdatedNewestFirst(a, b, 'lot'),
+    ),
     [visibleLots],
   );
   const getBillableAmount = (lot) => {
@@ -480,10 +537,10 @@ export default function GhausiaCollection() {
     .filter((p) => p.type === 'Paid' && p.party === 'Owner')
     .reduce((s, p) => s + p.amount, 0);
   const billableSettledTotal = useMemo(
-    () => ghausiaLots
+    () => collectionLots
       .filter((l) => l.status === 'completed' && l.completedFromBillable)
       .reduce((s, l) => s + Number(l.billAmount || 0), 0),
-    [ghausiaLots],
+    [collectionLots],
   );
   const ownerReceivedNet = ownerIn - ownerPaidToOwner - billableSettledTotal;
   const ownerReceivedIsPending = ownerReceivedNet < 0;
@@ -511,15 +568,18 @@ export default function GhausiaCollection() {
     }
 
     const lotKey = normalizeLotNumberKey(saveForm.lotNumber ?? saveForm.lotNo);
+    const targetBiz = prev
+      ? lotBizId(prev)
+      : String(form.saveBusinessOwnerId || activeBusinessOwnerId || '').trim();
+
     if (lotKey) {
-      const ownerKey = String(activeBusinessOwnerId ?? '');
-      if (!ownerKey.trim()) {
+      if (!targetBiz.trim()) {
         lotSaveErrorToast('Select a business collection before saving lots.');
         return;
       }
-      const dupLocal = ghausiaLots.some((l) => {
+      const dupLocal = collectionLots.some((l) => {
         if (prev && String(l.id) === String(prev.id)) return false;
-        if (String(l.businessOwnerId ?? '') !== ownerKey) return false;
+        if (String(l.businessOwnerId ?? '') !== targetBiz) return false;
         return normalizeLotNumberKey(l.lotNumber ?? l.lotNo) === lotKey;
       });
       if (dupLocal) {
@@ -528,20 +588,22 @@ export default function GhausiaCollection() {
       }
     }
 
+    const { saveBusinessOwnerId: _ignoreSaveOwner, ...lotPayloadForApi } = saveForm;
+
     const today = new Date().toISOString().slice(0, 10);
     setLotSaving(true);
     try {
       if (prev) {
-        await updateLot(prev.id, saveForm, { businessOwnerId: activeBusinessOwnerId });
+        await updateLot(prev.id, lotPayloadForApi, { businessOwnerId: targetBiz });
         if (saveForm.status === 'completed') {
           await updatePartyEdit(prev.id, {
             overrideStatus: 'Completed',
             completeDate: today,
-          });
+          }, { businessOwnerId: targetBiz });
         }
         if (recordOwnerPaymentAfterSave) {
           try {
-            await recordOwnerReceivedForCompletedLot({ ...prev, ...saveForm }, saveForm.billAmount, today);
+            await recordOwnerReceivedForCompletedLot({ ...prev, ...saveForm, businessOwnerId: targetBiz }, saveForm.billAmount, today);
           } catch (e) {
             Swal.fire({
               icon: 'warning',
@@ -551,16 +613,16 @@ export default function GhausiaCollection() {
           }
         }
       } else {
-        const created = await addLot(saveForm, { businessOwnerId: activeBusinessOwnerId });
+        const created = await addLot(lotPayloadForApi, { businessOwnerId: targetBiz });
         if (saveForm.status === 'completed') {
           await updatePartyEdit(created.id, {
             overrideStatus: 'Completed',
             completeDate: today,
-          });
+          }, { businessOwnerId: targetBiz });
         }
         if (recordOwnerPaymentAfterSave) {
           try {
-            await recordOwnerReceivedForCompletedLot({ ...created, ...saveForm }, saveForm.billAmount, today);
+            await recordOwnerReceivedForCompletedLot({ ...created, ...saveForm, businessOwnerId: targetBiz }, saveForm.billAmount, today);
           } catch (e) {
             Swal.fire({
               icon: 'warning',
@@ -581,7 +643,7 @@ export default function GhausiaCollection() {
   const handleDelete = async () => {
     setDeleteLoading(true);
     try {
-      await deleteLot(deleteTarget.id);
+      await deleteLot(deleteTarget.id, { businessOwnerId: lotBizId(deleteTarget) });
       setDeleteTarget(null);
     } finally {
       setDeleteLoading(false);
@@ -591,6 +653,8 @@ export default function GhausiaCollection() {
   const handlePartyChange = async (lotId, partyId) => {
     setInlineSummaryBusy(true);
     try {
+      const lot = collectionLots.find((l) => String(l.id) === String(lotId));
+      const biz = lot ? lotBizId(lot) : String(activeBusinessOwnerId || '').trim();
       const currentDate = new Date().toISOString().slice(0, 10);
       const selectedParty = parties.find(p => p.id === partyId);
       await updateLot(lotId, {
@@ -598,12 +662,12 @@ export default function GhausiaCollection() {
         partyName: selectedParty ? selectedParty.name : '',
         status: partyId ? 'dispatched' : 'pending',
         dispatchDate: partyId ? currentDate : '',
-      }, { businessOwnerId: activeBusinessOwnerId });
+      }, { businessOwnerId: biz });
       if (partyId) {
         await updatePartyEdit(lotId, {
           overrideStatus: 'In Progress',
           allotDate: currentDate,
-        });
+        }, { businessOwnerId: biz });
       }
     } finally {
       setInlineSummaryBusy(false);
@@ -630,7 +694,7 @@ export default function GhausiaCollection() {
         date: payForm.date,
         linkedLot: payForm.linkedLot,
         note: payForm.note,
-      });
+      }, { businessOwnerId: activeBusinessOwnerId });
       setPayModal(false);
       setPayErrors({});
       setPayForm({ type: 'Received', amount: '', party: 'Owner', date: '', note: '', linkedLot: '' });
@@ -736,7 +800,9 @@ export default function GhausiaCollection() {
                 maxWidth: 560,
               }}
             >
-              Manage design lots, statuses, and owner billing for this business. Switch workspace using the control below.
+              {viewAllWorkspaces
+                ? 'Showing lots across every workspace. Pick a single workspace here to anchor new payments and the add-lot flow, or use “Business collection” in the lot form when adding in this view.'
+                : 'Manage design lots, statuses, and owner billing for this business. Use the dropdown below to switch workspace or view all workspaces.'}
             </p>
           </div>
           <button
@@ -1095,7 +1161,17 @@ export default function GhausiaCollection() {
       {/* Lot Form Modal */}
       {modal === 'form' && (
         <Modal title={editing ? 'Edit Lot' : 'Add New Lot'} onClose={() => { if (!lotSaving) { setModal(null); setEditing(null); } }}>
-          <LotForm initial={editing} onSave={handleSave} onClose={() => { if (!lotSaving) { setModal(null); setEditing(null); } }} parties={parties} saving={lotSaving} />
+          <LotForm
+            key={editing?.id || 'new'}
+            initial={editing}
+            onSave={handleSave}
+            onClose={() => { if (!lotSaving) { setModal(null); setEditing(null); } }}
+            parties={parties}
+            saving={lotSaving}
+            pickWorkspaceForNewLot={viewAllWorkspaces && !editing}
+            workspaceOwnerOptions={businessOwners}
+            defaultNewLotOwnerId={activeBusinessOwnerId}
+          />
         </Modal>
       )}
 
@@ -1116,10 +1192,13 @@ export default function GhausiaCollection() {
           <Modal
             title={fromBillable ? 'Confirm payment & complete lot' : 'Bill amount for completion'}
             onClose={dismissCompleteBillModal}
+            onFormSubmit={() => {
+              confirmCompleteBillModal();
+            }}
             footer={(
               <>
                 <button type="button" className="btn btn-ghost" onClick={dismissCompleteBillModal}>Cancel</button>
-                <button type="button" className="btn btn-primary" onClick={confirmCompleteBillModal}>
+                <button type="submit" className="btn btn-primary">
                   {fromBillable ? 'Complete & settle' : 'Complete & record payment'}
                 </button>
               </>
@@ -1175,10 +1254,13 @@ export default function GhausiaCollection() {
       {/* Payment Modal */}
       {payModal && (
         <Modal title="Record Payment" onClose={() => { if (!paymentSaving) { setPayModal(false); setPayErrors({}); } }}
+          onFormSubmit={() => {
+            void handleAddPayment();
+          }}
           footer={
             <>
-              <button className="btn btn-ghost" onClick={() => { setPayModal(false); setPayErrors({}); }} disabled={paymentSaving}>Cancel</button>
-              <button className="btn btn-success" onClick={handleAddPayment} disabled={paymentSaving} style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+              <button type="button" className="btn btn-ghost" onClick={() => { setPayModal(false); setPayErrors({}); }} disabled={paymentSaving}>Cancel</button>
+              <button type="submit" className="btn btn-success" disabled={paymentSaving} style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
                 {paymentSaving ? <><Loader /> Saving…</> : 'Save Payment'}
               </button>
             </>
@@ -1242,7 +1324,7 @@ export default function GhausiaCollection() {
             <FormGroup label="Linked Lot (optional)">
               <select className="form-select" value={payForm.linkedLot} onChange={e => setPayForm(f => ({ ...f, linkedLot: e.target.value }))}>
                 <option value="">None</option>
-                {ghausiaLots.map(l => <option key={l.id} value={l.lotNumber}>{l.lotNumber || l.lotNo} / {l.designNo}</option>)}
+                {collectionLots.map(l => <option key={l.id} value={l.lotNumber}>{l.lotNumber || l.lotNo} / {l.designNo}</option>)}
               </select>
             </FormGroup>
             <FormGroup label="Note">

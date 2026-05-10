@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useApp } from '../context/AppContext';
+import { useApp, ADMIN_ALL_WORKSPACES_ID } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
 import { Modal, FormGroup } from './UI';
 
@@ -9,6 +9,8 @@ export default function BusinessOwnerSwitcher({ compact = false }) {
     businessOwners,
     activeBusinessOwnerId,
     selectBusinessOwner,
+    selectAllWorkspacesView,
+    viewAllWorkspaces,
     createBusinessOwner,
   } = useApp();
   const [modalOpen, setModalOpen] = useState(false);
@@ -20,6 +22,12 @@ export default function BusinessOwnerSwitcher({ compact = false }) {
   if (!isAdmin) return null;
 
   const activeOwner = businessOwners.find((owner) => String(owner.id || owner._id) === String(activeBusinessOwnerId));
+
+  const compactSelectValue = viewAllWorkspaces ? ADMIN_ALL_WORKSPACES_ID : String(activeBusinessOwnerId || '');
+
+  const displayOwnerName = viewAllWorkspaces
+    ? 'All workspaces'
+    : (activeOwner?.name || 'Select business owner');
 
   const handleCreate = async () => {
     setError('');
@@ -59,11 +67,16 @@ export default function BusinessOwnerSwitcher({ compact = false }) {
               border: '1px solid var(--border)',
               background: '#f8fafc',
             }}
-            value={activeBusinessOwnerId}
-            onChange={(event) => selectBusinessOwner(event.target.value)}
+            value={compactSelectValue}
+            onChange={(event) => {
+              const next = event.target.value;
+              if (next === ADMIN_ALL_WORKSPACES_ID) selectAllWorkspacesView();
+              else selectBusinessOwner(next);
+            }}
             title="Switch workspace"
             aria-label="Switch workspace"
           >
+            <option value={ADMIN_ALL_WORKSPACES_ID}>All workspaces</option>
             {businessOwners.map((owner) => (
               <option key={owner.id || owner._id} value={owner.id || owner._id}>
                 {owner.name}
@@ -114,16 +127,21 @@ export default function BusinessOwnerSwitcher({ compact = false }) {
                 lineHeight: 1.25,
               }}
             >
-              {activeOwner?.name || 'Select business owner'}
+              {displayOwnerName}
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <select
               className="form-select"
               style={{ minWidth: 220 }}
-              value={activeBusinessOwnerId}
-              onChange={(event) => selectBusinessOwner(event.target.value)}
+              value={compactSelectValue}
+              onChange={(event) => {
+                const next = event.target.value;
+                if (next === ADMIN_ALL_WORKSPACES_ID) selectAllWorkspacesView();
+                else selectBusinessOwner(next);
+              }}
             >
+              <option value={ADMIN_ALL_WORKSPACES_ID}>All workspaces</option>
               {businessOwners.map((owner) => (
                 <option key={owner.id || owner._id} value={owner.id || owner._id}>
                   {owner.name}
@@ -146,10 +164,13 @@ export default function BusinessOwnerSwitcher({ compact = false }) {
               setError('');
             }
           }}
+          onFormSubmit={() => {
+            void handleCreate();
+          }}
           footer={(
             <>
-              <button className="btn btn-ghost" disabled={saving} onClick={() => setModalOpen(false)}>Cancel</button>
-              <button className="btn btn-primary" disabled={saving} onClick={handleCreate}>
+              <button type="button" className="btn btn-ghost" disabled={saving} onClick={() => setModalOpen(false)}>Cancel</button>
+              <button type="submit" className="btn btn-primary" disabled={saving}>
                 {saving ? 'Creating...' : 'Create Owner'}
               </button>
             </>

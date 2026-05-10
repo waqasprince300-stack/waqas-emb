@@ -5,7 +5,10 @@ import { useAuth } from "../context/AuthContext";
 import { Modal, FormGroup, EmptyState } from "../components/UI";
 import Loader from "../components/Loader";
 import LoaderDashboard from "../components/LoaderDashboard";
-import { latestDateFrom } from "../utils/dateFilters";
+import {
+  latestDateFrom,
+  compareRowsByUpdatedNewestFirst,
+} from "../utils/dateFilters";
 
 function normalizeLotKey(linkedLot) {
   return String(linkedLot || "")
@@ -32,16 +35,23 @@ function partyRecordMatchesUser(partyIdOnRow, partyNameOnRow, userPartyId, userP
   return String(partyNameOnRow || "").trim() === pname;
 }
 
-/** How a row appears in the table (party users see admin payouts as Received). */
+/** How a row appears for party login (mirror vs admin bookkeeping). */
 function presentationType(row, isParty) {
   if (row._synthetic && row.type === "Bill") return "Bill";
-  if (
-    isParty &&
-    row.type === "Paid" &&
-    String(row.party || "").toLowerCase().trim() !== "owner"
-  ) {
+  if (!isParty) return row.type;
+
+  const partyLower = String(row.party || "").toLowerCase().trim();
+
+  // Admin Paid → party: business paid you → show as inflow
+  if (row.type === "Paid" && partyLower !== "owner") {
     return "Received";
   }
+
+  // Admin Received from party: you paid the business → show as Paid
+  if (row.type === "Received" && partyLower !== "owner") {
+    return "Paid";
+  }
+
   return row.type;
 }
 
@@ -223,8 +233,11 @@ export default function Payments() {
         } else if (typeFilter === "Received") {
           if (pt !== "Received") return false;
         } else if (typeFilter === "Paid") {
-          if (isParty) return false;
-          if (p.type !== "Paid") return false;
+          if (isParty) {
+            if (pt !== "Paid") return false;
+          } else if (p.type !== "Paid") {
+            return false;
+          }
         }
         if (isAdmin && ownerNameFilter !== "All") {
           if (paymentBusinessOwnerId(p) !== ownerNameFilter) return false;
@@ -235,13 +248,9 @@ export default function Payments() {
   );
   const sortedFiltered = useMemo(
     () =>
-      [...filtered].sort((a, b) => {
-        // Sort by edit date (updatedAt) first if available, then by creation date
-        const da = new Date((a.updatedAt || a.date || 0)).getTime();
-        const db = new Date((b.updatedAt || b.date || 0)).getTime();
-        if (db !== da) return db - da;
-        return String(b.id || "").localeCompare(String(a.id || ""));
-      }),
+      [...filtered].sort((a, b) =>
+        compareRowsByUpdatedNewestFirst(a, b, "payment"),
+      ),
     [filtered],
   );
   const totalPages = Math.max(1, Math.ceil(sortedFiltered.length / PAGE_SIZE));
@@ -255,10 +264,6 @@ export default function Payments() {
   useEffect(() => {
     setCurrentPage(1);
   }, [typeFilter, ownerNameFilter]);
-
-  useEffect(() => {
-    if (isParty && typeFilter === "Paid") setTypeFilter("All");
-  }, [isParty, typeFilter]);
 
   useEffect(() => {
     if (currentPage > totalPages) {
@@ -288,13 +293,13 @@ export default function Payments() {
 
   const lotsForLinkedReceived = useMemo(() => {
     if (form.type !== "Received") return ghausiaLots;
-    if (isAdmin && form.party === "Owner" && form.ownerWorkspaceId) {
+    if (isAdmin && String(form.ownerWorkspaceId || "").trim()) {
       return reportingLots.filter(
         (l) => String(l.businessOwnerId || "") === String(form.ownerWorkspaceId),
       );
     }
     return ghausiaLots;
-  }, [form.type, form.party, form.ownerWorkspaceId, isAdmin, reportingLots, ghausiaLots]);
+  }, [form.type, form.ownerWorkspaceId, isAdmin, reportingLots, ghausiaLots]);
 
   const linkedLotOptions = useMemo(() => {
     if (form.type === "Received") {
@@ -309,7 +314,14 @@ export default function Payments() {
     }
     const party = parties.find((p) => p.name === form.party);
     if (!party) return [];
-    return ghausiaLots.filter((l) => {
+    const paidLotPool =
+      isAdmin && String(form.ownerWorkspaceId || "").trim()
+        ? reportingLots.filter(
+            (l) =>
+              String(l.businessOwnerId || "") === String(form.ownerWorkspaceId),
+          )
+        : ghausiaLots;
+    return paidLotPool.filter((l) => {
       if (l.status !== "completed") return false;
       const byId =
         party.id != null &&
@@ -324,8 +336,11 @@ export default function Payments() {
   }, [
     form.type,
     form.party,
+    form.ownerWorkspaceId,
     lotsForLinkedReceived,
     ghausiaLots,
+    reportingLots,
+    isAdmin,
     parties,
     usedReceivedLotKeys,
     usedPaidLotKeys,
@@ -340,26 +355,66 @@ export default function Payments() {
     const paidFromAdmin = visibleDbPayments
       .filter((p) => p.type === "Paid")
       .reduce((s, p) => s + Number(p.amount || 0), 0);
-    const due = billed - paidFromAdmin;
-    return { billed, paidFromAdmin, due };
+    const paidToBusiness = visibleDbPayments
+      .filter((p) => p.type === "Received")
+      .reduce((s, p) => s + Number(p.amount || 0), 0);
+    /** Business still owes party (negative = party ahead): billed work − cash paid to party + cash party returned to business */
+    const due = billed - paidFromAdmin + paidToBusiness;
+    return { billed, paidFromAdmin, paidToBusiness, due };
   }, [isParty, syntheticPartyBills, visibleDbPayments]);
 
+  /** Payments included in admin summary cards (respects Owner / workspace filter). */
+  const adminSummaryPaymentsPool = useMemo(() => {
+    if (!isAdmin) return reportingPayments;
+    if (ownerNameFilter === "All") return reportingPayments;
+    const wid = String(ownerNameFilter).trim();
+    return reportingPayments.filter(
+      (p) => paymentBusinessOwnerId(p) === wid,
+    );
+  }, [isAdmin, reportingPayments, ownerNameFilter]);
+
   const paidToNonOwnerParties = useMemo(() => {
-    const sum = reportingPayments
+    return adminSummaryPaymentsPool
       .filter(
         (p) =>
           p.type === "Paid" && String(p.party || "").toLowerCase() !== "owner",
       )
       .reduce((s, p) => s + Number(p.amount || 0), 0);
-    return sum;
-  }, [reportingPayments]);
-  const ownerIn = reportingPayments
-    .filter((p) => p.type === "Received")
-    .reduce((s, p) => s + Number(p.amount || 0), 0);
-  const partyOut = reportingPayments
-    .filter((p) => p.type === "Paid")
-    .reduce((s, p) => s + Number(p.amount || 0), 0);
-  const balance = ownerIn - paidToNonOwnerParties;
+  }, [adminSummaryPaymentsPool]);
+
+  /** Inflows credited to workspace owner capital — only “Received” with party Owner, not party → business Received rows. */
+  const ownerIn = useMemo(
+    () =>
+      adminSummaryPaymentsPool
+        .filter(
+          (p) =>
+            p.type === "Received" &&
+            String(p.party || "").toLowerCase().trim() === "owner",
+        )
+        .reduce((s, p) => s + Number(p.amount || 0), 0),
+    [adminSummaryPaymentsPool],
+  );
+
+  /** Cash Received from embroidery parties (party repaying / paying in) — excludes Owner-row receipts. */
+  const receivedFromParties = useMemo(
+    () =>
+      adminSummaryPaymentsPool
+        .filter(
+          (p) =>
+            p.type === "Received" &&
+            String(p.party || "").toLowerCase().trim() !== "owner",
+        )
+        .reduce((s, p) => s + Number(p.amount || 0), 0),
+    [adminSummaryPaymentsPool],
+  );
+
+  /** Same subset as Paid to Parties (used if cash-flow bar is re-enabled). */
+  const partyOut = paidToNonOwnerParties;
+
+  /** Net workspace cash: owner + party money in, minus paid out to parties (± same amount from a party cancels). */
+  const balance = ownerIn + receivedFromParties - paidToNonOwnerParties;
+
+  const adminSummaryTransactionCount = adminSummaryPaymentsPool.length;
 
   const validateForm = () => {
     const newErrors = {};
@@ -369,12 +424,10 @@ export default function Payments() {
       newErrors.party = "Please select a party";
     if (
       isAdmin &&
-      form.type === "Received" &&
-      form.party === "Owner" &&
       !String(form.ownerWorkspaceId || "").trim()
     ) {
       newErrors.ownerWorkspaceId =
-        "Select which business owner this payment belongs to.";
+        "Select which business / collection this payment belongs to.";
     }
     if (form.linkedLot) {
       const key = normalizeLotKey(form.linkedLot);
@@ -408,10 +461,7 @@ export default function Payments() {
         linkedLot: form.linkedLot || "",
       };
       const targetBiz =
-        isAdmin &&
-        form.type === "Received" &&
-        form.party === "Owner" &&
-        String(form.ownerWorkspaceId || "").trim()
+        isAdmin && String(form.ownerWorkspaceId || "").trim()
           ? form.ownerWorkspaceId
           : activeBusinessOwnerId;
       await addPayment(payload, { businessOwnerId: targetBiz });
@@ -567,10 +617,17 @@ export default function Payments() {
                 value: partyStatementSummary.paidFromAdmin,
                 color: "#15803d",
                 icon: "↓",
-                note: "Payments the admin marked as Paid to you",
+                note: "Admin marked as Paid → you",
               },
               {
-                label: "Due (bill − paid)",
+                label: "Paid to business",
+                value: partyStatementSummary.paidToBusiness,
+                color: "#b91c1c",
+                icon: "↑",
+                note: "Admin marked as Received from you",
+              },
+              {
+                label: "Net due (bill − in + out)",
                 value: Math.abs(partyStatementSummary.due),
                 color:
                   partyStatementSummary.due > 0
@@ -586,10 +643,10 @@ export default function Payments() {
                       : "=",
                 note:
                   partyStatementSummary.due > 0
-                    ? "Outstanding from business"
+                    ? "Net amount business still owes you (billed − received from biz + paid to biz)"
                     : partyStatementSummary.due < 0
-                      ? "You were paid ahead of billed work"
-                      : "Balanced billed vs paid",
+                      ? "You are ahead on this netting (equal in/out cancels)"
+                      : "Balanced net",
               },
               {
                 label: "Total rows",
@@ -651,6 +708,13 @@ export default function Payments() {
             icon: "↓",
           },
           {
+            label: "Received from parties",
+            value: receivedFromParties,
+            color: "#059669",
+            icon: "↓",
+            note: "Party → business",
+          },
+          {
             label: "Paid to Parties",
             value: paidToNonOwnerParties,
             color: "#dc2626",
@@ -661,11 +725,14 @@ export default function Payments() {
             value: Math.abs(balance),
             color: balance >= 0 ? "#15803d" : "#dc2626",
             icon: balance >= 0 ? "+" : "-",
-            note: balance >= 0 ? "Credit" : "Debit",
+            note:
+              balance >= 0
+                ? "Credit (owner + parties in − paid out)"
+                : "Debit (owner + parties in − paid out)",
           },
           {
             label: "Total Transactions",
-            value: reportingPayments.length,
+            value: adminSummaryTransactionCount,
             color: "#1e40af",
             isCount: true,
           },
@@ -845,7 +912,7 @@ export default function Payments() {
         >
           <option value="All">All Types</option>
           <option>Received</option>
-          {!isParty && <option>Paid</option>}
+          <option>Paid</option>
           <option>Bill</option>
         </select>
         {isAdmin && businessOwners.length > 0 && (
@@ -1084,9 +1151,13 @@ export default function Payments() {
           onClose={() => {
             if (!paymentSaving) handleClose();
           }}
+          onFormSubmit={() => {
+            void handleSave();
+          }}
           footer={
             <>
               <button
+                type="button"
                 className="btn btn-ghost"
                 onClick={handleClose}
                 disabled={paymentSaving}
@@ -1094,8 +1165,8 @@ export default function Payments() {
                 Cancel
               </button>
               <button
+                type="submit"
                 className="btn btn-success"
-                onClick={handleSave}
                 disabled={paymentSaving}
                 style={{ display: "inline-flex", alignItems: "center", gap: 8 }}
               >
@@ -1123,10 +1194,7 @@ export default function Payments() {
                     party: newType === "Received" ? "Owner" : "",
                     linkedLot: "",
                     amount: "",
-                    ownerWorkspaceId:
-                      newType === "Received" && isAdmin
-                        ? activeBusinessOwnerId || ""
-                        : "",
+                    ownerWorkspaceId: isAdmin ? activeBusinessOwnerId || "" : "",
                   }));
                   setErrors((prev) => ({
                     ...prev,
@@ -1153,10 +1221,11 @@ export default function Payments() {
                       party: v,
                       linkedLot: "",
                       amount: "",
-                      ownerWorkspaceId:
-                        v === "Owner" && isAdmin
+                      ownerWorkspaceId: isAdmin
+                        ? v === "Owner"
                           ? f.ownerWorkspaceId || activeBusinessOwnerId || ""
-                          : "",
+                          : activeBusinessOwnerId || ""
+                        : "",
                     }));
                     setErrors((prev) => ({
                       ...prev,
@@ -1182,6 +1251,9 @@ export default function Payments() {
                         party: e.target.value,
                         linkedLot: "",
                         amount: "",
+                        ownerWorkspaceId: isAdmin
+                          ? activeBusinessOwnerId || ""
+                          : f.ownerWorkspaceId,
                       }));
                       setErrors((p) => ({ ...p, party: undefined }));
                     }}
@@ -1209,10 +1281,8 @@ export default function Payments() {
                 </>
               )}
             </FormGroup>
-            {isAdmin &&
-              form.type === "Received" &&
-              form.party === "Owner" && (
-                <FormGroup label="Business owner *">
+            {isAdmin && (
+                <FormGroup label="Business / collection *">
                   <select
                     className={`form-select${errors.ownerWorkspaceId ? " input-error" : ""}`}
                     value={form.ownerWorkspaceId}
@@ -1248,6 +1318,17 @@ export default function Payments() {
                       {errors.ownerWorkspaceId}
                     </span>
                   )}
+                  <span
+                    style={{
+                      color: "var(--text-muted)",
+                      fontSize: 11,
+                      marginTop: 4,
+                      display: "block",
+                    }}
+                  >
+                    This row is stored under this workspace (not only the header
+                    switcher). Choose the correct collection before saving.
+                  </span>
                 </FormGroup>
               )}
             <FormGroup label="Linked Lot (optional)">
@@ -1271,10 +1352,7 @@ export default function Payments() {
                 }}
                 disabled={
                   (form.type === "Paid" && !form.party) ||
-                  (isAdmin &&
-                    form.type === "Received" &&
-                    form.party === "Owner" &&
-                    !form.ownerWorkspaceId)
+                  (isAdmin && !String(form.ownerWorkspaceId || "").trim())
                 }
               >
                 <option value="">None</option>
@@ -1312,7 +1390,6 @@ export default function Payments() {
               )}
               {form.type === "Received" &&
                 isAdmin &&
-                form.party === "Owner" &&
                 !form.ownerWorkspaceId && (
                 <span
                   style={{
@@ -1322,7 +1399,7 @@ export default function Payments() {
                     display: "block",
                   }}
                 >
-                  Choose a business owner to load open lots for that collection.
+                  Choose a business / collection to load lots for this workspace.
                 </span>
               )}
               {form.type === "Paid" && !form.party && (

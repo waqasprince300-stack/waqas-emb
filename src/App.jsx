@@ -15,6 +15,7 @@ import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
 import UserApprovals from './pages/UserApprovals';
 import ReviewLots from './pages/ReviewLots';
+import PersonalKhata from './pages/PersonalKhata';
 
 function Layout({ children, sidebarOpen, setSidebarOpen }) {
   return (
@@ -183,6 +184,26 @@ function AppRoutes() {
           <RequireAuth adminOnly>
             <Layout sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen}>
               <ReviewLots />
+            </Layout>
+          </RequireAuth>
+        )}
+      />
+      <Route
+        path="/personal-khata"
+        element={(
+          <RequireAuth>
+            <Layout sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen}>
+              <PersonalKhata />
+            </Layout>
+          </RequireAuth>
+        )}
+      />
+      <Route
+        path="/personal-khata/contact/:contactId"
+        element={(
+          <RequireAuth>
+            <Layout sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen}>
+              <PersonalKhata />
             </Layout>
           </RequireAuth>
         )}

@@ -54,6 +54,51 @@ export const latestDateFrom = (item, keys) => {
   return latest;
 };
 
+/** Millis for sorting tables: updatedAt → createdAt → kind-specific fallbacks. */
+export function rowRecencyMs(row, kind) {
+  const u = parseDateValue(row?.updatedAt)?.getTime();
+  if (u != null && !Number.isNaN(u)) return u;
+  const c = parseDateValue(row?.createdAt)?.getTime();
+  if (c != null && !Number.isNaN(c)) return c;
+  if (kind === 'lot') {
+    const t = latestDateFrom(row, [
+      'receivedBackDate',
+      'dispatchDate',
+      'allotDate',
+      'receivedDate',
+    ]);
+    return t ? t.getTime() : 0;
+  }
+  if (kind === 'payment') {
+    const d = parseDateValue(row?.date)?.getTime();
+    return d != null && !Number.isNaN(d) ? d : 0;
+  }
+  return 0;
+}
+
+function fallbackIdCompare(a, b) {
+  const idB = String(b.id ?? b._id ?? '');
+  const idA = String(a.id ?? a._id ?? '');
+  if (
+    idB.length === 24 &&
+    idA.length === 24 &&
+    /^[a-f0-9]{24}$/i.test(idB) &&
+    /^[a-f0-9]{24}$/i.test(idA)
+  ) {
+    const nb = parseInt(idB.slice(0, 8), 16);
+    const na = parseInt(idA.slice(0, 8), 16);
+    if (nb !== na) return nb - na;
+  }
+  return idB.localeCompare(idA);
+}
+
+/** Newest first (tables). kind: 'lot' | 'payment' | 'user'. */
+export function compareRowsByUpdatedNewestFirst(a, b, kind) {
+  const d = rowRecencyMs(b, kind) - rowRecencyMs(a, kind);
+  if (d !== 0) return d;
+  return fallbackIdCompare(a, b);
+}
+
 export function DateRangeSelect({ value, onChange, style }) {
   return (
     <select

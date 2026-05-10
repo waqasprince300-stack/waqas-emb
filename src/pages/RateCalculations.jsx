@@ -249,17 +249,21 @@ export default function StitchCalculator() {
         <Modal
           title="Save Design"
           onClose={() => setSaveModal(false)}
+          onFormSubmit={() => {
+            void handleSaveDesign();
+          }}
           footer={
             <>
               <button
+                type="button"
                 className="btn btn-ghost"
                 onClick={() => setSaveModal(false)}
               >
                 Cancel
               </button>
               <button
+                type="submit"
                 className="btn btn-success"
-                onClick={handleSaveDesign}
                 disabled={loading}
               >
                 {loading ? "Saving..." : "Save Design"}

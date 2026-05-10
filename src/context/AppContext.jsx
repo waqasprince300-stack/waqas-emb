@@ -67,6 +67,11 @@ const INITIAL_PARTY_EDITS = {};
 
 const INITIAL_PAYMENTS = [];
 const BUSINESS_OWNER_KEY = 'waqas_emb_business_owner_id';
+/** UI-only flag: show merged lots across all business workspaces without breaking API headers */
+const WORKSPACE_VIEW_ALL_KEY = 'waqas_emb_workspace_view_all';
+
+/** Dropdown value for BusinessOwnerSwitcher → “All workspaces”. */
+export const ADMIN_ALL_WORKSPACES_ID = '__all_workspaces__';
 
 /** Mongo/API may return only `_id`; UI uses `id` everywhere. */
 const normalizeParty = (p) => {
@@ -111,10 +116,31 @@ export function AppProvider({ children }) {
   const [partyCrossPayments, setPartyCrossPayments] = useState(INITIAL_PAYMENTS);
   const [initialDataLoading, setInitialDataLoading] = useState(true);
 
+  const readViewAllWorkspaces = () => {
+    try {
+      return localStorage.getItem(WORKSPACE_VIEW_ALL_KEY) === '1';
+    } catch {
+      return false;
+    }
+  };
+
+  const [viewAllWorkspaces, setViewAllWorkspaces] = useState(readViewAllWorkspaces);
+
   const selectBusinessOwner = (id) => {
     const nextId = String(id || '');
+    try {
+      localStorage.removeItem(WORKSPACE_VIEW_ALL_KEY);
+    } catch { /* ignore */ }
+    setViewAllWorkspaces(false);
     localStorage.setItem(BUSINESS_OWNER_KEY, nextId);
     setActiveBusinessOwnerId(nextId);
+  };
+
+  const selectAllWorkspacesView = () => {
+    try {
+      localStorage.setItem(WORKSPACE_VIEW_ALL_KEY, '1');
+    } catch { /* ignore */ }
+    setViewAllWorkspaces(true);
   };
 
   useEffect(() => {
@@ -130,6 +156,10 @@ export function AppProvider({ children }) {
       setPartyCrossPartyEdits(INITIAL_PARTY_EDITS);
       setPartyCrossPayments(INITIAL_PAYMENTS);
       setBusinessOwners([]);
+      try {
+        localStorage.removeItem(WORKSPACE_VIEW_ALL_KEY);
+      } catch { /* ignore */ }
+      setViewAllWorkspaces(false);
       setInitialDataLoading(false);
       return;
     }
@@ -435,7 +465,12 @@ export function AppProvider({ children }) {
       payments, addPayment, deletePayment,
       reportingLots, reportingPayments, reportingPartyEdits,
       partyCrossLots, partyCrossPartyEdits, partyCrossPayments,
-      businessOwners, activeBusinessOwnerId, selectBusinessOwner, createBusinessOwner,
+      businessOwners,
+      activeBusinessOwnerId,
+      selectBusinessOwner,
+      selectAllWorkspacesView,
+      viewAllWorkspaces,
+      createBusinessOwner,
       getPartyById, getPartyName,
       initialDataLoading,
     }}>

@@ -3,6 +3,7 @@ import apiService from '../services/api';
 import { useApp } from '../context/AppContext';
 import LoaderDashboard from '../components/LoaderDashboard';
 import { EmptyState } from '../components/UI';
+import { compareRowsByUpdatedNewestFirst } from '../utils/dateFilters';
 
 const getUserId = (user) => String(user?._id || user?.id || '');
 
@@ -96,6 +97,14 @@ export default function UserApprovals() {
     }
   };
 
+  const sortedUsers = useMemo(
+    () =>
+      [...users].sort((a, b) =>
+        compareRowsByUpdatedNewestFirst(a, b, 'user'),
+      ),
+    [users],
+  );
+
   if (loading) {
     return (
       <div style={{ minHeight: '70vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -134,14 +143,14 @@ export default function UserApprovals() {
               </tr>
             </thead>
             <tbody>
-              {users.length === 0 ? (
+              {sortedUsers.length === 0 ? (
                 <tr>
                   <td colSpan={5}>
                     <EmptyState message="No users found" />
                   </td>
                 </tr>
               ) : (
-                users.map((user) => {
+                sortedUsers.map((user) => {
                   const id = getUserId(user);
                   const form = approvalForms[id] || { partyId: user.partyId || '' };
                   const isPending = user.status === 'pending';

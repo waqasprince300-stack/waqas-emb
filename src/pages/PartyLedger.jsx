@@ -11,7 +11,12 @@ import {
 } from "../components/UI";
 import Loader from "../components/Loader";
 import LoaderDashboard from "../components/LoaderDashboard";
-import { DateRangeSelect, isWithinDateRange, latestDateFrom } from "../utils/dateFilters";
+import {
+  DateRangeSelect,
+  isWithinDateRange,
+  latestDateFrom,
+  compareRowsByUpdatedNewestFirst,
+} from "../utils/dateFilters";
 
 // From the party's perspective: dispatched = In Progress, received back = Completed
 // If party name is unknown, status should be Pending
@@ -29,34 +34,6 @@ const toTitleCase = (s) =>
     .split(" ")
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
     .join(" ");
-
-function lotRecencyTimestamp(l) {
-  const keys = [
-    l.updatedAt,
-    l.createdAt,
-    l.receivedBackDate,
-    l.dispatchDate,
-    l.allotDate,
-  ];
-  let max = 0;
-  for (const v of keys) {
-    const t = v ? new Date(v).getTime() : NaN;
-    if (!Number.isNaN(t) && t > max) max = t;
-  }
-  if (max === 0) {
-    const id = String(l.id || "");
-    if (id.length === 24 && /^[a-f0-9]{24}$/i.test(id)) {
-      max = parseInt(id.slice(0, 8), 16) * 1000;
-    }
-  }
-  return max;
-}
-
-function compareLotsNewestFirst(a, b) {
-  const d = lotRecencyTimestamp(b) - lotRecencyTimestamp(a);
-  if (d !== 0) return d;
-  return String(b.id || "").localeCompare(String(a.id || ""));
-}
 
 function readReceiptAsStoredValue(file) {
   return new Promise((resolve, reject) => {
@@ -216,24 +193,27 @@ function ReceiptThumbButton({ receipt, lotLabel, onOpen }) {
 
 export default function PartyLedger() {
   const {
-    ghausiaLots,
-    payments,
-    partyEdits,
+    reportingLots,
+    reportingPayments,
+    reportingPartyEdits,
     partyCrossLots,
     partyCrossPayments,
     partyCrossPartyEdits,
     updateLot,
     updatePartyEdit,
     parties,
+    businessOwners,
     initialDataLoading,
   } = useApp();
   const { isAdmin, isParty, user } = useAuth();
 
-  const ledgerLots = isParty ? partyCrossLots : ghausiaLots;
-  const ledgerPayments = isParty ? partyCrossPayments : payments;
-  const ledgerPartyEdits = isParty ? partyCrossPartyEdits : partyEdits;
+  /** Admin: merged lots/edits/payments across all workspaces; party login: scoped cross-collection rows */
+  const ledgerLots = isParty ? partyCrossLots : reportingLots;
+  const ledgerPayments = isParty ? partyCrossPayments : reportingPayments;
+  const ledgerPartyEdits = isParty ? partyCrossPartyEdits : reportingPartyEdits;
   const PAGE_SIZE = 10;
   const [search, setSearch] = useState("");
+  const [workspaceFilter, setWorkspaceFilter] = useState("All");
   const [partyFilter, setPartyFilter] = useState("All");
   const [statusFilter, setStatusFilter] = useState("All");
   const [dateRange, setDateRange] = useState("all");
@@ -243,6 +223,8 @@ export default function PartyLedger() {
   const [ledgerFormErrors, setLedgerFormErrors] = useState({});
   const [receiptPreview, setReceiptPreview] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
+  /** Split view: non-completed vs completed (same for admin & party) */
+  const [ledgerLotsTab, setLedgerLotsTab] = useState("other");
 
   const samePartyId = (a, b) =>
     String(a ?? "").trim() === String(b ?? "").trim();
@@ -250,21 +232,32 @@ export default function PartyLedger() {
   const lotWorkspaceOpts = (lot) =>
     lot?.businessOwnerId ? { businessOwnerId: lot.businessOwnerId } : {};
 
-  const assignedLots = useMemo(
-    () =>
-      ledgerLots
-        .filter(
-          (l) =>
-            String(l.partyId || "").trim() || String(l.partyName || "").trim(),
-        )
-        .filter((lot) =>
-          isWithinDateRange(
-            latestDateFrom(lot, ["updatedAt", "createdAt", "receivedBackDate", "dispatchDate", "allotDate", "receivedDate"]),
-            dateRange,
-          ),
+  const workspaceNameForLot = (l) => {
+    const id = String(l.businessOwnerId ?? "").trim();
+    if (!id) return "—";
+    return businessOwners.find((o) => String(o.id || o._id) === id)?.name || "—";
+  };
+
+  const assignedLots = useMemo(() => {
+    const byWorkspace = (l) => {
+      if (isParty || !isAdmin) return true;
+      if (workspaceFilter === "All") return true;
+      return String(l.businessOwnerId ?? "").trim() === String(workspaceFilter).trim();
+    };
+
+    return ledgerLots
+      .filter(byWorkspace)
+      .filter(
+        (l) =>
+          String(l.partyId || "").trim() || String(l.partyName || "").trim(),
+      )
+      .filter((lot) =>
+        isWithinDateRange(
+          latestDateFrom(lot, ["updatedAt", "createdAt", "receivedBackDate", "dispatchDate", "allotDate", "receivedDate"]),
+          dateRange,
         ),
-    [ledgerLots, dateRange],
-  );
+      );
+  }, [ledgerLots, dateRange, isAdmin, isParty, workspaceFilter]);
 
   const formatYmd = (value) => {
     if (!value) return "";
@@ -317,11 +310,47 @@ export default function PartyLedger() {
       const matchP =
         partyFilter === "All" || samePartyId(l.partyId, partyFilter);
       const displayStatus = getDisplayStatus(l);
-      const matchS = statusFilter === "All" || displayStatus === statusFilter;
+      const matchTab =
+        ledgerLotsTab === "completed"
+          ? displayStatus === "Completed"
+          : displayStatus !== "Completed";
+      const matchS =
+        matchTab &&
+        (ledgerLotsTab === "completed" ||
+          statusFilter === "All" ||
+          displayStatus === statusFilter);
       return matchQ && matchP && matchS;
     });
-    return [...list].sort(compareLotsNewestFirst);
-  }, [assignedLots, search, partyFilter, statusFilter, ledgerPartyEdits]);
+    return [...list].sort((a, b) =>
+      compareRowsByUpdatedNewestFirst(a, b, "lot"),
+    );
+  }, [
+    assignedLots,
+    search,
+    partyFilter,
+    ledgerLotsTab,
+    statusFilter,
+    ledgerPartyEdits,
+  ]);
+
+  const otherLotsTabCount = useMemo(
+    () =>
+      assignedLots.reduce(
+        (n, l) => n + (getDisplayStatus(l) !== "Completed" ? 1 : 0),
+        0,
+      ),
+    [assignedLots, ledgerPartyEdits],
+  );
+  const completedLotsTabCount = useMemo(
+    () =>
+      assignedLots.reduce(
+        (n, l) => n + (getDisplayStatus(l) === "Completed" ? 1 : 0),
+        0,
+      ),
+    [assignedLots, ledgerPartyEdits],
+  );
+  const showWorkspaceCol = isAdmin && workspaceFilter === "All";
+  const ledgerTableColSpan = 14 + (showWorkspaceCol ? 1 : 0);
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safeCurrentPage = Math.min(currentPage, totalPages);
   const pageStart = (safeCurrentPage - 1) * PAGE_SIZE;
@@ -329,7 +358,20 @@ export default function PartyLedger() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [search, partyFilter, statusFilter, dateRange]);
+  }, [
+    search,
+    partyFilter,
+    statusFilter,
+    ledgerLotsTab,
+    dateRange,
+    workspaceFilter,
+  ]);
+
+  useEffect(() => {
+    if (ledgerLotsTab === "other" && statusFilter === "Completed") {
+      setStatusFilter("All");
+    }
+  }, [ledgerLotsTab, statusFilter]);
 
   useEffect(() => {
     if (isParty) {
@@ -540,53 +582,95 @@ export default function PartyLedger() {
   }, [filtered, ledgerPartyEdits]);
 
   const partyBalanceInfo = useMemo(() => {
-    const pays = ledgerPayments.filter((p) => p.type === "Paid" && isWithinDateRange(p.updatedAt || p.date, dateRange));
+    const withinWorkspace = (p) => {
+      if (!isAdmin || workspaceFilter === "All") return true;
+      return String(p.businessOwnerId ?? "").trim() === String(workspaceFilter).trim();
+    };
+    const paysDateScoped = ledgerPayments.filter(
+      (p) => p.type === "Paid" && isWithinDateRange(p.updatedAt || p.date, dateRange),
+    );
+    const pays = paysDateScoped.filter(withinWorkspace);
+    const receivedDateScoped = ledgerPayments.filter(
+      (p) => p.type === "Received" && isWithinDateRange(p.updatedAt || p.date, dateRange),
+    );
+    const receiveds = receivedDateScoped.filter(withinWorkspace);
 
-  if (partyFilter === "All") {
-    const names = [
-      ...new Set(
-        filtered
-          .map((l) => getPartyNameLocal(l.partyId, l.partyName).trim())
-          .filter((n) => n && n !== "—")
-      ),
-    ];
+    if (partyFilter === "All") {
+      const names = [
+        ...new Set(
+          filtered
+            .map((l) => getPartyNameLocal(l.partyId, l.partyName).trim())
+            .filter((n) => n && n !== "—"),
+        ),
+      ];
 
-    let balance = 0;
-    let paidSum = 0; // ✅ declare OUTSIDE
+      let balance = 0;
+      let receivedFromBusiness = 0;
+      let paidToBusiness = 0;
 
-    names.forEach((name) => {
-      const billSum = filtered
-        .filter(
-          (l) => getPartyNameLocal(l.partyId, l.partyName).trim() === name
-        )
-        .reduce((s, l) => s + getDisplayBill(l), 0);
+      names.forEach((name) => {
+        const billSum = filtered
+          .filter(
+            (l) => getPartyNameLocal(l.partyId, l.partyName).trim() === name,
+          )
+          .reduce((s, l) => s + getDisplayBill(l), 0);
 
-      const partyPaid = pays
-        .filter((p) => String(p.party || "").trim() === name)
-        .reduce((s, p) => s + Number(p.amount || 0), 0);
+        const partyIn = pays
+          .filter((p) => String(p.party || "").trim() === name)
+          .reduce((s, p) => s + Number(p.amount || 0), 0);
+        const partyOut = receiveds
+          .filter((p) => String(p.party || "").trim() === name)
+          .reduce((s, p) => s + Number(p.amount || 0), 0);
 
-      paidSum += partyPaid;      // ✅ accumulate
-      balance += billSum - partyPaid;
-    });
+        receivedFromBusiness += partyIn;
+        paidToBusiness += partyOut;
+        balance += billSum - partyIn + partyOut;
+      });
 
-    return { balance, paidSum, hint: "Total balance for all the parties." };
-  }
+      return {
+        balance,
+        receivedFromBusiness,
+        paidToBusiness,
+        completedNet:
+          totals.completedAmount - receivedFromBusiness + paidToBusiness,
+        hint:
+          workspaceFilter === "All"
+            ? "Totals for all parties in the filtered workspaces."
+            : "Totals for all parties in this workspace.",
+      };
+    }
 
-  const party = parties.find((p) => samePartyId(p.id, partyFilter));
-  const pname = (party?.name || "").trim();
+    const party = parties.find((p) => samePartyId(p.id, partyFilter));
+    const pname = (party?.name || "").trim();
 
-  const paidSum = pays
-    .filter((p) => String(p.party || "").trim() === pname)
-    .reduce((s, p) => s + Number(p.amount || 0), 0);
+    const receivedFromBusiness = pays
+      .filter((p) => String(p.party || "").trim() === pname)
+      .reduce((s, p) => s + Number(p.amount || 0), 0);
+    const paidToBusiness = receiveds
+      .filter((p) => String(p.party || "").trim() === pname)
+      .reduce((s, p) => s + Number(p.amount || 0), 0);
 
-  return {
-    balance: totals.billTotal - paidSum,
-    paidSum,
-    hint: pname
-      ? `${pname}'s balance`
-      : "Total bill value minus paid to party",
-  };
-}, [partyFilter, filtered, ledgerPayments, parties, ledgerPartyEdits, totals.billTotal, dateRange]);
+    return {
+      balance: totals.billTotal - receivedFromBusiness + paidToBusiness,
+      receivedFromBusiness,
+      paidToBusiness,
+      completedNet:
+        totals.completedAmount - receivedFromBusiness + paidToBusiness,
+      hint: pname
+        ? `${pname}'s balance (bill − paid to party + received from party)`
+        : "Bill value minus paid to party plus received from party",
+    };
+  }, [
+    partyFilter,
+    filtered,
+    ledgerPayments,
+    parties,
+    totals.billTotal,
+    totals.completedAmount,
+    dateRange,
+    isAdmin,
+    workspaceFilter,
+  ]);
   const handleRowStatusChange = async (lot, newStatus) => {
     if (newStatus === "Completed") {
       openEdit(lot, "Completed");
@@ -633,7 +717,9 @@ export default function PartyLedger() {
         <div>
           <div className="page-title">Party Ledger</div>
           <div className="page-subtitle">
-            All lots assigned to parties — editable completion details
+            {isAdmin
+              ? "All workspaces by default — filter by party, workspace, dates, and status"
+              : "All lots assigned to parties — editable completion details"}
           </div>
         </div>
       </div>
@@ -695,9 +781,9 @@ export default function PartyLedger() {
           },
           {
             key: "completed-lots-balance",
-            label: `Completed Los't ${totals.completedAmount - partyBalanceInfo.paidSum >= 0 ? "balance (payable)" : "(advance)"}`,
-            value: `₨${totals.completedAmount - partyBalanceInfo.paidSum}`,
-            color: `${totals.completedAmount - partyBalanceInfo.paidSum >= 0 ? "#0f766e" : "#dc2626"}`,
+            label: `Completed lots ${partyBalanceInfo.completedNet >= 0 ? "balance (payable)" : "(advance)"}`,
+            value: `₨${partyBalanceInfo.completedNet.toLocaleString()}`,
+            color: `${partyBalanceInfo.completedNet >= 0 ? "#0f766e" : "#dc2626"}`,
             sub: partyBalanceInfo.hint,
           },
           {
@@ -729,6 +815,72 @@ export default function PartyLedger() {
         ))}
       </div>
 
+      <div
+        role="tablist"
+        aria-label="Other lots or completed lots"
+        style={{
+          display: "flex",
+          gap: 8,
+          flexWrap: "wrap",
+          marginBottom: 16,
+          padding: 4,
+          background: "var(--surface-2, #f8fafc)",
+          borderRadius: 10,
+          border: "1px solid var(--border-subtle, #e2e8f0)",
+        }}
+      >
+        {[
+          {
+            id: "other",
+            label: "Other lots",
+            count: otherLotsTabCount,
+          },
+          {
+            id: "completed",
+            label: "Completed lots",
+            count: completedLotsTabCount,
+          },
+        ].map((t) => {
+          const active = ledgerLotsTab === t.id;
+          return (
+            <button
+              key={t.id}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              onClick={() => setLedgerLotsTab(t.id)}
+              style={{
+                padding: "10px 16px",
+                borderRadius: 8,
+                border: active
+                  ? "1px solid #15803d"
+                  : "1px solid transparent",
+                background: active ? "#fff" : "transparent",
+                color: active ? "#15803d" : "var(--text-secondary, #64748b)",
+                fontWeight: active ? 700 : 600,
+                fontSize: 14,
+                cursor: "pointer",
+                boxShadow: active ? "0 1px 2px rgba(0,0,0,0.06)" : "none",
+              }}
+            >
+              {t.label}
+              {t.count != null && (
+                <span
+                  style={{
+                    marginLeft: 8,
+                    fontSize: 12,
+                    fontWeight: 700,
+                    opacity: 0.9,
+                  }}
+                >
+                  ({t.count})
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
       {/* Toolbar */}
       <div className="toolbar">
         <SearchBar
@@ -736,6 +888,23 @@ export default function PartyLedger() {
           onChange={setSearch}
           placeholder="Search lot no., design..."
         />
+        {isAdmin && (
+          <select
+            className="form-select"
+            style={{ width: 200 }}
+            value={workspaceFilter}
+            onChange={(e) => setWorkspaceFilter(e.target.value)}
+            aria-label="Filter by workspace"
+            title="Business / workspace filter"
+          >
+            <option value="All">All workspaces</option>
+            {businessOwners.map((o) => (
+              <option key={o.id || o._id} value={String(o.id || o._id)}>
+                {o.name}
+              </option>
+            ))}
+          </select>
+        )}
         <select
           className="form-select"
           style={{ width: 190 }}
@@ -743,28 +912,30 @@ export default function PartyLedger() {
           onChange={(e) => setPartyFilter(e.target.value)}
           disabled={isParty}
         >
-          {!isParty && <option value="All">All Parties</option>}
+          {!isParty && <option value="All">All parties</option>}
           {isParty && <option value="All">All collections</option>}
-          {!isParty && parties.map((p) => (
-            <option key={p.id} value={String(p.id)}>
-              {p.name}
-            </option>
-          ))}
+          {!isParty &&
+            parties.map((p) => (
+              <option key={p.id} value={String(p.id)}>
+                {p.name}
+              </option>
+            ))}
         </select>
         <DateRangeSelect value={dateRange} onChange={setDateRange} />
-        <select
-          className="form-select"
-          style={{ width: 160 }}
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-        >
-          <option value="All">All Statuses</option>
-          <option value="Pending">Pending</option>
-          <option value="In Progress">In Progress</option>
-          <option value="Pending review">Pending review</option>
-          <option value="Rejected">Rejected</option>
-          <option value="Completed">Completed</option>
-        </select>
+        {ledgerLotsTab === "other" && (
+          <select
+            className="form-select"
+            style={{ width: 160 }}
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+          >
+            <option value="All">All Statuses</option>
+            <option value="Pending">Pending</option>
+            <option value="In Progress">In Progress</option>
+            <option value="Pending review">Pending review</option>
+            <option value="Rejected">Rejected</option>
+          </select>
+        )}
       </div>
 
       {/* Table */}
@@ -782,6 +953,11 @@ export default function PartyLedger() {
                 <th>Allot Date</th>
                 <th>Complete Date</th>
                 <th>Party Name</th>
+                {showWorkspaceCol && (
+                  <th style={{ minWidth: 120 }} title="Business owner collection">
+                    Workspace
+                  </th>
+                )}
                 <th>Status</th>
                 <th style={{ textAlign: "right" }}>Bill Amount</th>
                 <th>Receipt</th>
@@ -792,7 +968,7 @@ export default function PartyLedger() {
             <tbody>
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={14}>
+                  <td colSpan={ledgerTableColSpan}>
                     <EmptyState message="No assigned lots found" />
                   </td>
                 </tr>
@@ -833,6 +1009,17 @@ export default function PartyLedger() {
                         )}
                       </td>
                       <td>{getPartyNameLocal(l.partyId, l.partyName)}</td>
+                      {showWorkspaceCol && (
+                        <td
+                          style={{
+                            fontSize: 12,
+                            fontWeight: 600,
+                            color: "var(--text-secondary)",
+                          }}
+                        >
+                          {workspaceNameForLot(l)}
+                        </td>
+                      )}
                       <td>
                         {displayStatus === "Completed" ? (
                           <span
@@ -1044,9 +1231,13 @@ export default function PartyLedger() {
               setLedgerFormErrors({});
             }
           }}
+          onFormSubmit={() => {
+            void handleSave();
+          }}
           footer={
             <>
               <button
+                type="button"
                 className="btn btn-ghost"
                 onClick={() => {
                   setEditingId(null);
@@ -1057,8 +1248,8 @@ export default function PartyLedger() {
                 Cancel
               </button>
               <button
+                type="submit"
                 className="btn btn-primary"
-                onClick={handleSave}
                 disabled={ledgerSaving}
                 style={{ display: "inline-flex", alignItems: "center", gap: 8 }}
               >

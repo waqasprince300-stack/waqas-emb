@@ -3,7 +3,7 @@ import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
 import { StatusBadge } from '../components/UI';
 import LoaderDashboard from '../components/LoaderDashboard';
-import { DateRangeSelect, isWithinDateRange, latestDateFrom } from '../utils/dateFilters';
+import { DateRangeSelect, isWithinDateRange, latestDateFrom, compareRowsByUpdatedNewestFirst } from '../utils/dateFilters';
 
 const toTitleCase = (s) =>
   String(s || '').split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
@@ -149,33 +149,12 @@ export default function Dashboard() {
   const totalLotValue = scopedLots.reduce((s, l) => s + Number(l.billAmount || 0), 0);
 
   const ownerIn = scopedPayments.filter(p => p.type === 'Received').reduce((s, p) => s + Number(p.amount || 0), 0);
-  const partyOut = scopedPayments.filter(p => p.type === 'Paid').reduce((s, p) => s + Number(p.amount || 0), 0);
-  const balance = ownerIn - partyOut;
+  /** Cash movements shown on dashboard: owner receipts vs payouts to parties (excludes "owner" payees). */
+  const netOwnerVsParties = ownerIn - paidToNonOwnerParties;
 
-  /** Sort lots by recency (newest first) using modification date, then created date, then ID */
-  function lotRecencyTimestamp(l) {
-    const keys = [l.updatedAt, l.createdAt, l.receivedBackDate, l.dispatchDate, l.allotDate];
-    let max = 0;
-    for (const v of keys) {
-      const t = v ? new Date(v).getTime() : NaN;
-      if (!Number.isNaN(t) && t > max) max = t;
-    }
-    if (max === 0) {
-      const id = String(l.id || '');
-      if (id.length === 24 && /^[a-f0-9]{24}$/i.test(id)) {
-        max = parseInt(id.slice(0, 8), 16) * 1000;
-      }
-    }
-    return max;
-  }
-
-  function compareLotsNewestFirst(a, b) {
-    const d = lotRecencyTimestamp(b) - lotRecencyTimestamp(a);
-    if (d !== 0) return d;
-    return String(b.id || '').localeCompare(String(a.id || ''));
-  }
-
-  const recentLots = [...scopedLots].sort(compareLotsNewestFirst).slice(0, 12);
+  const recentLots = [...scopedLots]
+    .sort((a, b) => compareRowsByUpdatedNewestFirst(a, b, 'lot'))
+    .slice(0, 12);
 
   const partyStats = parties.map(p => {
     const lots = scopedLots.filter(l => String(l.partyId ?? '') === String(p.id ?? ''));
@@ -188,26 +167,53 @@ export default function Dashboard() {
     };
   }).filter(p => p.total > 0);
 
-  const statCards = [
-    { label: 'Total Lots',     value: scopedLots.length,       color: '#1e40af', sub: 'All assigned lots' },
-    { label: 'Pending',        value: byStatus('pending'),       color: '#d97706', sub: 'Awaiting dispatch' },
-    { label: 'Dispatched',     value: byStatus('dispatched'),    color: '#0284c7', sub: 'Currently with party' },
+  const pipelineStatCards = [
+    { label: 'Total Lots', value: scopedLots.length, color: '#1e40af', sub: 'All assigned lots' },
+    { label: 'Pending', value: byStatus('pending'), color: '#d97706', sub: 'Awaiting dispatch' },
+    { label: 'Dispatched', value: byStatus('dispatched'), color: '#0284c7', sub: 'Currently with party' },
     { label: 'Awaiting approval', value: byStatus('pending approval'), color: '#ca8a04', sub: 'Party submitted completion' },
-    { label: 'Rejected',       value: byStatus('rejected'),      color: '#b91c1c', sub: 'Needs rework' },
-    { label: 'Received Back',  value: byStatus('received back'), color: '#dc2626', sub: 'Ready to bill owner' },
-    { label: 'Completed',      value: byStatus('completed'),     color: '#15803d', sub: 'Fully done' },
-    { label: 'Active Parties', value: partyStats.length,         color: '#7c3aed', sub: 'With assigned lots' },
+    { label: 'Rejected', value: byStatus('rejected'), color: '#b91c1c', sub: 'Needs rework' },
+    { label: 'Received Back', value: byStatus('received back'), color: '#0d9488', sub: 'Ready to bill owner' },
+    { label: 'Completed', value: byStatus('completed'), color: '#15803d', sub: 'Fully done' },
   ];
 
-  const profit = completedTotal - paidToNonOwnerParties;
+  const activePartyStat = {
+    label: 'Active Parties',
+    value: partyStats.length,
+    color: '#7c3aed',
+    sub: 'With assigned lots',
+  };
+
+  const formatRupee = (n) => `₨${Number(n || 0).toLocaleString()}`;
+  const formatSignedRupee = (n) => {
+    const v = Number(n || 0);
+    if (v === 0) return '₨0';
+    const abs = `₨${Math.abs(v).toLocaleString()}`;
+    return v < 0 ? `−${abs}` : abs;
+  };
 
   const finCards = [
-    { label: 'Total Lot Value',       value: totalLotValue, color: '#1e40af' },
-    { label: 'Billable to Owner',     value: billableTotal, color: '#dc2626', note: `${billable.length} lots` },
-    { label: 'Completed Revenue',     value: completedTotal, color: '#15803d' },
-    { label: 'Received from Owner',   value: ownerIn,       color: '#0284c7' },
-    { label: 'Paid to Parties',       value: paidToNonOwnerParties,      color: '#7c3aed' },
-    { label: 'Profit',                value: profit,        color: profit >= 0 ? '#15803d' : '#dc2626', note: profit >= 0 ? 'Gain' : 'Loss' },
+    { label: 'Total Lot Value', value: totalLotValue, color: '#1e40af' },
+    {
+      label: 'Billable to Owner',
+      value: billableTotal,
+      color: '#0369a1',
+      note: `${billable.length} lot${billable.length === 1 ? '' : 's'} — ready to invoice`,
+    },
+    { label: 'Completed Revenue', value: completedTotal, color: '#15803d' },
+    { label: 'Received from Owner', value: ownerIn, color: '#0284c7' },
+    { label: 'Paid to Parties', value: paidToNonOwnerParties, color: '#7c3aed' },
+    {
+      label: 'Net (owner vs parties)',
+      value: netOwnerVsParties,
+      color: netOwnerVsParties >= 0 ? '#15803d' : '#dc2626',
+      note:
+        netOwnerVsParties >= 0
+          ? 'Received more than paid to parties'
+          : 'Paid parties more than received from owner',
+      signed: true,
+      highlight: true,
+    },
   ];
 
   return (
@@ -240,29 +246,73 @@ export default function Dashboard() {
 
       {!isParty && (
         <>
-      {/* Lot Status Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 14, marginBottom: 24 }}>
-        {statCards.map(c => (
-          <div key={c.label} className="stat-card">
-            <div className="stat-label">{c.label}</div>
-            <div className="stat-value" style={{ color: c.color }}>{c.value}</div>
-            <div className="stat-sub">{c.sub}</div>
-          </div>
-        ))}
-      </div>
-
-      {/* Financial Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 14, marginBottom: 24 }}>
-        {finCards.map(c => (
-          <div key={c.label} style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 12, padding: '16px 18px', boxShadow: 'var(--shadow)' }}>
-            <div className="stat-label">{c.label}</div>
-            <div style={{ fontSize: 20, fontWeight: 700, color: c.color, marginBottom: 2 }}>
-              ₨{Math.abs(c.value).toLocaleString()}
+      <section style={{ marginBottom: 28 }}>
+        <div className="section-title">Production pipeline</div>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(152px, 1fr))',
+            gap: 12,
+            padding: 16,
+            background: 'linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%)',
+            border: '1px solid var(--border)',
+            borderRadius: 14,
+          }}
+        >
+          {pipelineStatCards.map((c) => (
+            <div key={c.label} className="stat-card" style={{ boxShadow: '0 1px 2px rgba(15,23,42,0.04)' }}>
+              <div className="stat-label">{c.label}</div>
+              <div className="stat-value" style={{ color: c.color, fontSize: 24 }}>
+                {c.value}
+              </div>
+              <div className="stat-sub">{c.sub}</div>
             </div>
-            {c.note && <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{c.note}</div>}
+          ))}
+        </div>
+      </section>
+
+      <section style={{ marginBottom: 28 }}>
+        <div className="section-title">Parties & finances</div>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(168px, 1fr))',
+            gap: 12,
+          }}
+        >
+          <div className="stat-card" style={{ boxShadow: '0 1px 2px rgba(15,23,42,0.04)' }}>
+            <div className="stat-label">{activePartyStat.label}</div>
+            <div className="stat-value" style={{ color: activePartyStat.color, fontSize: 24 }}>
+              {activePartyStat.value}
+            </div>
+            <div className="stat-sub">{activePartyStat.sub}</div>
           </div>
-        ))}
-      </div>
+          {finCards.map((c) => (
+            <div
+              key={c.label}
+              className="stat-card"
+              style={{
+                boxShadow: '0 1px 2px rgba(15,23,42,0.04)',
+                ...(c.highlight
+                  ? {
+                      borderColor: netOwnerVsParties >= 0 ? '#86efac' : '#fecaca',
+                      background:
+                        netOwnerVsParties >= 0
+                          ? 'linear-gradient(145deg, #fff 0%, #f0fdf4 100%)'
+                          : 'linear-gradient(145deg, #fff 0%, #fef2f2 100%)',
+                    }
+                  : {}),
+              }}
+            >
+              <div className="stat-label">{c.label}</div>
+              <div className="stat-value" style={{ color: c.color, fontSize: 24 }}>
+                {c.signed ? formatSignedRupee(c.value) : formatRupee(c.value)}
+              </div>
+              {c.note && <div className="stat-sub">{c.note}</div>}
+            </div>
+          ))}
+        </div>
+      </section>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18, marginBottom: 24 }}>
         {/* Status Breakdown */}
@@ -272,7 +322,7 @@ export default function Dashboard() {
             {[
               { label: 'Pending',       count: byStatus('pending'),       color: '#d97706' },
               { label: 'Dispatched',    count: byStatus('dispatched'),    color: '#0284c7' },
-              { label: 'Received Back', count: byStatus('received back'), color: '#dc2626' },
+              { label: 'Received Back', count: byStatus('received back'), color: '#0d9488' },
               { label: 'Completed',     count: byStatus('completed'),     color: '#15803d' },
             ].map(s => (
               <div key={s.label} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
@@ -294,7 +344,7 @@ export default function Dashboard() {
         <div className="card">
           <div className="card-header">
             <span className="card-title">Billable to Owner</span>
-            <span style={{ fontSize: 13, fontWeight: 700, color: '#dc2626' }}>₨{billableTotal.toLocaleString()}</span>
+            <span style={{ fontSize: 13, fontWeight: 700, color: '#0369a1' }}>₨{billableTotal.toLocaleString()}</span>
           </div>
           <div className="card-body" style={{ padding: billable.length ? 0 : 22 }}>
             {billable.length === 0 ? (
@@ -311,15 +361,17 @@ export default function Dashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {billable.map(l => (
+                  {[...billable]
+                    .sort((a, b) => compareRowsByUpdatedNewestFirst(a, b, 'lot'))
+                    .map(l => (
                     <tr key={l.id}>
                       <td><span style={{ fontWeight: 600 }}>{l.lotNo || l.lotNumber}</span> / {l.designNo}</td>
                       <td style={{ color: 'var(--text-secondary)' }}>{l.partyName}</td>
-                      <td style={{ textAlign: 'right', fontWeight: 600, color: '#dc2626' }}>
+                      <td style={{ textAlign: 'right', fontWeight: 600, color: '#0369a1' }}>
                         ₨{Number(l.billAmount).toLocaleString()}
                       </td>
                     </tr>
-                  ))}
+                    ))}
                 </tbody>
               </table>
             )}
@@ -378,12 +430,10 @@ export default function Dashboard() {
                 </tr>
               </thead>
               <tbody>
-                {[...scopedPayments].sort((a, b) => {
-                  const da = new Date(a.date || 0).getTime();
-                  const db = new Date(b.date || 0).getTime();
-                  if (db !== da) return db - da;
-                  return String(b.id || '').localeCompare(String(a.id || ''));
-                }).slice(0, 8).map(p => (
+                {[...scopedPayments]
+                  .sort((a, b) => compareRowsByUpdatedNewestFirst(a, b, 'payment'))
+                  .slice(0, 8)
+                  .map(p => (
                   <tr key={p.id}>
                     <td>{p.date}</td>
                     <td>
