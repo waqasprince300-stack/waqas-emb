@@ -9,6 +9,10 @@ import {
   latestDateFrom,
   compareRowsByUpdatedNewestFirst,
 } from "../utils/dateFilters";
+import {
+  getAdminLedgerOrBusinessBill,
+  getPartyLedgerBillNumeric,
+} from "../utils/partyBillPrivacy";
 
 function normalizeLotKey(linkedLot) {
   return String(linkedLot || "")
@@ -61,14 +65,11 @@ function findLotByLinkedValue(reportingLots, linkedLotValue) {
   return reportingLots.find((l) => normalizeLotKey(lotDisplayRef(l)) === key);
 }
 
-/** Bill for party payout — matches Party Ledger (`partyBillAmount` when set & positive, else lot bill). */
+/** Admin: bill for party payout — party ledger when set & positive, else business bill on lot. */
 function partyLedgerBillForLot(lot, partyEditsMap) {
   if (!lot) return 0;
   const pe = partyEditsMap[lot.id] || {};
-  if (pe.partyBillAmount != null && Number(pe.partyBillAmount) > 0) {
-    return Number(pe.partyBillAmount);
-  }
-  return Number(lot.billAmount || 0);
+  return getAdminLedgerOrBusinessBill(lot, pe);
 }
 
 /** Lot number + resolved design No for linked payments / synthetic bills */
@@ -179,9 +180,7 @@ export default function Payments() {
       if (ref && linkedLotKeys.has(normalizeLotKey(ref))) continue;
 
       const pe = partyCrossPartyEdits[l.id] || {};
-      const amt = Number(
-        pe.partyBillAmount !== undefined ? pe.partyBillAmount : l.billAmount || 0,
-      );
+      const amt = getPartyLedgerBillNumeric(pe);
       if (amt <= 0) continue;
 
       const when =

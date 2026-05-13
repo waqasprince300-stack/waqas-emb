@@ -361,9 +361,37 @@ export function AppProvider({ children }) {
   };
 
   const approveLotCompletion = async (lotId, opts = {}) => {
-    const { businessOwnerId, ownerBillingChoice } = opts;
-    const raw = await apiService.approveLotCompletion(lotId, { businessOwnerId, ownerBillingChoice });
-    const normalized = mergeLotAcrossCollections(raw);
+    const { businessOwnerId, ownerBillingChoice, ownerBillAmount, resolvedBusinessBill } = opts;
+    const raw = await apiService.approveLotCompletion(lotId, {
+      businessOwnerId,
+      ownerBillingChoice,
+      ownerBillAmount,
+    });
+
+    const unwrapLot = (payload) => {
+      if (!payload || typeof payload !== 'object') return payload;
+      if (payload.lot && typeof payload.lot === 'object') return payload.lot;
+      if (payload.data && typeof payload.data === 'object') return payload.data;
+      return payload;
+    };
+
+    let body = unwrapLot(raw);
+    if (
+      resolvedBusinessBill != null &&
+      Number.isFinite(Number(resolvedBusinessBill))
+    ) {
+      const amt = Number(resolvedBusinessBill);
+      if (body && typeof body === 'object') {
+        body = { ...body, billAmount: amt, totalAmount: amt };
+      } else {
+        body = { id: lotId, billAmount: amt, totalAmount: amt };
+      }
+    }
+    if (body && typeof body === 'object' && body.id == null && body._id == null) {
+      body = { ...body, id: lotId };
+    }
+
+    const normalized = mergeLotAcrossCollections(body);
     const idStr = String(lotId);
     const mergePe = (prev) => ({
       ...prev,

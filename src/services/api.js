@@ -235,9 +235,12 @@ class ApiService {
   }
 
   async approveLotCompletion(id, opts = {}) {
-    const { businessOwnerId, ownerBillingChoice } = opts || {};
+    const { businessOwnerId, ownerBillingChoice, ownerBillAmount } = opts || {};
     const body = {};
     if (ownerBillingChoice) body.ownerBillingChoice = ownerBillingChoice;
+    if (ownerBillAmount != null && ownerBillAmount !== '' && Number.isFinite(Number(ownerBillAmount))) {
+      body.ownerBillAmount = Number(ownerBillAmount);
+    }
     return this.request(`/ghausiaLots/${id}/approve-completion`, {
       method: 'POST',
       body: JSON.stringify(body),

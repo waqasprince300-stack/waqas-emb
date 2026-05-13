@@ -17,6 +17,11 @@ import {
   latestDateFrom,
   compareRowsByUpdatedNewestFirst,
 } from "../utils/dateFilters";
+import {
+  getAdminLedgerOrBusinessBill,
+  getPartyLedgerBillDisplay,
+  getPartyLedgerBillNumeric,
+} from "../utils/partyBillPrivacy";
 
 // From the party's perspective: dispatched = In Progress, received back = Completed
 // If party name is unknown, status should be Pending
@@ -34,6 +39,19 @@ const toTitleCase = (s) =>
     .split(" ")
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
     .join(" ");
+
+/** Party UI label: admin "pending" lot = not yet received by party for work. */
+function partyFacingStatusLabel(displayStatus, isParty) {
+  if (!isParty) return displayStatus;
+  if (displayStatus === "Pending") return "Lot Not Received";
+  return displayStatus;
+}
+
+function pendingRevisionIsReal(pe) {
+  const pr = pe?.pendingRevision;
+  if (!pr) return false;
+  return Number(pr.fromAmount) !== Number(pr.toAmount);
+}
 
 function readReceiptAsStoredValue(file) {
   return new Promise((resolve, reject) => {
@@ -191,6 +209,11 @@ function ReceiptThumbButton({ receipt, lotLabel, onOpen }) {
   );
 }
 
+/** Admin/workspace lot still awaiting dispatch — party must not self-set "In Progress". */
+function adminLotNotDispatched(lot) {
+  return String(lot?.status || "").toLowerCase().trim() === "pending";
+}
+
 export default function PartyLedger() {
   const {
     reportingLots,
@@ -290,14 +313,11 @@ export default function PartyLedger() {
   const getPartyNameLocal = (partyId, fallback) =>
     parties.find((p) => samePartyId(p.id, partyId))?.name || fallback || "—";
 
-  // Bill amount: prefer explicit partyBillAmount (> 0), else use lot's billAmount
-  // let arry = [];
-  const getDisplayBill = (l) => {
+  /** Amounts for totals & admin column: party login uses ledger-only; admin uses ledger-or-business. */
+  const getLedgerAmountForTotals = (l) => {
     const pe = ledgerPartyEdits[l.id] || {};
-    if (pe.partyBillAmount != null && Number(pe.partyBillAmount) > 0) {
-      return Number(pe.partyBillAmount);
-    }
-    return Number(l.billAmount || 0);
+    if (isParty) return getPartyLedgerBillNumeric(pe);
+    return getAdminLedgerOrBusinessBill(l, pe);
   };
 
   const filtered = useMemo(() => {
@@ -331,6 +351,31 @@ export default function PartyLedger() {
     search,
     partyFilter,
     ledgerLotsTab,
+    statusFilter,
+    ledgerPartyEdits,
+  ]);
+
+  /** Same filters as the table but ignoring Other vs Completed tab — summary cards always reflect all matching lots. */
+  const lotsForSummaryStats = useMemo(() => {
+    return assignedLots.filter((l) => {
+      const q = search.toLowerCase();
+      const lotLabel = (l.lotNo || l.lotNumber || "").toLowerCase();
+      const matchQ =
+        !q ||
+        lotLabel.includes(q) ||
+        l.designNo.toLowerCase().includes(q) ||
+        l.description.toLowerCase().includes(q);
+      const matchP =
+        partyFilter === "All" || samePartyId(l.partyId, partyFilter);
+      const displayStatus = getDisplayStatus(l);
+      const matchS =
+        statusFilter === "All" || displayStatus === statusFilter;
+      return matchQ && matchP && matchS;
+    });
+  }, [
+    assignedLots,
+    search,
+    partyFilter,
     statusFilter,
     ledgerPartyEdits,
   ]);
@@ -376,6 +421,12 @@ export default function PartyLedger() {
   }, [ledgerLotsTab, statusFilter]);
 
   useEffect(() => {
+    if (ledgerLotsTab === "completed") {
+      setStatusFilter("All");
+    }
+  }, [ledgerLotsTab]);
+
+  useEffect(() => {
     if (isParty) {
       setPartyFilter("All");
     }
@@ -397,6 +448,13 @@ export default function PartyLedger() {
     const existingComplete =
       formatYmd(pe.completeDate) || formatYmd(lot.receivedBackDate) || "";
     setLedgerFormErrors({});
+    const peOpen = ledgerPartyEdits[lot.id] || {};
+    const initialBill = isParty
+      ? peOpen.partyBillAmount != null && peOpen.partyBillAmount !== ""
+        ? String(peOpen.partyBillAmount)
+        : ""
+      : String(getAdminLedgerOrBusinessBill(lot, peOpen) || "");
+
     setEditForm({
       allotDate: lot.allotDate || "",
       completeDate:
@@ -405,7 +463,7 @@ export default function PartyLedger() {
           ? new Date().toISOString().slice(0, 10)
           : ""),
       status: statusForForm,
-      billAmount: getDisplayBill(lot) || "",
+      billAmount: initialBill,
       receipt: pe.receipt || "",
       notes: pe.notes || "",
       partyId:
@@ -437,13 +495,22 @@ export default function PartyLedger() {
         const partyChanged =
           String(editForm.partyId || "").trim() !== "" &&
           !samePartyId(editForm.partyId, lot.partyId);
-        const previousLedgerAmount = getDisplayBill(lot);
+        const prevPe = ledgerPartyEdits[lot.id] || {};
+        const previousLedgerAmount = isParty
+          ? getPartyLedgerBillNumeric(prevPe)
+          : getAdminLedgerOrBusinessBill(lot, prevPe);
         const nextLedgerAmount = Number(editForm.billAmount) || 0;
         const ghausiaAmount = Number(lot.billAmount || 0);
         let pendingRevisionPayload = null;
 
         if (previousLedgerAmount !== nextLedgerAmount) {
           const diff = nextLedgerAmount - previousLedgerAmount;
+          const businessLine = !isParty
+            ? `<div><strong>Business / owner bill on lot:</strong> ₨${ghausiaAmount.toLocaleString()}</div>`
+            : "";
+          const footnote = isParty
+            ? `<div style="margin-top:10px;color:#92400e">This lot stays <strong>under admin review</strong>. The admin reconciles your ledger with the business separately — you do not see the business-side bill.</div>`
+            : `<div style="margin-top:10px;color:#92400e">This lot stays <strong>under admin review</strong>. If the owner was already billed for this lot, the admin will choose how to update the business bill when approving.</div>`;
           const result = await Swal.fire({
             title: "Party bill amount change",
             icon: "question",
@@ -452,8 +519,8 @@ export default function PartyLedger() {
               <div><strong>Party ledger (old):</strong> ₨${previousLedgerAmount.toLocaleString()}</div>
               <div><strong>Party ledger (new):</strong> ₨${nextLedgerAmount.toLocaleString()}</div>
               <div><strong>Difference:</strong> ₨${diff.toLocaleString()}</div>
-              <div><strong>Ghausia / business bill on lot:</strong> ₨${ghausiaAmount.toLocaleString()}</div>
-              <div style="margin-top:10px;color:#92400e">This lot stays <strong>under admin review</strong>. If the owner was already billed for this lot, the admin will choose how to update the business bill when approving.</div>
+              ${businessLine}
+              ${footnote}
             </div>
           `,
             showCancelButton: true,
@@ -534,7 +601,8 @@ export default function PartyLedger() {
         String(editForm.partyId || "").trim() !== "" &&
         !samePartyId(editForm.partyId, lot.partyId);
 
-      const previousLedgerAmount = getDisplayBill(lot);
+      const prevPeStd = ledgerPartyEdits[lot.id] || {};
+      const previousLedgerAmount = getAdminLedgerOrBusinessBill(lot, prevPeStd);
       const nextLedgerAmount = Number(editForm.billAmount) || 0;
       const completedAmountChanged =
         getDisplayStatus(lot) === "Completed" &&
@@ -554,7 +622,8 @@ export default function PartyLedger() {
               <div><strong>Current party ledger amount:</strong> ₨${previousLedgerAmount.toLocaleString()}</div>
               <div><strong>Updated party ledger amount:</strong> ₨${nextLedgerAmount.toLocaleString()}</div>
               <div><strong>Difference:</strong> ₨${difference.toLocaleString()}</div>
-              <div style="margin-top:10px;color:#92400e">No payment transaction will be created automatically.</div>
+              <div style="margin-top:10px;color:#92400e">Only the party ledger is updated. The business (Ghausia) bill on the lot is <strong>not</strong> changed — edit it in the collection workspace or when reviewing completion so the owner sees the correct amount.</div>
+              <div style="margin-top:8px;color:#64748b;font-size:12px">No payment transaction will be created automatically.</div>
             </div>
           `,
           showCancelButton: true,
@@ -588,9 +657,6 @@ export default function PartyLedger() {
           receivedBackDate:
             editForm.completeDate || new Date().toISOString().slice(0, 10),
         };
-        if (amountChangeNote) {
-          lotUpdates.billAmount = nextLedgerAmount;
-        }
         if (partyChanged) {
           const sel = parties.find((p) => samePartyId(p.id, editForm.partyId));
           lotUpdates.partyId = editForm.partyId;
@@ -598,6 +664,26 @@ export default function PartyLedger() {
         }
         await updateLot(editingId, lotUpdates, lotWorkspaceOpts(lot));
       } else {
+        if (
+          isParty &&
+          getDisplayStatus(lot) === "In Progress" &&
+          editForm.status === "Pending"
+        ) {
+          await Swal.fire({
+            icon: "info",
+            title: "Not available",
+            text: "From In Progress you can only submit for admin approval. You cannot save as not received.",
+          });
+          return;
+        }
+        if (isParty && adminLotNotDispatched(lot) && editForm.status === "In Progress") {
+          await Swal.fire({
+            icon: "info",
+            title: "Not available",
+            text: "You cannot save In Progress until the business has dispatched this lot.",
+          });
+          return;
+        }
         const nextOverrideStatus = editForm.status === "Pending" ? "Pending" : "In Progress";
         await updatePartyEdit(editingId, {
           completeDate: editForm.completeDate || null,
@@ -648,9 +734,9 @@ export default function PartyLedger() {
     let completedAmount = 0;
     let inProgressAmount = 0;
 
-    filtered.forEach((l) => {
+    lotsForSummaryStats.forEach((l) => {
       const status = getDisplayStatus(l);
-      const bill = getDisplayBill(l);
+      const bill = getLedgerAmountForTotals(l);
 
       if (status === "Completed") {
         completedAmount += bill;
@@ -662,19 +748,19 @@ export default function PartyLedger() {
     });
 
     return {
-      lots: filtered.length,
-      billTotal: filtered.reduce((s, l) => s + getDisplayBill(l), 0),
-      completed: filtered.filter((l) => getDisplayStatus(l) === "Completed")
+      lots: lotsForSummaryStats.length,
+      billTotal: lotsForSummaryStats.reduce((s, l) => s + getLedgerAmountForTotals(l), 0),
+      completed: lotsForSummaryStats.filter((l) => getDisplayStatus(l) === "Completed")
         .length,
-      pending: filtered.filter((l) => getDisplayStatus(l) === "Pending")
+      pending: lotsForSummaryStats.filter((l) => getDisplayStatus(l) === "Pending")
         .length,
-      inProgress: filtered.filter((l) => getDisplayStatus(l) === "In Progress")
+      inProgress: lotsForSummaryStats.filter((l) => getDisplayStatus(l) === "In Progress")
         .length,
       completedAmount,
       inProgressAmount,
-      withReceipt: filtered.filter((l) => ledgerPartyEdits[l.id]?.receipt).length,
+      withReceipt: lotsForSummaryStats.filter((l) => ledgerPartyEdits[l.id]?.receipt).length,
     };
-  }, [filtered, ledgerPartyEdits]);
+  }, [lotsForSummaryStats, ledgerPartyEdits, isParty]);
 
   const partyBalanceInfo = useMemo(() => {
     const withinWorkspace = (p) => {
@@ -693,7 +779,7 @@ export default function PartyLedger() {
     if (partyFilter === "All") {
       const names = [
         ...new Set(
-          filtered
+          lotsForSummaryStats
             .map((l) => getPartyNameLocal(l.partyId, l.partyName).trim())
             .filter((n) => n && n !== "—"),
         ),
@@ -704,11 +790,11 @@ export default function PartyLedger() {
       let paidToBusiness = 0;
 
       names.forEach((name) => {
-        const billSum = filtered
+        const billSum = lotsForSummaryStats
           .filter(
             (l) => getPartyNameLocal(l.partyId, l.partyName).trim() === name,
           )
-          .reduce((s, l) => s + getDisplayBill(l), 0);
+          .reduce((s, l) => s + getLedgerAmountForTotals(l), 0);
 
         const partyIn = pays
           .filter((p) => String(p.party || "").trim() === name)
@@ -730,8 +816,12 @@ export default function PartyLedger() {
           totals.completedAmount - receivedFromBusiness + paidToBusiness,
         hint:
           workspaceFilter === "All"
-            ? "Totals for all parties in the filtered workspaces."
-            : "Totals for all parties in this workspace.",
+            ? (isParty
+              ? "All lots in scope (all tabs) — amounts you agreed on the ledger."
+              : "Totals for all parties in the filtered workspaces.")
+            : (isParty
+              ? "All lots in this workspace (all tabs)."
+              : "Totals for all parties in this workspace."),
       };
     }
 
@@ -752,12 +842,14 @@ export default function PartyLedger() {
       completedNet:
         totals.completedAmount - receivedFromBusiness + paidToBusiness,
       hint: pname
-        ? `${pname}'s balance (bill − paid to party + received from party)`
+        ? (isParty
+          ? `${pname} — ledger balance (all lots in this view, all tabs).`
+          : `${pname}'s balance (bill − paid to party + received from party)`)
         : "Bill value minus paid to party plus received from party",
     };
   }, [
     partyFilter,
-    filtered,
+    lotsForSummaryStats,
     ledgerPayments,
     parties,
     totals.billTotal,
@@ -765,10 +857,28 @@ export default function PartyLedger() {
     dateRange,
     isAdmin,
     workspaceFilter,
+    isParty,
   ]);
   const handleRowStatusChange = async (lot, newStatus) => {
     if (newStatus === "Completed") {
       openEdit(lot, "Completed");
+      return;
+    }
+    if (isParty && getDisplayStatus(lot) === "In Progress") {
+      if (newStatus === "In Progress") return;
+      await Swal.fire({
+        icon: "info",
+        title: "Not available",
+        text: "From In Progress you can only submit this lot for admin approval. You cannot move it back to not received.",
+      });
+      return;
+    }
+    if (isParty && adminLotNotDispatched(lot) && newStatus === "In Progress") {
+      await Swal.fire({
+        icon: "info",
+        title: "Not available",
+        text: "You cannot set this to In Progress until the business dispatches the lot to you. Your status will move forward when dispatch happens on the business side.",
+      });
       return;
     }
     if (newStatus === "Pending") {
@@ -831,7 +941,7 @@ export default function PartyLedger() {
           },
           {
             key: "bill",
-            label: "Total Bill Value",
+            label: isParty ? "Your ledger total" : "Total Bill Value",
             value: `₨${totals.billTotal.toLocaleString()}`,
             color: "#7c3aed",
           },
@@ -852,13 +962,13 @@ export default function PartyLedger() {
             key: "pending",
             label: (
               <>
-                Pending{" "}
+                {isParty ? "Lot not received" : "Pending"}{" "}
                 <strong style={{ fontSize: 14, color: "#d97706" }}>
                   ({totals.pending})
                 </strong>
               </>
             ),
-            value: "Awaiting dispatch",
+            value: isParty ? "Business has not dispatched to you" : "Awaiting dispatch",
             color: "#d97706",
           },
           {
@@ -876,14 +986,14 @@ export default function PartyLedger() {
           },
           {
             key: "completed-lots-balance",
-            label: `Completed lots ${partyBalanceInfo.completedNet >= 0 ? "balance (payable)" : "(advance)"}`,
+            label: `Completed lots ${partyBalanceInfo.completedNet >= 0 ? `balance (${isParty ? "receivable" : "payable"})` : "(advance)"}`,
             value: `₨${partyBalanceInfo.completedNet.toLocaleString()}`,
             color: `${partyBalanceInfo.completedNet >= 0 ? "#0f766e" : "#dc2626"}`,
             sub: partyBalanceInfo.hint,
           },
           {
             key: "balance",
-            label: `Total Balance ${partyBalanceInfo.balance >= 0 ? "(payable)" : "(advance)"}`,
+            label: `Total Balance ${partyBalanceInfo.balance >= 0 ? `(${isParty ? "receivable" : "payable"})` : "(advance)"}`,
             value: `₨${partyBalanceInfo.balance.toLocaleString()}`,
             color: partyBalanceInfo.balance >= 0 ? "#0f766e" : "#dc2626",
             sub: partyBalanceInfo.hint,
@@ -1025,7 +1135,7 @@ export default function PartyLedger() {
             onChange={(e) => setStatusFilter(e.target.value)}
           >
             <option value="All">All Statuses</option>
-            <option value="Pending">Pending</option>
+            <option value="Pending">{partyFacingStatusLabel("Pending", isParty)}</option>
             <option value="In Progress">In Progress</option>
             <option value="Pending review">Pending review</option>
             <option value="Rejected">Rejected</option>
@@ -1054,7 +1164,9 @@ export default function PartyLedger() {
                   </th>
                 )}
                 <th>Status</th>
-                <th style={{ textAlign: "right" }}>Bill Amount</th>
+                <th style={{ textAlign: "right" }}>
+                  {isParty ? "Your ledger (₨)" : "Bill Amount"}
+                </th>
                 <th>Receipt</th>
                 <th>Notes</th>
                 <th>Actions</th>
@@ -1072,7 +1184,8 @@ export default function PartyLedger() {
                   // console.log(l, 'l');
                   const pe = ledgerPartyEdits[l.id] || {};
                   const displayStatus = getDisplayStatus(l);
-                  const displayBill = getDisplayBill(l);
+                  const partyBillOnly = getPartyLedgerBillDisplay(pe);
+                  const adminBillDisplay = getAdminLedgerOrBusinessBill(l, pe);
                   const displayComplete = getDisplayCompleteDate(l, pe);
                   return (
                     <tr key={l.id}>
@@ -1169,8 +1282,15 @@ export default function PartyLedger() {
                                 Rejected
                               </option>
                             )}
-                            <option value="Pending">Pending</option>
-                            <option value="In Progress">In Progress</option>
+                            {!(isParty && displayStatus === "In Progress") ? (
+                              <option value="Pending">{partyFacingStatusLabel("Pending", isParty)}</option>
+                            ) : null}
+                            {isParty && adminLotNotDispatched(l) && displayStatus === "In Progress" ? (
+                              <option value="In Progress">In Progress</option>
+                            ) : null}
+                            {!(isParty && adminLotNotDispatched(l)) ? (
+                              <option value="In Progress">In Progress</option>
+                            ) : null}
                             <option value="Completed">
                               {isParty ? "Submit for admin approval" : "Completed"}
                             </option>
@@ -1184,7 +1304,11 @@ export default function PartyLedger() {
                           color: "#1e40af",
                         }}
                       >
-                        ₨{displayBill.toLocaleString()}
+                        {isParty && partyBillOnly == null ? (
+                          <span style={{ color: "var(--text-muted)", fontWeight: 600 }}>—</span>
+                        ) : (
+                          `₨${(isParty ? partyBillOnly : adminBillDisplay).toLocaleString()}`
+                        )}
                       </td>
                       <td>
                         {pe.receipt ? (
@@ -1243,6 +1367,11 @@ export default function PartyLedger() {
                         {pe.amountChangeNote && (
                           <div style={{ fontSize: 11, color: "#92400e", marginTop: 4 }}>
                             Amount changed: ₨{Number(pe.amountChangeNote.previousAmount || 0).toLocaleString()} to ₨{Number(pe.amountChangeNote.updatedAmount || 0).toLocaleString()}
+                          </div>
+                        )}
+                        {isAdmin && pendingRevisionIsReal(pe) && (
+                          <div style={{ fontSize: 11, color: "#0369a1", marginTop: 4, fontWeight: 600 }}>
+                            Party revised bill: ₨{Number(pe.pendingRevision.fromAmount || 0).toLocaleString()} → ₨{Number(pe.pendingRevision.toAmount || 0).toLocaleString()} (settle on approval)
                           </div>
                         )}
                       </td>
@@ -1409,7 +1538,7 @@ export default function PartyLedger() {
               </div>
               <div>
                 <span style={{ color: "var(--text-muted)" }}>
-                  Ghausia Status:{" "}
+                  {isParty ? "Business order status: " : "Ghausia Status: "}
                 </span>
                 <StatusBadge status={toTitleCase(editingLot.status)} />
               </div>
@@ -1492,8 +1621,19 @@ export default function PartyLedger() {
                     setLedgerFormErrors({});
                   }}
                 >
-                  <option value="Pending">Pending</option>
-                  <option value="In Progress">In Progress</option>
+                  {!(
+                    isParty &&
+                    editingLot &&
+                    getDisplayStatus(editingLot) === "In Progress"
+                  ) ? (
+                    <option value="Pending">{partyFacingStatusLabel("Pending", isParty)}</option>
+                  ) : null}
+                  {isParty && editingLot && adminLotNotDispatched(editingLot) && editForm.status === "In Progress" ? (
+                    <option value="In Progress">In Progress</option>
+                  ) : null}
+                  {!(isParty && editingLot && adminLotNotDispatched(editingLot)) ? (
+                    <option value="In Progress">In Progress</option>
+                  ) : null}
                   <option value="Completed">
                     {isParty ? "Submit for admin approval" : "Completed"}
                   </option>
@@ -1526,7 +1666,7 @@ export default function PartyLedger() {
                 )}
               </FormGroup>
             )}
-            <FormGroup label="Bill Amount (₨)">
+            <FormGroup label={isParty ? "Your ledger amount (₨)" : "Bill Amount (₨)"}>
               <input
                 className="form-input"
                 type="number"
@@ -1633,7 +1773,10 @@ export default function PartyLedger() {
 
           {ledgerEditKind === "pendingReview" && (
             <div className="alert alert-warning">
-              <strong>Note:</strong> Saving updates your submission while it is still with the admin. If you change the bill amount, the admin will see the old and new figures and can choose how the owner (Ghausia) bill should follow when they approve.
+              <strong>Note:</strong>{" "}
+              {isParty
+                ? "Saving updates your submission while it is still with the admin. If you change your ledger amount, the admin will see the old and new figures and reconciles them with the business."
+                : "Saving updates this submission while it is under review. If you change the bill amount, the admin will see the old and new figures and can choose how the owner business bill should follow when they approve."}
             </div>
           )}
           {editForm.status === "Completed" && ledgerEditKind !== "pendingReview" && (
