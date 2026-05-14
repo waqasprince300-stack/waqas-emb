@@ -1,8 +1,11 @@
 // API utility for Express.js Backend
-// Render
-// const API_BASE_URL = 'https://waqas-emb-backend-1.onrender.com/api';
-// Localhost
-const API_BASE_URL = 'http://localhost:3001/api';
+// CRA only loads env vars that start with REACT_APP_ from .env in the project root (not src/).
+const API_BASE_URL = String(
+  process.env.REACT_APP_API_BASE_URL ||
+    (process.env.NODE_ENV === "development"
+      ? "http://localhost:5000/api"
+      : ""),
+).replace(/\/$/, "");
 const AUTH_SESSION_KEY = 'waqas_emb_auth_session';
 const BUSINESS_OWNER_KEY = 'waqas_emb_business_owner_id';
 
