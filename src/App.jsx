@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { BrowserRouter, Navigate, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Navigate, Routes, Route, useLocation } from 'react-router-dom';
 import { AppProvider } from './context/AppContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Sidebar from './components/Sidebar';
@@ -14,6 +14,7 @@ import Signup from './pages/Signup';
 import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
 import UserApprovals from './pages/UserApprovals';
+import SuperAdminApprovals from './pages/SuperAdminApprovals';
 import ReviewLots from './pages/ReviewLots';
 import PersonalKhata from './pages/PersonalKhata';
 import PersonalKhataShared from './pages/PersonalKhataShared';
@@ -99,7 +100,7 @@ function Layout({ children, sidebarOpen, setSidebarOpen }) {
 }
 
 function RequireAuth({ children, adminOnly = false }) {
-  const { isAuthenticated, isAdmin } = useAuth();
+  const { isAuthenticated, isAdmin, isSuperAdmin } = useAuth();
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
@@ -109,6 +110,46 @@ function RequireAuth({ children, adminOnly = false }) {
     return <Navigate to="/" replace />;
   }
 
+  if (isSuperAdmin) {
+    return <Navigate to="/super-admin/pending-admins" replace />;
+  }
+
+  return children;
+}
+
+function RequireSuperAdminAuth({ children }) {
+  const { isAuthenticated, isSuperAdmin } = useAuth();
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+
+  if (!isSuperAdmin) {
+    return <Navigate to="/" replace />;
+  }
+
+  return children;
+}
+
+/** Super admins only use the approval console (and auth / personal khata pages). */
+function SuperAdminShell({ children }) {
+  const location = useLocation();
+  const { user, isSuperAdmin } = useAuth();
+
+  if (user?.status === 'approved' && isSuperAdmin) {
+    const p = location.pathname;
+    const allowed =
+      p.startsWith('/super-admin') ||
+      p.startsWith('/login') ||
+      p.startsWith('/signup') ||
+      p.startsWith('/forgot-password') ||
+      p.startsWith('/reset-password') ||
+      p.startsWith('/personal-khata');
+    if (!allowed) {
+      return <Navigate to="/super-admin/pending-admins" replace />;
+    }
+  }
+
   return children;
 }
 
@@ -116,6 +157,7 @@ function AppRoutes() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
+    <SuperAdminShell>
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/signup" element={<Signup />} />
@@ -201,6 +243,16 @@ function AppRoutes() {
           </RequireAuth>
         )}
       />
+      <Route
+        path="/super-admin/pending-admins"
+        element={(
+          <RequireSuperAdminAuth>
+            <Layout sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen}>
+              <SuperAdminApprovals />
+            </Layout>
+          </RequireSuperAdminAuth>
+        )}
+      />
       <Route path="/personal-khata/shared" element={<PersonalKhataShared />} />
       <Route
         path="/personal-khata"
@@ -216,6 +268,7 @@ function AppRoutes() {
       />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+    </SuperAdminShell>
   );
 }
 

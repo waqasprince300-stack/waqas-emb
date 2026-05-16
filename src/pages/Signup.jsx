@@ -3,9 +3,10 @@ import { Link, Navigate, useNavigate } from 'react-router-dom';
 import AuthCard from '../components/AuthCard';
 import { useAuth, normalizeAuthResponse } from '../context/AuthContext';
 import { getRegistrationEmailError } from '../utils/registrationEmail';
+import { formatApiError } from '../utils/formatApiError';
 
 export default function Signup() {
-  const { isAuthenticated, signup, refreshSession } = useAuth();
+  const { isAuthenticated, user, signup, refreshSession } = useAuth();
   const navigate = useNavigate();
   const [form, setForm] = useState({
     name: '',
@@ -20,7 +21,8 @@ export default function Signup() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   if (isAuthenticated) {
-    return <Navigate to="/" replace />;
+    const to = user?.role === 'super_admin' ? '/super-admin/pending-admins' : '/';
+    return <Navigate to={to} replace />;
   }
 
   const handleSubmit = async (event) => {
@@ -66,6 +68,11 @@ export default function Signup() {
         setMessage(
           `${baseMsg || 'Account created and waiting for approval.'} You can log in after your business administrator approves your account.`,
         );
+      } else if (u?.role === 'admin' && u?.status === 'pending') {
+        setMessage(
+          baseMsg
+          || 'Your administrator account was created. You cannot sign in until the platform super administrator verifies and approves you.',
+        );
       } else if (u?.role === 'admin' && u?.status === 'approved') {
         setMessage(baseMsg || 'Organization administrator created — you can sign in.');
       } else {
@@ -76,7 +83,7 @@ export default function Signup() {
         name: '', email: '', password: '', role: 'party', partyName: '', adminEmail: '',
       });
     } catch (err) {
-      setError(err.message || 'Unable to create account');
+      setError(formatApiError(err, 'Unable to create account'));
     } finally {
       setIsSubmitting(false);
     }
@@ -85,9 +92,9 @@ export default function Signup() {
   return (
     <AuthCard
       title="Create account"
-      subtitle="The first account is the organization administrator. After that, everyone else joins as a party user with the admin's email."
-      sideTitle="One admin manages multiple businesses (workspaces); each business keeps its own lots, payments, and ledgers."
-      sideText="Party users enter their administrator's email and are approved only by that admin."
+      subtitle="Party users join an existing organization with their business administrator’s email. Additional business administrators can register and are activated after platform verification."
+      sideTitle="Super administrator verifies each new organization admin. Each approved admin can run their own workspaces and approve their party users."
+      sideText="Use a real email you control — disposable and test addresses are blocked. Party users are approved only by the business admin they selected."
       footer={<>Already have an account? <Link className="auth-inline-link" to="/login">Login</Link></>}
     >
       <form className="auth-form" onSubmit={handleSubmit}>
@@ -126,7 +133,7 @@ export default function Signup() {
             </label>
           </div>
           <p style={{ fontSize: 12, color: 'var(--text-muted, #64748b)', marginTop: 8, marginBottom: 0 }}>
-            If no administrator exists yet, choose Business administrator to create the one org admin. Only one administrator is allowed; additional staff sign up as party users.
+            When a platform super administrator is set up, each new business administrator must be verified before they can sign in. Multiple approved administrators can exist; party users pick which one they belong to.
           </p>
         </fieldset>
 
@@ -147,7 +154,7 @@ export default function Signup() {
           <input
             className="form-input"
             type="email"
-            placeholder="you@example.com"
+            placeholder="you@company.com"
             value={form.email}
             onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
             required

@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import AuthCard from '../components/AuthCard';
-import { useAuth } from '../context/AuthContext';
+import { useAuth, normalizeAuthResponse } from '../context/AuthContext';
+import { formatApiError } from '../utils/formatApiError';
 
 export default function ResetPassword() {
   const { token } = useParams();
   const navigate = useNavigate();
-  const { resetPassword } = useAuth();
+  const { resetPassword, refreshSession } = useAuth();
   const [form, setForm] = useState({ password: '', confirmPassword: '' });
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -26,10 +27,20 @@ export default function ResetPassword() {
 
     setIsSubmitting(true);
     try {
-      await resetPassword(token, { password: form.password });
-      navigate('/login', { replace: true });
+      const raw = await resetPassword(token, { password: form.password });
+      const payload = raw?.data || raw || {};
+      if (payload.token && payload.user) {
+        refreshSession(normalizeAuthResponse(raw));
+        const dest = payload.user?.role === 'super_admin' ? '/super-admin/pending-admins' : '/';
+        navigate(dest, { replace: true });
+        return;
+      }
+      navigate('/login', {
+        replace: true,
+        state: { message: payload.message || 'Password updated. You can sign in when your account is approved.' },
+      });
     } catch (err) {
-      setError(err.message || 'Unable to reset password');
+      setError(formatApiError(err, 'Unable to reset password'));
     } finally {
       setIsSubmitting(false);
     }

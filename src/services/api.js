@@ -1,9 +1,9 @@
 // API utility for Express.js Backend
 // CRA only loads env vars that start with REACT_APP_ from .env in the project root (not src/).
 const API_BASE_URL = String(
-  process.env.REACT_APP_API_BASE_URL ||
+  // process.env.REACT_APP_API_BASE_URL ||
     (process.env.NODE_ENV === "development"
-      ? "http://localhost:5000/api"
+      ? "http://localhost:3001/api"
       : ""),
 ).replace(/\/$/, "");
 const AUTH_SESSION_KEY = 'waqas_emb_auth_session';
@@ -99,17 +99,30 @@ class ApiService {
         ) {
           notifySessionExpired();
         }
+        let errBody = null;
         let detail = '';
         try {
-          const errBody = await response.json();
+          errBody = await response.json();
           detail = errBody.message || errBody.error || (typeof errBody === 'string' ? errBody : '');
           if (errBody.error && errBody.error !== detail) detail = `${detail} ${errBody.error}`.trim();
         } catch {
-          /* ignore non-JSON error bodies */
+          errBody = null;
         }
-        throw new Error(detail ? `HTTP ${response.status}: ${detail}` : `HTTP error! status: ${response.status}`);
+        const err = new Error(detail ? `HTTP ${response.status}: ${detail}` : `HTTP error! status: ${response.status}`);
+        err.status = response.status;
+        if (errBody && typeof errBody === 'object') err.body = errBody;
+        throw err;
       }
-      return await response.json();
+      if (response.status === 204 || response.status === 205) {
+        return null;
+      }
+      const text = await response.text();
+      if (!text.trim()) return null;
+      try {
+        return JSON.parse(text);
+      } catch {
+        return null;
+      }
     } catch (error) {
       console.error('API request failed:', error);
       throw error;
@@ -142,6 +155,26 @@ class ApiService {
     return this.request(`/reset-password/${token}`, {
       method: 'PATCH',
       body: JSON.stringify(data),
+    });
+  }
+
+  async getSuperAdminPendingAdmins() {
+    return this.request('/super-admin/pending-admins');
+  }
+
+  async approveOrganizationAdmin(id) {
+    const safe = encodeURIComponent(String(id ?? '').trim());
+    return this.request(`/super-admin/admins/${safe}/approve`, {
+      method: 'PATCH',
+      body: JSON.stringify({}),
+    });
+  }
+
+  async rejectOrganizationAdmin(id) {
+    const safe = encodeURIComponent(String(id ?? '').trim());
+    return this.request(`/super-admin/admins/${safe}/reject`, {
+      method: 'PATCH',
+      body: JSON.stringify({}),
     });
   }
 
@@ -197,6 +230,12 @@ class ApiService {
       method: 'PATCH',
       body: JSON.stringify(data),
     });
+  }
+
+  async deleteBusinessOwner(id, opts = {}) {
+    const safe = encodeURIComponent(String(id ?? '').trim());
+    const q = opts.force ? '?force=true' : '';
+    return this.request(`/businessOwners/${safe}${q}`, { method: 'DELETE' });
   }
 
   // Dashboard

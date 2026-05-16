@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
 import { StatusBadge } from '../components/UI';
@@ -38,7 +39,7 @@ export default function Dashboard() {
     payments,
     businessOwners,
   } = useApp();
-  const { isParty, user } = useAuth();
+  const { isParty, isAdmin, user } = useAuth();
   const [dateRange, setDateRange] = useState('all');
   const partyUserId = String(user?.partyId || '');
   const partyNameTrim = String(user?.partyName || '').trim();
@@ -138,6 +139,30 @@ export default function Dashboard() {
     return (
       <div style={{ textAlign: 'center', display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
         <LoaderDashboard height={30} width={30}/>
+      </div>
+    );
+  }
+
+  if (!isParty && isAdmin && businessOwners.length === 0) {
+    return (
+      <div>
+        <div className="page-header">
+          <div>
+            <div className="page-title">Dashboard</div>
+            <div className="page-subtitle">
+              Add a business workspace first — new accounts start with an empty list.
+            </div>
+          </div>
+        </div>
+        <div className="stat-card" style={{ maxWidth: 520 }}>
+          <div className="stat-label">No workspaces yet</div>
+          <p style={{ margin: '12px 0', color: 'var(--text-secondary, #64748b)' }}>
+            Open <strong>Work Spaces</strong> and use <strong>+ New workspace</strong> to create your Ghausia collection (or any name you use for production).
+          </p>
+          <Link className="btn btn-primary" to="/ghausia" style={{ display: 'inline-flex', textDecoration: 'none' }}>
+            Go to Work Spaces
+          </Link>
+        </div>
       </div>
     );
   }

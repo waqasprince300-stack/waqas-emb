@@ -1,28 +1,42 @@
 import React, { useState } from 'react';
-import { Link, Navigate, useNavigate } from 'react-router-dom';
+import { Link, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import AuthCard from '../components/AuthCard';
 import { useAuth } from '../context/AuthContext';
+import { getRegistrationEmailError } from '../utils/registrationEmail';
+import { formatApiError } from '../utils/formatApiError';
 
 export default function Login() {
-  const { isAuthenticated, login } = useAuth();
+  const { isAuthenticated, user, login } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const resetNotice = location.state?.message;
   const [form, setForm] = useState({ email: '', password: '' });
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   if (isAuthenticated) {
-    return <Navigate to="/" replace />;
+    const to = user?.role === 'super_admin' ? '/super-admin/pending-admins' : '/';
+    return <Navigate to={to} replace />;
   }
 
   const handleSubmit = async (event) => {
     event.preventDefault();
     setError('');
+    const emailErr = getRegistrationEmailError(form.email);
+    if (emailErr) {
+      setError(emailErr);
+      return;
+    }
     setIsSubmitting(true);
     try {
-      await login(form);
-      navigate('/', { replace: true });
+      const userAfter = await login(form);
+      if (userAfter?.role === 'super_admin') {
+        navigate('/super-admin/pending-admins', { replace: true });
+      } else {
+        navigate('/', { replace: true });
+      }
     } catch (err) {
-      setError(err.message || 'Unable to login');
+      setError(formatApiError(err, 'Unable to login'));
     } finally {
       setIsSubmitting(false);
     }
@@ -44,6 +58,11 @@ export default function Login() {
       }
     >
       <form className="auth-form" onSubmit={handleSubmit}>
+        {resetNotice && (
+          <div className="alert alert-success">
+            {resetNotice}
+          </div>
+        )}
         {error && (
           <div className="alert alert-warning">
             {error}
@@ -55,7 +74,7 @@ export default function Login() {
           <input
             className="form-input"
             type="email"
-            placeholder="you@example.com"
+            placeholder="you@company.com"
             value={form.email}
             onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
             required

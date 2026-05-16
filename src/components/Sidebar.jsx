@@ -4,6 +4,17 @@ import { useAuth } from '../context/AuthContext';
 
 const navItems = [
   {
+    to: '/super-admin/pending-admins',
+    label: 'Verify administrators',
+    superOnly: true,
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+        <path d="M9 12l2 2 4-4" />
+      </svg>
+    ),
+  },
+  {
     to: '/', label: 'Dashboard', exact: true,
     icon: (
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -101,13 +112,20 @@ const navItems = [
 ];
 
 export default function Sidebar({ sidebarOpen, setSidebarOpen }) {
-  const { user, isAdmin, logout } = useAuth();
+  const { user, isAdmin, isSuperAdmin, logout } = useAuth();
   const handleNavClick = () => {
     if (window.innerWidth <= 768) {
       setSidebarOpen(false);
     }
   };
   const visibleNavItems = navItems.filter((item) => {
+    if (isSuperAdmin) {
+      if (item.superOnly) return true;
+      return item.to === '/personal-khata';
+    }
+    if (item.superOnly) {
+      return false;
+    }
     if (isAdmin) {
       return true;
     }
@@ -188,7 +206,7 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen }) {
             })}
           >
             <span style={{ opacity: 0.85 }}>{item.icon}</span>
-            {!isAdmin && item.partyLabel ? item.partyLabel : item.label}
+            {!isAdmin && !isSuperAdmin && item.partyLabel ? item.partyLabel : item.label}
           </NavLink>
         ))}
       </nav>

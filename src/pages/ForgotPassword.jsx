@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import AuthCard from '../components/AuthCard';
 import { useAuth } from '../context/AuthContext';
+import { getRegistrationEmailError } from '../utils/registrationEmail';
+import { formatApiError } from '../utils/formatApiError';
 
 export default function ForgotPassword() {
   const { forgotPassword } = useAuth();
@@ -9,6 +11,7 @@ export default function ForgotPassword() {
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [resetLink, setResetLink] = useState('');
+  const [emailWarning, setEmailWarning] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = async (event) => {
@@ -16,6 +19,12 @@ export default function ForgotPassword() {
     setError('');
     setMessage('');
     setResetLink('');
+    setEmailWarning('');
+    const emailErr = getRegistrationEmailError(email);
+    if (emailErr) {
+      setError(emailErr);
+      return;
+    }
     setIsSubmitting(true);
 
     try {
@@ -23,8 +32,9 @@ export default function ForgotPassword() {
       const payload = response?.data || response || {};
       setMessage(payload.message || 'If an account exists for this email, a reset link has been sent.');
       setResetLink(payload.resetUrl || payload.resetLink || '');
+      setEmailWarning(payload.emailWarning || '');
     } catch (err) {
-      setError(err.message || 'Unable to send reset instructions');
+      setError(formatApiError(err, 'Unable to send reset instructions'));
     } finally {
       setIsSubmitting(false);
     }
@@ -48,6 +58,11 @@ export default function ForgotPassword() {
         {message && (
           <div className="alert alert-success">
             {message}
+            {emailWarning && (
+              <div style={{ marginTop: 8, fontSize: 13, opacity: 0.9 }}>
+                {emailWarning}
+              </div>
+            )}
             {resetLink && (
               <div style={{ marginTop: 8 }}>
                 <a className="auth-inline-link" href={resetLink}>Open reset link</a>
@@ -61,7 +76,7 @@ export default function ForgotPassword() {
           <input
             className="form-input"
             type="email"
-            placeholder="you@example.com"
+            placeholder="you@company.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required

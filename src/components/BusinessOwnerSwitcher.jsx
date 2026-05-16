@@ -3,6 +3,25 @@ import { useApp, ADMIN_ALL_WORKSPACES_ID } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
 import { Modal, FormGroup } from './UI';
 
+const REMOVE_COUNT_LABELS = {
+  partyEdits: 'Party edit records',
+  partyLedger: 'Ledger rows',
+  payments: 'Payments',
+  ghausiaLots: 'Lots',
+  parties: 'Parties',
+  collections: 'Collections',
+  rateCalculations: 'Rate calculations',
+  savedDesigns: 'Saved designs',
+  partyUsers: 'Party logins (will be disabled)',
+};
+
+function nonzeroCountLines(counts) {
+  if (!counts || typeof counts !== 'object') return [];
+  return Object.entries(counts)
+    .filter(([, n]) => Number(n) > 0)
+    .map(([key, n]) => `${REMOVE_COUNT_LABELS[key] || key}: ${n}`);
+}
+
 export default function BusinessOwnerSwitcher({ compact = false }) {
   const { isAdmin } = useAuth();
   const {
@@ -12,11 +31,17 @@ export default function BusinessOwnerSwitcher({ compact = false }) {
     selectAllWorkspacesView,
     viewAllWorkspaces,
     createBusinessOwner,
+    deleteBusinessOwner,
   } = useApp();
   const [modalOpen, setModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [form, setForm] = useState({ name: '', phone: '', address: '' });
+  const [removeModalOpen, setRemoveModalOpen] = useState(false);
+  const [removeSaving, setRemoveSaving] = useState(false);
+  const [removeError, setRemoveError] = useState('');
+  const [removeForceStep, setRemoveForceStep] = useState(false);
+  const [removeCounts, setRemoveCounts] = useState(null);
 
   /** Main app admin manages workspaces; party users never see this. */
   if (!isAdmin) return null;
@@ -28,6 +53,58 @@ export default function BusinessOwnerSwitcher({ compact = false }) {
   const displayOwnerName = viewAllWorkspaces
     ? 'All workspaces'
     : (activeOwner?.name || 'Select business owner');
+
+  const canRemoveWorkspace =
+    !viewAllWorkspaces && Boolean(String(activeBusinessOwnerId || '').trim()) && businessOwners.length > 0;
+
+  const resetRemoveModal = () => {
+    setRemoveModalOpen(false);
+    setRemoveForceStep(false);
+    setRemoveCounts(null);
+    setRemoveError('');
+  };
+
+  const openRemoveModal = () => {
+    setRemoveError('');
+    setRemoveForceStep(false);
+    setRemoveCounts(null);
+    setRemoveModalOpen(true);
+  };
+
+  const handleRemoveTry = async () => {
+    const wid = String(activeBusinessOwnerId || '').trim();
+    if (!wid) return;
+    setRemoveError('');
+    setRemoveSaving(true);
+    try {
+      await deleteBusinessOwner(wid);
+      resetRemoveModal();
+    } catch (err) {
+      if (err.status === 409 && err.body?.counts) {
+        setRemoveCounts(err.body.counts);
+        setRemoveForceStep(true);
+      } else {
+        setRemoveError(err.message || 'Could not remove workspace');
+      }
+    } finally {
+      setRemoveSaving(false);
+    }
+  };
+
+  const handleRemoveForce = async () => {
+    const wid = String(activeBusinessOwnerId || '').trim();
+    if (!wid) return;
+    setRemoveError('');
+    setRemoveSaving(true);
+    try {
+      await deleteBusinessOwner(wid, { force: true });
+      resetRemoveModal();
+    } catch (err) {
+      setRemoveError(err.message || 'Could not remove workspace');
+    } finally {
+      setRemoveSaving(false);
+    }
+  };
 
   const handleCreate = async () => {
     setError('');
@@ -96,6 +173,20 @@ export default function BusinessOwnerSwitcher({ compact = false }) {
           >
             + New workspace
           </button>
+          <button
+            className="btn btn-danger"
+            type="button"
+            disabled={!canRemoveWorkspace || removeSaving}
+            title={!canRemoveWorkspace ? 'Select a single workspace to remove it' : 'Remove this workspace'}
+            onClick={() => openRemoveModal()}
+            style={{
+              fontWeight: 600,
+              whiteSpace: 'nowrap',
+              opacity: canRemoveWorkspace ? 1 : 0.5,
+            }}
+          >
+            Remove workspace
+          </button>
         </div>
       ) : (
         <div
@@ -151,6 +242,16 @@ export default function BusinessOwnerSwitcher({ compact = false }) {
             <button className="btn btn-primary" type="button" onClick={() => setModalOpen(true)}>
               Add New Business
             </button>
+            <button
+              className="btn btn-danger"
+              type="button"
+              disabled={!canRemoveWorkspace || removeSaving}
+              title={!canRemoveWorkspace ? 'Select a single workspace to remove it' : 'Remove this workspace'}
+              onClick={() => openRemoveModal()}
+              style={{ opacity: canRemoveWorkspace ? 1 : 0.5 }}
+            >
+              Remove workspace
+            </button>
           </div>
         </div>
       )}
@@ -203,6 +304,55 @@ export default function BusinessOwnerSwitcher({ compact = false }) {
               placeholder="Optional"
             />
           </FormGroup>
+        </Modal>
+      )}
+
+      {removeModalOpen && (
+        <Modal
+          title={removeForceStep ? 'Delete workspace and all data?' : 'Remove workspace'}
+          onClose={() => {
+            if (!removeSaving) resetRemoveModal();
+          }}
+          wide={removeForceStep}
+          footer={(
+            <>
+              <button type="button" className="btn btn-ghost" disabled={removeSaving} onClick={() => resetRemoveModal()}>
+                Cancel
+              </button>
+              {removeForceStep ? (
+                <button type="button" className="btn btn-danger" disabled={removeSaving} onClick={() => void handleRemoveForce()}>
+                  {removeSaving ? 'Deleting…' : 'Delete workspace and all data'}
+                </button>
+              ) : (
+                <button type="button" className="btn btn-danger" disabled={removeSaving} onClick={() => void handleRemoveTry()}>
+                  {removeSaving ? 'Working…' : 'Remove workspace'}
+                </button>
+              )}
+            </>
+          )}
+        >
+          {removeError && <div className="alert alert-warning">{removeError}</div>}
+          {removeForceStep ? (
+            <>
+              <p style={{ marginTop: 0 }}>
+                This workspace still has related records. Deleting it will permanently remove the items below and disable party logins that belong only to this workspace.
+              </p>
+              {nonzeroCountLines(removeCounts).length > 0 ? (
+                <ul style={{ margin: '12px 0', paddingLeft: 20 }}>
+                  {nonzeroCountLines(removeCounts).map((line, i) => (
+                    <li key={`${i}-${line}`}>{line}</li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="alert alert-warning">Unable to load detail counts; you can still confirm deletion.</p>
+              )}
+            </>
+          ) : (
+            <p style={{ marginTop: 0 }}>
+              Remove <strong>{activeOwner?.name || 'this workspace'}</strong>? Empty workspaces are removed immediately.
+              If there are still lots, parties, or payments, you will be asked to confirm a full delete.
+            </p>
+          )}
         </Modal>
       )}
     </>

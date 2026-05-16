@@ -173,6 +173,26 @@ export function AppProvider({ children }) {
       return;
     }
 
+    if (user?.role === 'super_admin') {
+      setParties(INITIAL_PARTIES);
+      setGhausiaLots(INITIAL_GHAUSIA);
+      setPartyEdits(INITIAL_PARTY_EDITS);
+      setPayments(INITIAL_PAYMENTS);
+      setAdminReportingLots(INITIAL_GHAUSIA);
+      setAdminReportingPayments(INITIAL_PAYMENTS);
+      setAdminReportingPartyEdits(INITIAL_PARTY_EDITS);
+      setPartyCrossLots(INITIAL_GHAUSIA);
+      setPartyCrossPartyEdits(INITIAL_PARTY_EDITS);
+      setPartyCrossPayments(INITIAL_PAYMENTS);
+      setBusinessOwners([]);
+      try {
+        localStorage.removeItem(WORKSPACE_VIEW_ALL_KEY);
+      } catch { /* ignore */ }
+      setViewAllWorkspaces(false);
+      setInitialDataLoading(false);
+      return;
+    }
+
     async function loadAppData() {
       setInitialDataLoading(true);
       try {
@@ -180,6 +200,23 @@ export function AppProvider({ children }) {
           const remoteOwners = await apiService.getBusinessOwners();
           if (Array.isArray(remoteOwners)) {
             setBusinessOwners(remoteOwners);
+            if (remoteOwners.length === 0) {
+              try {
+                localStorage.removeItem(BUSINESS_OWNER_KEY);
+                localStorage.removeItem(WORKSPACE_VIEW_ALL_KEY);
+              } catch { /* ignore */ }
+              setViewAllWorkspaces(false);
+              setActiveBusinessOwnerId('');
+              setParties(INITIAL_PARTIES);
+              setGhausiaLots(INITIAL_GHAUSIA);
+              setPartyEdits(INITIAL_PARTY_EDITS);
+              setPayments(INITIAL_PAYMENTS);
+              setAdminReportingLots(INITIAL_GHAUSIA);
+              setAdminReportingPayments(INITIAL_PAYMENTS);
+              setAdminReportingPartyEdits(INITIAL_PARTY_EDITS);
+              setInitialDataLoading(false);
+              return;
+            }
             const selectedExists = remoteOwners.some((owner) => String(owner.id || owner._id) === String(activeBusinessOwnerId));
             const nextOwner = selectedExists
               ? activeBusinessOwnerId
@@ -412,6 +449,61 @@ export function AppProvider({ children }) {
     return created;
   };
 
+  const deleteBusinessOwner = async (id, opts = {}) => {
+    const idStr = String(id ?? '').trim();
+    if (!idStr) return;
+    await apiService.deleteBusinessOwner(id, opts);
+
+    const removedLotIds = new Set();
+    for (const l of ghausiaLots) {
+      if (String(l.businessOwnerId ?? '') === idStr) removedLotIds.add(String(l.id));
+    }
+    for (const l of adminReportingLots) {
+      if (String(l.businessOwnerId ?? '') === idStr) removedLotIds.add(String(l.id));
+    }
+
+    const remaining = businessOwners.filter((o) => String(o.id || o._id) !== idStr);
+
+    setBusinessOwners(remaining);
+    setGhausiaLots((arr) => arr.filter((l) => String(l.businessOwnerId ?? '') !== idStr));
+    setAdminReportingLots((arr) => arr.filter((l) => String(l.businessOwnerId ?? '') !== idStr));
+    setParties((arr) => arr.filter((p) => String(p.businessOwnerId ?? '') !== idStr));
+    setPayments((arr) => arr.filter((p) => String(p.businessOwnerId ?? '') !== idStr));
+    setAdminReportingPayments((arr) => arr.filter((p) => String(p.businessOwnerId ?? '') !== idStr));
+    setPartyEdits((prev) => {
+      if (removedLotIds.size === 0) return prev;
+      const next = { ...prev };
+      for (const lid of removedLotIds) delete next[lid];
+      return next;
+    });
+    setAdminReportingPartyEdits((prev) => {
+      if (removedLotIds.size === 0) return prev;
+      const next = { ...prev };
+      for (const lid of removedLotIds) delete next[lid];
+      return next;
+    });
+
+    if (String(activeBusinessOwnerId ?? '') === idStr) {
+      if (remaining.length === 0) {
+        try {
+          localStorage.removeItem(BUSINESS_OWNER_KEY);
+          localStorage.removeItem(WORKSPACE_VIEW_ALL_KEY);
+        } catch { /* ignore */ }
+        setViewAllWorkspaces(false);
+        setActiveBusinessOwnerId('');
+        setParties(INITIAL_PARTIES);
+        setGhausiaLots(INITIAL_GHAUSIA);
+        setPartyEdits(INITIAL_PARTY_EDITS);
+        setPayments(INITIAL_PAYMENTS);
+        setAdminReportingLots(INITIAL_GHAUSIA);
+        setAdminReportingPayments(INITIAL_PAYMENTS);
+        setAdminReportingPartyEdits(INITIAL_PARTY_EDITS);
+      } else {
+        selectBusinessOwner(String(remaining[0].id || remaining[0]._id));
+      }
+    }
+  };
+
   const addParty = async (p) => {
     const created = normalizeParty(await apiService.createParty(p));
     setParties(arr => [...arr, created]);
@@ -631,6 +723,7 @@ export function AppProvider({ children }) {
       selectAllWorkspacesView,
       viewAllWorkspaces,
       createBusinessOwner,
+      deleteBusinessOwner,
       getPartyById, getPartyName,
       initialDataLoading,
     }}>

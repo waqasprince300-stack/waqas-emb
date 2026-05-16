@@ -20,11 +20,13 @@ export const normalizeAuthResponse = (response) => {
   const payload = response?.data || response || {};
   const user = payload.user || payload;
   const token = payload.token || payload.accessToken || response?.token || response?.accessToken || '';
+  const rawRole = user?.role;
+  const role = ['super_admin', 'admin', 'party'].includes(rawRole) ? rawRole : 'party';
   return {
     token,
     user: {
       ...user,
-      role: user?.role ?? 'party',
+      role,
       status: user?.status ?? 'approved',
       email: normalizeEmail(user?.email),
     },
@@ -42,7 +44,7 @@ export function AuthProvider({ children }) {
     localStorage.setItem(SESSION_KEY, JSON.stringify(nextSession));
     setSession(nextSession);
     const u = nextSession?.user;
-    if (u && u.status === 'approved' && u.role !== 'admin') {
+    if (u && u.status === 'approved' && u.role !== 'admin' && u.role !== 'super_admin') {
       try {
         localStorage.removeItem(BUSINESS_OWNER_STORAGE_KEY);
         localStorage.removeItem(WORKSPACE_VIEW_ALL_STORAGE_KEY);
@@ -55,7 +57,7 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     const u = session?.user;
-    if (!u || u.status !== 'approved' || u.role === 'admin') return;
+    if (!u || u.status !== 'approved' || u.role === 'admin' || u.role === 'super_admin') return;
     try {
       localStorage.removeItem(BUSINESS_OWNER_STORAGE_KEY);
       localStorage.removeItem(WORKSPACE_VIEW_ALL_STORAGE_KEY);
@@ -137,6 +139,7 @@ export function AuthProvider({ children }) {
     /** Tenant (business) administrator — owns businesses, parties, operational data */
     isAdmin: user?.role === 'admin',
     isTenantAdmin: user?.role === 'admin',
+    isSuperAdmin: user?.role === 'super_admin',
     isParty: user?.role === 'party',
     signup,
     login,
