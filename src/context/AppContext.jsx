@@ -19,6 +19,16 @@ const normalizeDateString = (value) => {
   return date?.toISOString()?.slice(0, 10);
 };
 
+/** API may populate `businessOwnerId` as `{ _id, name }`; UI keeps a string id. */
+function businessOwnerIdToString(raw) {
+  if (raw == null || raw === '') return '';
+  if (typeof raw === 'object' && raw !== null) {
+    const oid = raw._id ?? raw.id;
+    if (oid != null) return String(oid);
+  }
+  return String(raw);
+}
+
 const normalizeLotData = (lot) => {
   const id = lot.id || lot._id || '';
   const lotNumber = lot.lotNumber || lot.lotNo || '';
@@ -54,7 +64,7 @@ const normalizeLotData = (lot) => {
     totalAmount: Number(lot.totalAmount ?? lot.billAmount ?? 0),
     partyId,
     partyName: lot.partyName || '',
-    businessOwnerId: lot.businessOwnerId != null ? String(lot.businessOwnerId) : '',
+    businessOwnerId: businessOwnerIdToString(lot.businessOwnerId),
     allotDate: normalizeDateString(lot.allotDate || lot.receivedDate || lot.createdAt || lot.updatedAt),
     dispatchDate: normalizeDateString(lot.dispatchDate),
     receivedBackDate: normalizeDateString(lot.receivedBackDate),

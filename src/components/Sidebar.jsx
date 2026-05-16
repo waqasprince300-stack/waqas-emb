@@ -216,7 +216,22 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen }) {
         {user && (
           <div style={{ marginBottom: 12 }}>
             <div style={{ color: '#e2e8f0', fontSize: 12, fontWeight: 700 }}>{user.name}</div>
-            <div style={{ marginTop: 2, textTransform: 'capitalize' }}>
+            {user.email ? (
+              <div
+                style={{
+                  marginTop: 4,
+                  fontSize: 11,
+                  color: '#94a3b8',
+                  fontWeight: 500,
+                  lineHeight: 1.35,
+                  wordBreak: 'break-all',
+                }}
+                title={user.email}
+              >
+                {user.email}
+              </div>
+            ) : null}
+            <div style={{ marginTop: 4, textTransform: 'capitalize' }}>
               {String(user.role || '').replace('_', ' ')}{user.partyName ? ` · ${user.partyName}` : ''}
             </div>
             <button

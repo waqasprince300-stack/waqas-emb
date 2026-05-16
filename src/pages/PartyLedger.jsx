@@ -23,9 +23,7 @@ import {
   getPartyLedgerBillNumeric,
 } from "../utils/partyBillPrivacy";
 import {
-  normalizedBusinessOwnerId,
-  workspaceLabelEmbeddedInLot,
-  businessOwnerRegistryMap,
+  workspaceDisplayTitleForLot,
 } from "../utils/businessWorkspace";
 
 // From the party's perspective: dispatched = In Progress, received back = Completed
@@ -328,32 +326,8 @@ export default function PartyLedger() {
   /** Split view: non-completed vs completed (same for admin & party) */
   const [ledgerLotsTab, setLedgerLotsTab] = useState("other");
 
-  /** Business / workspace display label (embedded on lot beats AppContext registry) */
-  const workspaceDisplayLookup = useMemo(() => {
-    const embedded = new Map();
-    for (const l of ledgerLots) {
-      const id = normalizedBusinessOwnerId(l.businessOwnerId);
-      if (!id || embedded.has(id)) continue;
-      const label = workspaceLabelEmbeddedInLot(l);
-      if (label) embedded.set(id, label);
-    }
-    const merged = new Map();
-    embedded.forEach((v, k) => merged.set(k, v));
-    businessOwnerRegistryMap(businessOwners).forEach((v, k) => {
-      if (!merged.has(k)) merged.set(k, v);
-    });
-    return merged;
-  }, [ledgerLots, businessOwners]);
-
-  const workspaceNameForLot = (l) => {
-    const id = normalizedBusinessOwnerId(l.businessOwnerId);
-    if (!id) return "—";
-    const direct = workspaceLabelEmbeddedInLot(l);
-    if (direct) return direct;
-    const mapped = workspaceDisplayLookup.get(id);
-    if (mapped) return mapped;
-    return `Workspace ${id.slice(-6)}`;
-  };
+  const workspaceNameForLot = (l) =>
+    workspaceDisplayTitleForLot(l, businessOwners, { shortIdFallback: true });
 
   const samePartyId = (a, b) =>
     String(a ?? "").trim() === String(b ?? "").trim();

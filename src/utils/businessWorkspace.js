@@ -9,7 +9,15 @@ export function normalizedBusinessOwnerId(raw) {
 export function workspaceLabelEmbeddedInLot(lot) {
   if (!lot || typeof lot !== "object") return "";
   try {
-    const bo = lot.businessOwner;
+    let bo = lot.businessOwner;
+    if (
+      !bo &&
+      lot.businessOwnerId != null &&
+      typeof lot.businessOwnerId === "object" &&
+      !Array.isArray(lot.businessOwnerId)
+    ) {
+      bo = lot.businessOwnerId;
+    }
     if (bo != null && typeof bo === "object") {
       const cand = bo.name ?? bo.displayName ?? bo.title ?? bo.label;
       const s = String(cand ?? "").trim();

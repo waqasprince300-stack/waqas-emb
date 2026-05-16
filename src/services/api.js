@@ -1,7 +1,7 @@
 // API utility for Express.js Backend
 // CRA only loads env vars that start with REACT_APP_ from .env in the project root (not src/).
 const API_BASE_URL = String(
-  // process.env.REACT_APP_API_BASE_URL ||
+  process.env.REACT_APP_API_BASE_URL ||
     (process.env.NODE_ENV === "development"
       ? "http://localhost:3001/api"
       : ""),
@@ -158,8 +158,14 @@ class ApiService {
     });
   }
 
+  /** All organization admins (pending + approved + rejected + disabled) for super-admin audit. */
+  async getSuperAdminOrganizationAdmins() {
+    return this.request('/super-admin/organization-admins');
+  }
+
+  /** @deprecated Same as getSuperAdminOrganizationAdmins — name kept for compatibility. */
   async getSuperAdminPendingAdmins() {
-    return this.request('/super-admin/pending-admins');
+    return this.getSuperAdminOrganizationAdmins();
   }
 
   async approveOrganizationAdmin(id) {
