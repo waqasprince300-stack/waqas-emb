@@ -28,6 +28,41 @@ const readBusinessOwnerId = () => {
   }
 };
 
+function metaPartySkipTenant(filtersOrOpts = {}) {
+  return filtersOrOpts?.skipTenantHeader === true
+    ? { skipBusinessOwnerHeader: true }
+    : {};
+}
+/** Paths where 401 means wrong credentials / signup issues, not “session expired”. */
+function isPublicAuthEndpoint(endpoint) {
+  const path = String(endpoint || '').split('?')[0];
+  return (
+    /^\/login$/i.test(path) ||
+    /^\/signup$/i.test(path) ||
+    /^\/forgot-password$/i.test(path) ||
+    /^\/reset-password\//i.test(path)
+  );
+}
+
+let sessionExpiredHandler = null;
+let sessionExpiryNotified = false;
+
+/** Register `fn` to run when an authenticated API call gets 401 (e.g. expired JWT). */
+export function registerSessionExpiredHandler(fn) {
+  sessionExpiredHandler = fn;
+  sessionExpiryNotified = false;
+}
+
+function notifySessionExpired() {
+  if (sessionExpiryNotified) return;
+  sessionExpiryNotified = true;
+  try {
+    sessionExpiredHandler?.();
+  } catch (e) {
+    console.error('sessionExpiredHandler failed:', e);
+  }
+}
+
 class ApiService {
   constructor() {
     this.baseURL = API_BASE_URL;
@@ -36,10 +71,13 @@ class ApiService {
   async request(endpoint, options = {}, meta = {}) {
     const url = `${this.baseURL}${endpoint}`;
     const token = readAuthToken();
+    /** When true: do not send `x-business-owner-id` even if one is cached in localStorage (party JWT cross-tenant reads). */
     const headerBiz =
-      meta.businessOwnerId != null && String(meta.businessOwnerId).trim() !== ''
-        ? String(meta.businessOwnerId).trim()
-        : readBusinessOwnerId() || '';
+      meta.skipBusinessOwnerHeader === true
+        ? ''
+        : meta.businessOwnerId != null && String(meta.businessOwnerId).trim() !== ''
+          ? String(meta.businessOwnerId).trim()
+          : readBusinessOwnerId() || '';
     const mergedHeaders = {
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -54,6 +92,13 @@ class ApiService {
     try {
       const response = await fetch(url, config);
       if (!response.ok) {
+        if (
+          response.status === 401 &&
+          token &&
+          !isPublicAuthEndpoint(endpoint)
+        ) {
+          notifySessionExpired();
+        }
         let detail = '';
         try {
           const errBody = await response.json();
@@ -129,8 +174,15 @@ class ApiService {
   }
 
   // Business Owners
-  async getBusinessOwners() {
-    return this.request('/businessOwners');
+  async getBusinessOwners(filters = {}) {
+    return this.request('/businessOwners', {}, metaPartySkipTenant(filters));
+  }
+
+  /** Resolve one workspace owner by id — used when party JWT cannot list all owners. */
+  async getBusinessOwner(id) {
+    const idStr = String(id ?? "").trim();
+    const safe = encodeURIComponent(idStr);
+    return this.request(`/businessOwners/${safe}`, {}, { businessOwnerId: idStr });
   }
 
   async createBusinessOwner(data) {
@@ -153,8 +205,8 @@ class ApiService {
   }
 
   // Collections
-  async getCollections() {
-    return this.request('/collections');
+  async getCollections(filters = {}) {
+    return this.request('/collections', {}, metaPartySkipTenant(filters));
   }
 
   async getCollection(id) {
@@ -182,8 +234,8 @@ class ApiService {
   }
 
   // Parties
-  async getParties() {
-    return this.request('/parties');
+  async getParties(filters = {}) {
+    return this.request('/parties', {}, metaPartySkipTenant(filters));
   }
 
   async getParty(id) {
@@ -216,7 +268,7 @@ class ApiService {
     if (opts.scope === 'all') qs.set('scope', 'all');
     if (opts.partyScope === 'all') qs.set('partyScope', 'all');
     const q = qs.toString();
-    return this.request(`/ghausiaLots${q ? `?${q}` : ''}`);
+    return this.request(`/ghausiaLots${q ? `?${q}` : ''}`, {}, metaPartySkipTenant(opts));
   }
 
   async getGhausiaLot(id) {
@@ -269,7 +321,7 @@ class ApiService {
     if (opts.scope === 'all') qs.set('scope', 'all');
     if (opts.partyScope === 'all') qs.set('partyScope', 'all');
     const q = qs.toString();
-    return this.request(`/partyEdits${q ? `?${q}` : ''}`);
+    return this.request(`/partyEdits${q ? `?${q}` : ''}`, {}, metaPartySkipTenant(opts));
   }
 
   async createPartyEdit(data) {
@@ -313,7 +365,7 @@ class ApiService {
     if (filters.partyScope === 'all') qs.set('partyScope', 'all');
     if (filters.partyId) qs.set('partyId', filters.partyId);
     const q = qs.toString();
-    return this.request(`/payments${q ? `?${q}` : ''}`);
+    return this.request(`/payments${q ? `?${q}` : ''}`, {}, metaPartySkipTenant(filters));
   }
 
   async getPartyPayments(partyId) {

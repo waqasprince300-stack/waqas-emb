@@ -22,6 +22,11 @@ import {
   getPartyLedgerBillDisplay,
   getPartyLedgerBillNumeric,
 } from "../utils/partyBillPrivacy";
+import {
+  normalizedBusinessOwnerId,
+  workspaceLabelEmbeddedInLot,
+  businessOwnerRegistryMap,
+} from "../utils/businessWorkspace";
 
 // From the party's perspective: dispatched = In Progress, received back = Completed
 // If party name is unknown, status should be Pending
@@ -70,6 +75,76 @@ function readReceiptAsStoredValue(file) {
   });
 }
 
+/** Smaller JPEG for ledger storage (party bill snaps). */
+const LEDGER_BILL_IMG_MAX_BYTES = 320 * 1024;
+
+function approxBytesFromDataUrl(dataUrl) {
+  const i = String(dataUrl || "").indexOf(",");
+  if (i === -1) return 0;
+  const b64 = dataUrl.slice(i + 1);
+  const pad = b64.endsWith("==") ? 2 : b64.endsWith("=") ? 1 : 0;
+  return (b64.length * 3) / 4 - pad;
+}
+
+function dataUrlToImage(dataUrl) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error("image"));
+    img.src = dataUrl;
+  });
+}
+
+async function compressPartyLedgerBillImage(dataUrl, maxBytes = LEDGER_BILL_IMG_MAX_BYTES) {
+  if (!dataUrl || !/^data:image\//i.test(dataUrl)) return dataUrl;
+  if (approxBytesFromDataUrl(dataUrl) <= maxBytes) return dataUrl;
+
+  let img;
+  try {
+    img = await dataUrlToImage(dataUrl);
+  } catch {
+    return dataUrl;
+  }
+
+  const mime = "image/jpeg";
+  let maxEdge = Math.min(1600, Math.max(img.width, img.height));
+  let quality = 0.86;
+
+  const encode = (edge, q) => {
+    const long = Math.max(img.width, img.height);
+    const scale = Math.min(1, edge / long);
+    const tw = Math.max(1, Math.round(img.width * scale));
+    const th = Math.max(1, Math.round(img.height * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = tw;
+    canvas.height = th;
+    const ctx = canvas.getContext("2d");
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, tw, th);
+    ctx.drawImage(img, 0, 0, tw, th);
+    return canvas.toDataURL(mime, q);
+  };
+
+  let out = encode(maxEdge, quality);
+  for (let i = 0; i < 18 && approxBytesFromDataUrl(out) > maxBytes; i += 1) {
+    if (quality > 0.35) {
+      quality -= 0.06;
+      out = encode(maxEdge, quality);
+    } else {
+      maxEdge = Math.round(maxEdge * 0.82);
+      if (maxEdge < 220) break;
+      quality = 0.82;
+      out = encode(maxEdge, quality);
+    }
+  }
+  return out;
+}
+
+async function finalizeLedgerReceiptStoredValue(stored) {
+  if (!stored) return "";
+  if (/^data:image\//i.test(String(stored))) return compressPartyLedgerBillImage(stored);
+  return stored;
+}
 /** @returns {'image'|'pdf'|'url'|'filename'|'none'} */
 function receiptPreviewKind(receipt) {
   const s = String(receipt || "").trim();
@@ -247,21 +322,44 @@ export default function PartyLedger() {
   const [ledgerSaving, setLedgerSaving] = useState(false);
   const [ledgerFormErrors, setLedgerFormErrors] = useState({});
   const [receiptPreview, setReceiptPreview] = useState(null);
+  /** Party quick-upload bill snapshot to API row */
+  const [billPicSavingLotId, setBillPicSavingLotId] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
   /** Split view: non-completed vs completed (same for admin & party) */
   const [ledgerLotsTab, setLedgerLotsTab] = useState("other");
+
+  /** Business / workspace display label (embedded on lot beats AppContext registry) */
+  const workspaceDisplayLookup = useMemo(() => {
+    const embedded = new Map();
+    for (const l of ledgerLots) {
+      const id = normalizedBusinessOwnerId(l.businessOwnerId);
+      if (!id || embedded.has(id)) continue;
+      const label = workspaceLabelEmbeddedInLot(l);
+      if (label) embedded.set(id, label);
+    }
+    const merged = new Map();
+    embedded.forEach((v, k) => merged.set(k, v));
+    businessOwnerRegistryMap(businessOwners).forEach((v, k) => {
+      if (!merged.has(k)) merged.set(k, v);
+    });
+    return merged;
+  }, [ledgerLots, businessOwners]);
+
+  const workspaceNameForLot = (l) => {
+    const id = normalizedBusinessOwnerId(l.businessOwnerId);
+    if (!id) return "—";
+    const direct = workspaceLabelEmbeddedInLot(l);
+    if (direct) return direct;
+    const mapped = workspaceDisplayLookup.get(id);
+    if (mapped) return mapped;
+    return `Workspace ${id.slice(-6)}`;
+  };
 
   const samePartyId = (a, b) =>
     String(a ?? "").trim() === String(b ?? "").trim();
 
   const lotWorkspaceOpts = (lot) =>
     lot?.businessOwnerId ? { businessOwnerId: lot.businessOwnerId } : {};
-
-  const workspaceNameForLot = (l) => {
-    const id = String(l.businessOwnerId ?? "").trim();
-    if (!id) return "—";
-    return businessOwners.find((o) => String(o.id || o._id) === id)?.name || "—";
-  };
 
   const assignedLots = useMemo(() => {
     const byWorkspace = (l) => {
@@ -396,12 +494,58 @@ export default function PartyLedger() {
       ),
     [assignedLots, ledgerPartyEdits],
   );
-  const showWorkspaceCol = isAdmin && workspaceFilter === "All";
-  const ledgerTableColSpan = 14 + (showWorkspaceCol ? 1 : 0);
+  const showPartyNameCol = !isParty;
+  const showWorkspaceCol = (isAdmin && workspaceFilter === "All") || isParty;
+  const ledgerTableColSpan = 13 + (showPartyNameCol ? 1 : 0) + (showWorkspaceCol ? 1 : 0);
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safeCurrentPage = Math.min(currentPage, totalPages);
   const pageStart = (safeCurrentPage - 1) * PAGE_SIZE;
   const paginatedLots = filtered.slice(pageStart, pageStart + PAGE_SIZE);
+
+  const savePartyLotReceiptFromFile = async (lot, file) => {
+    if (!file || !isParty) return;
+    setBillPicSavingLotId(lot.id);
+    try {
+      const raw = await readReceiptAsStoredValue(file);
+      const receipt = await finalizeLedgerReceiptStoredValue(raw);
+      await updatePartyEdit(lot.id, { receipt }, lotWorkspaceOpts(lot));
+    } catch (e) {
+      const msg =
+        e?.message ||
+        (typeof e === "string" ? e : "Could not save bill photo. Try a smaller JPG.");
+      await Swal.fire({
+        icon: "error",
+        title: "Upload failed",
+        text: msg,
+      });
+    } finally {
+      setBillPicSavingLotId(null);
+    }
+  };
+
+  const removePartyLotReceipt = async (lot) => {
+    if (!isParty) return;
+    const ok = await Swal.fire({
+      icon: "question",
+      title: "Delete bill photo?",
+      showCancelButton: true,
+      confirmButtonText: "Delete",
+      cancelButtonText: "Cancel",
+    });
+    if (!ok.isConfirmed) return;
+    setBillPicSavingLotId(lot.id);
+    try {
+      await updatePartyEdit(lot.id, { receipt: "" }, lotWorkspaceOpts(lot));
+    } catch (e) {
+      await Swal.fire({
+        icon: "error",
+        title: "Could not remove photo",
+        text: e?.message || "Please try again.",
+      });
+    } finally {
+      setBillPicSavingLotId(null);
+    }
+  };
 
   useEffect(() => {
     setCurrentPage(1);
@@ -1157,10 +1301,10 @@ export default function PartyLedger() {
                 <th>Pieces</th>
                 <th>Allot Date</th>
                 <th>Complete Date</th>
-                <th>Party Name</th>
+                {showPartyNameCol ? <th>Party Name</th> : null}
                 {showWorkspaceCol && (
-                  <th style={{ minWidth: 120 }} title="Business owner collection">
-                    Workspace
+                  <th style={{ minWidth: 120 }} title="Business workspace">
+                    {isParty ? "Business" : "Workspace"}
                   </th>
                 )}
                 <th>Status</th>
@@ -1216,7 +1360,9 @@ export default function PartyLedger() {
                           <span style={{ color: "var(--text-muted)" }}>—</span>
                         )}
                       </td>
-                      <td>{getPartyNameLocal(l.partyId, l.partyName)}</td>
+                      {showPartyNameCol ? (
+                        <td>{getPartyNameLocal(l.partyId, l.partyName)}</td>
+                      ) : null}
                       {showWorkspaceCol && (
                         <td
                           style={{
@@ -1258,6 +1404,21 @@ export default function PartyLedger() {
                             }}
                           >
                             Pending review
+                          </span>
+                        ) : displayStatus === "Pending" && isParty ? (
+                          <span
+                            style={{
+                              fontSize: 12,
+                              color: "#b45309",
+                              marginTop: 3,
+                              fontWeight: 600,
+                              padding: "2px 8px",
+                              borderRadius: 6,
+                              background: "#FEF3C7",
+                              border: "1px solid #FCD34D",
+                            }}
+                          >
+                            {partyFacingStatusLabel("Pending", isParty)}
                           </span>
                         ) : (
                           <select
@@ -1311,43 +1472,99 @@ export default function PartyLedger() {
                         )}
                       </td>
                       <td>
-                        {pe.receipt ? (
-                          <div
-                            style={{
-                              display: "flex",
-                              alignItems: "center",
-                              gap: 8,
-                              flexWrap: "wrap",
-                            }}
-                          >
-                            <ReceiptThumbButton
-                              receipt={pe.receipt}
-                              lotLabel={l.lotNo || l.lotNumber}
-                              onOpen={setReceiptPreview}
-                            />
-                            {receiptPreviewKind(pe.receipt) === "filename" && (
-                              <span
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 8,
+                            flexWrap: "wrap",
+                            maxWidth: 220,
+                          }}
+                        >
+                          {pe.receipt ? (
+                            <>
+                              <ReceiptThumbButton
+                                receipt={pe.receipt}
+                                lotLabel={l.lotNo || l.lotNumber}
+                                onOpen={setReceiptPreview}
+                              />
+                              {receiptPreviewKind(pe.receipt) === "filename" && (
+                                <span
+                                  style={{
+                                    fontSize: 11,
+                                    color: "var(--text-secondary)",
+                                    maxWidth: 120,
+                                    overflow: "hidden",
+                                    textOverflow: "ellipsis",
+                                    whiteSpace: "nowrap",
+                                  }}
+                                  title={pe.receipt}
+                                >
+                                  {pe.receipt}
+                                </span>
+                              )}
+                            </>
+                          ) : (
+                            <span
+                              style={{ color: "var(--text-muted)", fontSize: 12 }}
+                            >
+                              No bill
+                            </span>
+                          )}
+                          {isParty ? (
+                            <>
+                              <input
+                                id={`pl-bill-${l.id}`}
+                                type="file"
+                                accept="image/*,.pdf,application/pdf"
+                                style={{ display: "none" }}
+                                disabled={billPicSavingLotId === l.id}
+                                onChange={(e) => {
+                                  const f = e.target.files?.[0];
+                                  e.target.value = "";
+                                  if (f) void savePartyLotReceiptFromFile(l, f);
+                                }}
+                              />
+                              <label
+                                htmlFor={`pl-bill-${l.id}`}
                                 style={{
                                   fontSize: 11,
-                                  color: "var(--text-secondary)",
-                                  maxWidth: 120,
-                                  overflow: "hidden",
-                                  textOverflow: "ellipsis",
-                                  whiteSpace: "nowrap",
+                                  fontWeight: 700,
+                                  cursor:
+                                    billPicSavingLotId === l.id ? "wait" : "pointer",
+                                  color: "#0369a1",
+                                  textDecoration: "underline",
+                                  textUnderlineOffset: 2,
                                 }}
-                                title={pe.receipt}
                               >
-                                {pe.receipt}
-                              </span>
-                            )}
-                          </div>
-                        ) : (
-                          <span
-                            style={{ color: "var(--text-muted)", fontSize: 12 }}
-                          >
-                            No receipt
-                          </span>
-                        )}
+                                {billPicSavingLotId === l.id
+                                  ? "Saving…"
+                                  : pe.receipt
+                                    ? "Change"
+                                    : "Add bill"}
+                              </label>
+                              {pe.receipt ? (
+                                <button
+                                  type="button"
+                                  onClick={() => removePartyLotReceipt(l)}
+                                  disabled={billPicSavingLotId === l.id}
+                                  style={{
+                                    fontSize: 11,
+                                    fontWeight: 700,
+                                    border: "none",
+                                    background: "transparent",
+                                    color: "#b91c1c",
+                                    cursor:
+                                      billPicSavingLotId === l.id ? "wait" : "pointer",
+                                    padding: "2px 4px",
+                                  }}
+                                >
+                                  Delete
+                                </button>
+                              ) : null}
+                            </>
+                          ) : null}
+                        </div>
                       </td>
                       <td>
                         {pe.notes}
@@ -1378,20 +1595,22 @@ export default function PartyLedger() {
                       <td>
                         {displayStatus === "Completed" && !isAdmin ? (
                           <span style={{ fontSize: 12, color: "var(--text-muted)" }}>Admin only</span>
+                        ) : displayStatus === "Pending" && isParty ? (
+                          <span style={{ fontSize: 12, color: "var(--text-muted)" }}>—</span>
                         ) : (
                           <button
                             onClick={() => openEdit(l)}
-                          style={{
-                            padding: "4px 12px",
-                            fontSize: 12,
-                            fontWeight: 500,
-                            borderRadius: 6,
-                            cursor: "pointer",
-                            background: "#EFF6FF",
-                            color: "#1e40af",
-                            border: "1px solid #BFDBFE",
-                            fontFamily: "Inter, sans-serif",
-                          }}
+                            style={{
+                              padding: "4px 12px",
+                              fontSize: 12,
+                              fontWeight: 500,
+                              borderRadius: 6,
+                              cursor: "pointer",
+                              background: "#EFF6FF",
+                              color: "#1e40af",
+                              border: "1px solid #BFDBFE",
+                              fontFamily: "Inter, sans-serif",
+                            }}
                           >
                             Edit
                           </button>
@@ -1546,6 +1765,7 @@ export default function PartyLedger() {
           </div>
 
           <div className="grid-2">
+            {!isParty && (
             <FormGroup
               label={
                 ledgerEditKind === "pendingReview" || editForm.status === "Completed"
@@ -1582,6 +1802,7 @@ export default function PartyLedger() {
                 </span>
               )}
             </FormGroup>
+            )}
             <FormGroup label="Allot Date">
               <input
                 className="form-input"
@@ -1693,7 +1914,8 @@ export default function PartyLedger() {
                 }
                 try {
                   const stored = await readReceiptAsStoredValue(file);
-                  setEditForm((f) => ({ ...f, receipt: stored }));
+                  const cropped = await finalizeLedgerReceiptStoredValue(stored);
+                  setEditForm((f) => ({ ...f, receipt: cropped }));
                 } catch {
                   setEditForm((f) => ({ ...f, receipt: file.name }));
                 }

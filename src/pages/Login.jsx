@@ -32,7 +32,16 @@ export default function Login() {
     <AuthCard
       title="Welcome back"
       subtitle="Sign in to continue managing lots, ledgers, and payments."
-      footer={<>Need an account? <Link className="auth-inline-link" to="/signup">Create one</Link></>}
+      footer={
+        <>
+          Need an account? <Link className="auth-inline-link" to="/signup">Create one</Link>
+          <div style={{ marginTop: 12, fontSize: 13 }}>
+            <Link className="auth-inline-link" to="/personal-khata">
+              Personal Khata · bina login kholein →
+            </Link>
+          </div>
+        </>
+      }
     >
       <form className="auth-form" onSubmit={handleSubmit}>
         {error && (

@@ -4,6 +4,7 @@ import {
   ArrowDownLeft,
   ArrowUpRight,
   BookOpen,
+  Briefcase,
   Camera,
   ChevronLeft,
   Eye,
@@ -11,6 +12,7 @@ import {
   Image as ImageIcon,
   Plus,
   Search,
+  Share2,
   Trash2,
   UserPlus,
   X,
@@ -24,6 +26,7 @@ import {
   contactBalance,
   entriesChronological,
   runningBalances,
+  buildBusinessShareSnapshot,
 } from '../utils/personalKhataStorage';
 import {
   buildContactLedgerPdf,
@@ -31,6 +34,7 @@ import {
   downloadContactLedgerPdf,
   downloadPersonalKhataSummaryPdf,
 } from '../utils/personalKhataPdf';
+import { buildKhataShareUrl } from '../utils/personalKhataShare';
 
 const fmtMoney = (n) =>
   `₨${Math.abs(Number(n) || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
@@ -123,11 +127,16 @@ async function compressImageDataUrl(dataUrl, maxBytes = PK_IMAGE_TARGET_BYTES) {
   return out;
 }
 
-export default function PersonalKhata() {
+export default function PersonalKhata({ standalone = false } = {}) {
   const { contactId } = useParams();
   const navigate = useNavigate();
   const [contacts, setContacts] = useState([]);
   const [entries, setEntries] = useState([]);
+  const [businesses, setBusinesses] = useState([]);
+  const [activeBusinessId, setActiveBusinessId] = useState('');
+  const [khataHydrated, setKhataHydrated] = useState(false);
+  const [bizModalOpen, setBizModalOpen] = useState(false);
+  const [formBizName, setFormBizName] = useState('');
   const [search, setSearch] = useState('');
   const [fabOpen, setFabOpen] = useState(false);
 
@@ -197,23 +206,42 @@ export default function PersonalKhata() {
     return () => window.removeEventListener('keydown', onKey);
   }, [billLightboxSrc]);
 
-  const persist = useCallback((nextContacts, nextEntries) => {
-    setContacts(nextContacts);
-    setEntries(nextEntries);
-    saveKhataState({ contacts: nextContacts, entries: nextEntries });
+  useEffect(() => {
+    const data = loadKhataState();
+    setBusinesses(data.businesses);
+    setActiveBusinessId(data.activeBusinessId);
+    setContacts(data.contacts);
+    setEntries(data.entries);
+    setKhataHydrated(true);
   }, []);
 
+  useEffect(() => {
+    if (!khataHydrated) return;
+    saveKhataState({ businesses, activeBusinessId, contacts, entries });
+  }, [khataHydrated, businesses, activeBusinessId, contacts, entries]);
+
+  const scopedContacts = useMemo(() => {
+    const bid = String(activeBusinessId || '').trim();
+    if (!bid) return [];
+    return contacts.filter((c) => String(c.businessId || bid) === bid);
+  }, [contacts, activeBusinessId]);
+
+  const scopedEntries = useMemo(() => {
+    const ids = new Set(scopedContacts.map((c) => c.id));
+    return entries.filter((e) => ids.has(e.contactId));
+  }, [entries, scopedContacts]);
+
   const exportSummaryPdf = useCallback(() => {
-    if (!contacts.length) {
+    if (!scopedContacts.length) {
       Swal.fire({
         icon: 'info',
         title: 'Khata khaali',
-        text: 'Pehle kam az kam ek shakhs shamil karein, phir PDF ban sakti hai.',
+        text: 'Is business me abhi koi shakhs nahi — pehle shamil karein.',
       });
       return;
     }
     try {
-      downloadPersonalKhataSummaryPdf(contacts, entries);
+      downloadPersonalKhataSummaryPdf(scopedContacts, scopedEntries);
       Swal.fire({
         toast: true,
         icon: 'success',
@@ -225,30 +253,24 @@ export default function PersonalKhata() {
     } catch (e) {
       Swal.fire({ icon: 'error', title: 'PDF masla', text: String(e?.message || e) });
     }
-  }, [contacts, entries]);
+  }, [scopedContacts, scopedEntries]);
 
   const previewSummaryPdf = useCallback(() => {
-    if (!contacts.length) {
+    if (!scopedContacts.length) {
       Swal.fire({
         icon: 'info',
         title: 'Khata khaali',
-        text: 'Pehle kam az kam ek shakhs shamil karein.',
+        text: 'Is business ke liye waqai koi maaloomat nahi.',
       });
       return;
     }
     try {
-      const doc = buildPersonalKhataSummaryPdf(contacts, entries);
-      openPdfPreview(doc, 'Personal Khata — full summary');
+      const doc = buildPersonalKhataSummaryPdf(scopedContacts, scopedEntries);
+      openPdfPreview(doc, 'Personal Khata — summary');
     } catch (e) {
       Swal.fire({ icon: 'error', title: 'Preview masla', text: String(e?.message || e) });
     }
-  }, [contacts, entries, openPdfPreview]);
-
-  useEffect(() => {
-    const data = loadKhataState();
-    setContacts(data.contacts);
-    setEntries(data.entries);
-  }, []);
+  }, [scopedContacts, scopedEntries, openPdfPreview]);
 
   const active = useMemo(
     () => contacts.find((c) => c.id === contactId) || null,
@@ -257,7 +279,7 @@ export default function PersonalKhata() {
 
   const filteredContacts = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return contacts.filter((c) => {
+    return scopedContacts.filter((c) => {
       if (!q) return true;
       return (
         c.name.toLowerCase().includes(q) ||
@@ -266,12 +288,12 @@ export default function PersonalKhata() {
           .includes(q)
       );
     });
-  }, [contacts, search]);
+  }, [scopedContacts, search]);
 
   const sortedContactList = useMemo(() => {
     const latestTs = (c) => {
       let t = new Date(c.updatedAt || c.createdAt || 0).getTime();
-      for (const e of entries) {
+      for (const e of scopedEntries) {
         if (e.contactId !== c.id) continue;
         const te = new Date(e.updatedAt || e.createdAt || 0).getTime();
         if (te > t) t = te;
@@ -283,18 +305,18 @@ export default function PersonalKhata() {
       if (d !== 0) return d;
       return String(b.id).localeCompare(String(a.id));
     });
-  }, [filteredContacts, entries]);
+  }, [filteredContacts, scopedEntries]);
 
   const totals = useMemo(() => {
     let receivable = 0;
     let payable = 0;
-    for (const c of contacts) {
-      const { net } = contactBalance(c.id, entries);
+    for (const c of scopedContacts) {
+      const { net } = contactBalance(c.id, scopedEntries);
       if (net > 0) receivable += net;
       else if (net < 0) payable += -net;
     }
     return { receivable, payable };
-  }, [contacts, entries]);
+  }, [scopedContacts, scopedEntries]);
 
   const openAddContact = () => {
     setFormName('');
@@ -313,10 +335,11 @@ export default function PersonalKhata() {
       id: newId(),
       name,
       phone: formPhone.trim() || '',
+      businessId: activeBusinessId,
       createdAt: nowIso(),
       updatedAt: nowIso(),
     };
-    persist([row, ...contacts], entries);
+    setContacts([row, ...contacts]);
     setContactModal(false);
   };
 
@@ -326,7 +349,7 @@ export default function PersonalKhata() {
     setFormDesc('');
     setFormCategory('');
     setFormBillImage('');
-    setFormContactId(preselectContactId || contactId || contacts[0]?.id || '');
+    setFormContactId(preselectContactId || contactId || scopedContacts[0]?.id || '');
     setFabOpen(false);
   };
 
@@ -374,7 +397,8 @@ export default function PersonalKhata() {
     const nextContacts = contacts.map((c) =>
       c.id === cid ? { ...c, updatedAt: ts } : c,
     );
-    persist(nextContacts, [row, ...entries]);
+    setContacts(nextContacts);
+    setEntries([row, ...entries]);
     setEntryModal(null);
   };
 
@@ -387,10 +411,7 @@ export default function PersonalKhata() {
       cancelButtonText: 'Nahi',
     });
     if (!ok.isConfirmed) return;
-    persist(
-      contacts,
-      entries.filter((e) => e.id !== eid),
-    );
+    setEntries(entries.filter((e) => e.id !== eid));
   };
 
   const deleteContact = async (cid) => {
@@ -403,12 +424,98 @@ export default function PersonalKhata() {
       cancelButtonText: 'Cancel',
     });
     if (!ok.isConfirmed) return;
-    persist(
-      contacts.filter((c) => c.id !== cid),
-      entries.filter((e) => e.contactId !== cid),
-    );
+    setContacts(contacts.filter((c) => c.id !== cid));
+    setEntries(entries.filter((e) => e.contactId !== cid));
     navigate('/personal-khata');
   };
+
+  const saveNewBusiness = () => {
+    const name = formBizName.trim();
+    if (!name) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Naam zaroori',
+        text: 'Karobar ya dukaan ka naam likhein.',
+      });
+      return;
+    }
+    const id = newId();
+    const row = { id, name, createdAt: nowIso() };
+    setBusinesses((prev) => [...prev, row]);
+    setActiveBusinessId(id);
+    setFormBizName('');
+    setBizModalOpen(false);
+    setFabOpen(false);
+  };
+
+  const copyKhataShareLink = useCallback(async () => {
+    if (!scopedContacts.length) {
+      await Swal.fire({
+        icon: 'info',
+        title: 'Khaali',
+        text: 'Share karne se pehle is business main kam az kam ek shakhs hon.',
+      });
+      return;
+    }
+    const snap = buildBusinessShareSnapshot(
+      { businesses, activeBusinessId, contacts, entries },
+      activeBusinessId,
+    );
+    if (!snap) {
+      await Swal.fire({
+        icon: 'error',
+        title: 'Link nahi bana',
+        text: 'Dobara koshish karein.',
+      });
+      return;
+    }
+    const { url, warning } = buildKhataShareUrl(snap);
+    if (!url) {
+      await Swal.fire({
+        icon: 'warning',
+        title: 'Data bohot bara hai',
+        text: 'Bohot tasveeren hon to link chhota nahin ho sakta. PDF bhejin ya tasveeren kam kar ke dubara banayein.',
+      });
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+      const extra =
+        warning === 'long_url'
+          ? ' URL lambi hai — WhatsApp/desktop par test kar lein.'
+          : '';
+      await Swal.fire({
+        toast: true,
+        icon: 'success',
+        title: `Share link clipboard me${extra}`,
+        position: 'top-end',
+        timer: 3200,
+        showConfirmButton: false,
+      });
+    } catch {
+      await Swal.fire({
+        icon: 'info',
+        title: 'Khud copy karein',
+        input: 'textarea',
+        inputValue: url,
+      });
+    }
+  }, [
+    scopedContacts.length,
+    businesses,
+    activeBusinessId,
+    contacts,
+    entries,
+  ]);
+
+  useEffect(() => {
+    if (!contactId || !khataHydrated || !activeBusinessId) return;
+    const row = contacts.find((c) => c.id === contactId);
+    if (!row) return;
+    if (String(row.businessId || activeBusinessId) !== String(activeBusinessId)) {
+      navigate('/personal-khata', { replace: true });
+    }
+  }, [contactId, khataHydrated, activeBusinessId, contacts, navigate]);
 
   const pdfPreviewLayer =
     pdfPreviewUrl ? (
@@ -504,7 +611,7 @@ export default function PersonalKhata() {
     const runMap = runningBalances(entries, active.id);
 
     return (
-      <div className="pk-wrap">
+      <div className={standalone ? 'pk-wrap pk-standalone-view' : 'pk-wrap'}>
         <style>{`
           .pk-wrap {
             --pk-coral: #f43f5e;
@@ -604,7 +711,7 @@ export default function PersonalKhata() {
             display: flex; gap: 10px;
           }
           @media (min-width: 769px) {
-            .pk-bottom { left: 230px; }
+            .pk-bottom.pk-offset-sidebar { left: 230px; }
           }
           .pk-btn-give {
             flex: 1;
@@ -832,7 +939,7 @@ export default function PersonalKhata() {
           )}
         </div>
 
-        <div className="pk-bottom">
+        <div className={`pk-bottom${standalone ? '' : ' pk-offset-sidebar'}`}>
           <div className="pk-bottom-inner">
             <button
               type="button"
@@ -854,7 +961,7 @@ export default function PersonalKhata() {
         {entryModal && (
           <EntryOverlay
             type={entryModal}
-            contacts={contacts}
+            contacts={scopedContacts}
             formContactId={formContactId}
             setFormContactId={setFormContactId}
             formAmount={formAmount}
@@ -1184,7 +1291,8 @@ export default function PersonalKhata() {
           gap: 10px;
         }
         @media (min-width: 769px) {
-          .pk-fab-wrap { right: 28px; left: auto; margin-right: calc((100vw - 980px - 230px) / 2); }
+          .pk-fab-wrap.pk-offset-sidebar { margin-right: calc((100vw - 980px - 230px) / 2); }
+          .pk-fab-wrap.pk-standalone-margin { margin-right: calc((100vw - 980px) / 2); }
         }
         .pk-fab-menu {
           display: flex;
@@ -1235,6 +1343,79 @@ export default function PersonalKhata() {
           </div>
           <BookOpen size={40} style={{ opacity: 0.35 }} aria-hidden />
         </div>
+        <div style={{ marginTop: 14, marginBottom: 6, flexWrap: 'wrap', gap: 10 }} className="pk-biz-strip">
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
+            <Briefcase size={18} aria-hidden style={{ opacity: 0.65 }} />
+            <label style={{ fontSize: 12, fontWeight: 800 }} htmlFor="pk-biz-picker">
+              Business
+            </label>
+            <select
+              id="pk-biz-picker"
+              value={activeBusinessId}
+              onChange={(e) => setActiveBusinessId(e.target.value)}
+              style={{
+                flex: '1 1 200px',
+                minWidth: 160,
+                maxWidth: 360,
+                borderRadius: 12,
+                border: '2px solid rgba(255,255,255,0.45)',
+                background: 'rgba(255,255,255,0.95)',
+                padding: '10px 12px',
+                fontWeight: 700,
+                fontSize: 14,
+                color: '#0f172a',
+              }}
+            >
+              {businesses.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={() => {
+                setFormBizName('');
+                setBizModalOpen(true);
+                setFabOpen(false);
+              }}
+              style={{
+                border: 'none',
+                borderRadius: 12,
+                padding: '10px 14px',
+                fontWeight: 800,
+                fontSize: 13,
+                cursor: 'pointer',
+                background: 'rgba(255,255,255,0.95)',
+                color: '#5b21b6',
+                boxShadow: '0 4px 14px rgba(15,23,42,0.12)',
+              }}
+            >
+              + Naya business
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setFabOpen(false);
+                void copyKhataShareLink();
+              }}
+              style={{
+                border: 'none',
+                borderRadius: 12,
+                padding: '10px 14px',
+                fontWeight: 800,
+                fontSize: 13,
+                cursor: 'pointer',
+                background: 'rgba(255,255,255,0.28)',
+                color: '#fff',
+                border: '1px solid rgba(255,255,255,0.55)',
+              }}
+            >
+              <Share2 size={14} strokeWidth={2.5} style={{ verticalAlign: 'middle', marginRight: 6 }} />
+              Khata share
+            </button>
+          </div>
+        </div>
         <div className="pk-sumgrid">
           <div className="pk-sum pk-sum-receive">
             <span style={{ fontSize: 12, fontWeight: 700 }}>Total receivable</span>
@@ -1271,7 +1452,7 @@ export default function PersonalKhata() {
           <button
             type="button"
             className="pk-tile pk-tile-rose"
-            onClick={() => (contacts.length ? openEntry('given') : openAddContact())}
+            onClick={() => (scopedContacts.length ? openEntry('given') : openAddContact())}
           >
             <div className="pk-tile-icon" style={{ background: '#fecdd3', color: '#be123c' }}>
               <ArrowUpRight size={20} strokeWidth={2.25} />
@@ -1282,7 +1463,7 @@ export default function PersonalKhata() {
           <button
             type="button"
             className="pk-tile pk-tile-emerald"
-            onClick={() => (contacts.length ? openEntry('received') : openAddContact())}
+            onClick={() => (scopedContacts.length ? openEntry('received') : openAddContact())}
           >
             <div className="pk-tile-icon" style={{ background: '#a7f3d0', color: '#047857' }}>
               <ArrowDownLeft size={20} strokeWidth={2.25} />
@@ -1400,9 +1581,32 @@ export default function PersonalKhata() {
         )}
       </div>
 
-      <div className="pk-fab-wrap">
+      <div className={`pk-fab-wrap ${standalone ? 'pk-standalone-margin' : 'pk-offset-sidebar'}`}>
         {fabOpen && (
           <div className="pk-fab-menu">
+            <button
+              type="button"
+              className="pk-fab-item"
+              style={{ background: '#fffbeb', color: '#b45309' }}
+              onClick={() => {
+                setFabOpen(false);
+                setFormBizName('');
+                setBizModalOpen(true);
+              }}
+            >
+              <Briefcase size={18} /> Naya business
+            </button>
+            <button
+              type="button"
+              className="pk-fab-item"
+              style={{ background: '#eef2ff', color: '#312e81' }}
+              onClick={() => {
+                setFabOpen(false);
+                void copyKhataShareLink();
+              }}
+            >
+              <Share2 size={18} /> Khata share link
+            </button>
             <button
               type="button"
               className="pk-fab-item"
@@ -1533,10 +1737,74 @@ export default function PersonalKhata() {
         </div>
       )}
 
+      {bizModalOpen && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(15,23,42,0.45)',
+            zIndex: 100,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 16,
+            overflowY: 'auto',
+          }}
+          role="dialog"
+          aria-modal="true"
+        >
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              saveNewBusiness();
+            }}
+            style={{
+              background: '#fff',
+              borderRadius: 24,
+              padding: 22,
+              width: '100%',
+              maxWidth: 420,
+              maxHeight: 'min(90vh, 560px)',
+              overflowY: 'auto',
+              boxShadow: '0 24px 80px rgba(0,0,0,0.2)',
+              margin: 'auto',
+            }}
+          >
+            <h2 style={{ margin: '0 0 6px', fontSize: 20, fontWeight: 900 }}>Naya business</h2>
+            <p style={{ margin: '0 0 18px', color: '#64748b', fontSize: 13 }}>
+              Alag dukaan / unit ka naam — khata shamil shamil rahay ga.
+            </p>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 700, marginBottom: 6, color: '#475569' }}>
+              Naam
+            </label>
+            <input
+              className="form-input"
+              style={{ width: '100%', marginBottom: 18, padding: 12, borderRadius: 12, border: '1px solid #e2e8f0' }}
+              value={formBizName}
+              onChange={(e) => setFormBizName(e.target.value)}
+              placeholder="Misaal: Cloth House Anarkali"
+            />
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                style={{ flex: 1 }}
+                onClick={() => setBizModalOpen(false)}
+              >
+                Cancel
+              </button>
+              <button type="submit" className="btn btn-primary" style={{ flex: 1 }}>
+                Save business
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
       {entryModal && (
         <EntryOverlay
           type={entryModal}
-          contacts={contacts}
+          contacts={scopedContacts}
           formContactId={formContactId}
           setFormContactId={setFormContactId}
           formAmount={formAmount}

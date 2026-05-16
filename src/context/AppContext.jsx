@@ -1,6 +1,14 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { apiService } from '../services/api';
 import { useAuth } from './AuthContext';
+import {
+  workspaceLabelEmbeddedInLot,
+  normalizedBusinessOwnerId,
+  normalizeBusinessOwnersListResponse,
+  extractBusinessOwnersArrayFromResponse,
+  ownerDisplayNameFromRow,
+  businessOwnerDisplayFromApiPayload,
+} from '../utils/businessWorkspace';
 
 const AppContext = createContext(null);
 
@@ -54,6 +62,7 @@ const normalizeLotData = (lot) => {
     status: status || 'Pending',
     notes: lot.notes || '',
     rejectionNote: lot.rejectionNote ? String(lot.rejectionNote).trim() : '',
+    embeddedWorkspaceName: workspaceLabelEmbeddedInLot(lot),
   };
 };
 
@@ -226,6 +235,9 @@ export function AppProvider({ children }) {
           }
           setAdminReportingPartyEdits(partyEditsArrayToMap(allPartyEdits));
         } else {
+          /** Party JWT is cross-workspace — never reuse admin cached `x-business-owner-id` from localStorage. */
+          const partyReadOpts = { skipTenantHeader: true };
+
           const [
             remoteParties,
             remoteLots,
@@ -235,13 +247,13 @@ export function AppProvider({ children }) {
             ledgerPartyEdits,
             ledgerPayments,
           ] = await Promise.all([
-            apiService.getParties(),
-            apiService.getGhausiaLots(),
-            apiService.getPayments(),
-            apiService.getPartyEdits(),
-            apiService.getGhausiaLots({ partyScope: 'all' }),
-            apiService.getPartyEdits({ partyScope: 'all' }),
-            apiService.getPayments({ partyScope: 'all' }),
+            apiService.getParties(partyReadOpts),
+            apiService.getGhausiaLots(partyReadOpts),
+            apiService.getPayments(partyReadOpts),
+            apiService.getPartyEdits(partyReadOpts),
+            apiService.getGhausiaLots({ ...partyReadOpts, partyScope: 'all' }),
+            apiService.getPartyEdits({ ...partyReadOpts, partyScope: 'all' }),
+            apiService.getPayments({ ...partyReadOpts, partyScope: 'all' }),
           ]);
 
           if (Array.isArray(remoteParties)) {
@@ -258,12 +270,129 @@ export function AppProvider({ children }) {
 
           setPartyEdits(partyEditsArrayToMap(remotePartyEdits));
 
+          const normalizedPartyLedgerLots = Array.isArray(ledgerLots)
+            ? ledgerLots.map(normalizeLotData)
+            : [];
           if (Array.isArray(ledgerLots)) {
-            setPartyCrossLots(ledgerLots.map(normalizeLotData));
+            setPartyCrossLots(normalizedPartyLedgerLots);
           }
           setPartyCrossPartyEdits(partyEditsArrayToMap(ledgerPartyEdits));
           if (Array.isArray(ledgerPayments)) {
             setPartyCrossPayments(ledgerPayments);
+          }
+
+          /** Workspace names for party (admin gets full owners list separately). */
+          try {
+            const byId = new Map();
+
+            const ingestOwnerRow = (row) => {
+              if (!row || typeof row !== 'object') return;
+              const id = normalizedBusinessOwnerId(row?.id ?? row?._id);
+              if (!id) return;
+              const nm = ownerDisplayNameFromRow(row);
+              const existing = byId.get(id);
+              const name =
+                nm ||
+                (existing ? ownerDisplayNameFromRow(existing) : '') ||
+                String(existing?.name ?? '').trim();
+              const merged = {
+                ...(existing || {}),
+                ...row,
+                id,
+                _id: id,
+              };
+              if (name) merged.name = name;
+              byId.set(id, merged);
+            };
+
+            const ownersResp = await apiService.getBusinessOwners(partyReadOpts).catch(() => null);
+
+            /** Prefer legacy bare-array behaviour; then broaden with extract helper. */
+            if (Array.isArray(ownersResp) && ownersResp.length) {
+              ownersResp.forEach((o) => ingestOwnerRow({ ...o, id: normalizedBusinessOwnerId(o?.id ?? o?._id) }));
+            } else {
+              extractBusinessOwnersArrayFromResponse(ownersResp).forEach((o) =>
+                ingestOwnerRow(o && typeof o === 'object' ? o : {}),
+              );
+            }
+
+            try {
+              const colsResp = await apiService.getCollections(partyReadOpts).catch(() => null);
+              const colList = Array.isArray(colsResp)
+                ? colsResp
+                : normalizeBusinessOwnersListResponse(colsResp);
+              colList.forEach((c) => {
+                if (!c || typeof c !== 'object') return;
+                let cid = normalizedBusinessOwnerId(
+                  c.businessOwnerId ??
+                    c.businessOwner ??
+                    c.ownerId ??
+                    c.workspaceOwnerId,
+                );
+                const bo = c.businessOwner ?? c.owner;
+                if (bo != null && typeof bo === 'object') {
+                  const innerId = normalizedBusinessOwnerId(bo._id ?? bo.id);
+                  if (innerId) cid = innerId;
+                  ingestOwnerRow({ ...bo, id: innerId, _id: innerId });
+                }
+                const cname = ownerDisplayNameFromRow(c);
+                if (cid && cname && !ownerDisplayNameFromRow(byId.get(cid))) {
+                  ingestOwnerRow({ id: cid, name: cname });
+                }
+              });
+            } catch {
+              /* optional */
+            }
+
+            normalizedPartyLedgerLots.forEach((l) => {
+              const wid = normalizedBusinessOwnerId(l.businessOwnerId);
+              if (!wid) return;
+              const embedded = workspaceLabelEmbeddedInLot(l);
+              if (embedded) ingestOwnerRow({ id: wid, name: embedded });
+            });
+
+            const needFetchIds = [...new Set(
+              normalizedPartyLedgerLots
+                .map((l) => normalizedBusinessOwnerId(l.businessOwnerId))
+                .filter(Boolean),
+            )].filter((wid) => !ownerDisplayNameFromRow(byId.get(wid)));
+
+            await Promise.all(
+              needFetchIds.map(async (wid) => {
+                try {
+                  const raw = await apiService.getBusinessOwner(wid);
+                  const row = businessOwnerDisplayFromApiPayload(raw, wid);
+                  if (row) ingestOwnerRow(row);
+                } catch {
+                  /* route may be forbidden for party JWT */
+                }
+              }),
+            );
+
+            const sortLabel = (o) =>
+              ownerDisplayNameFromRow(o || {}) ||
+              String(o?.name ?? '').trim();
+
+            setBusinessOwners(
+              [...byId.values()].sort((a, b) =>
+                String(sortLabel(a)).localeCompare(String(sortLabel(b))),
+              ),
+            );
+          } catch (e) {
+            console.warn('Party workspace directory merge failed', e);
+            try {
+              const owners = await apiService.getBusinessOwners(partyReadOpts);
+              if (Array.isArray(owners) && owners.length) {
+                setBusinessOwners(
+                  owners.map((o) => ({
+                    ...o,
+                    id: normalizedBusinessOwnerId(o?.id ?? o?._id),
+                  })),
+                );
+              }
+            } catch {
+              /* keep previous businessOwners rather than wiping */
+            }
           }
         }
       } catch (error) {

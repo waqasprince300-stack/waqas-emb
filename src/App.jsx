@@ -16,6 +16,19 @@ import ResetPassword from './pages/ResetPassword';
 import UserApprovals from './pages/UserApprovals';
 import ReviewLots from './pages/ReviewLots';
 import PersonalKhata from './pages/PersonalKhata';
+import PersonalKhataShared from './pages/PersonalKhataShared';
+
+function PersonalKhataAccessibleRoute({ sidebarOpen, setSidebarOpen }) {
+  const { isAuthenticated } = useAuth();
+  const body = <PersonalKhata standalone={!isAuthenticated} />;
+  return isAuthenticated ? (
+    <Layout sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen}>
+      {body}
+    </Layout>
+  ) : (
+    <div style={{ minHeight: '100vh', background: '#F0F2F5' }}>{body}</div>
+  );
+}
 
 function Layout({ children, sidebarOpen, setSidebarOpen }) {
   return (
@@ -188,24 +201,17 @@ function AppRoutes() {
           </RequireAuth>
         )}
       />
+      <Route path="/personal-khata/shared" element={<PersonalKhataShared />} />
       <Route
         path="/personal-khata"
         element={(
-          <RequireAuth>
-            <Layout sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen}>
-              <PersonalKhata />
-            </Layout>
-          </RequireAuth>
+          <PersonalKhataAccessibleRoute sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
         )}
       />
       <Route
         path="/personal-khata/contact/:contactId"
         element={(
-          <RequireAuth>
-            <Layout sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen}>
-              <PersonalKhata />
-            </Layout>
-          </RequireAuth>
+          <PersonalKhataAccessibleRoute sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
         )}
       />
       <Route path="*" element={<Navigate to="/" replace />} />

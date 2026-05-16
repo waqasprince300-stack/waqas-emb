@@ -1,8 +1,10 @@
-import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
-import apiService from '../services/api';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import apiService, { registerSessionExpiredHandler } from '../services/api';
 
 const AuthContext = createContext(null);
 const SESSION_KEY = 'waqas_emb_auth_session';
+const BUSINESS_OWNER_STORAGE_KEY = 'waqas_emb_business_owner_id';
+const WORKSPACE_VIEW_ALL_STORAGE_KEY = 'waqas_emb_workspace_view_all';
 
 const safeJsonParse = (value, fallback) => {
   try {
@@ -39,7 +41,53 @@ export function AuthProvider({ children }) {
   const saveSession = useCallback((nextSession) => {
     localStorage.setItem(SESSION_KEY, JSON.stringify(nextSession));
     setSession(nextSession);
+    const u = nextSession?.user;
+    if (u && u.status === 'approved' && u.role !== 'admin') {
+      try {
+        localStorage.removeItem(BUSINESS_OWNER_STORAGE_KEY);
+        localStorage.removeItem(WORKSPACE_VIEW_ALL_STORAGE_KEY);
+      } catch {
+        /* ignore */
+      }
+    }
     return nextSession.user;
+  }, []);
+
+  useEffect(() => {
+    const u = session?.user;
+    if (!u || u.status !== 'approved' || u.role === 'admin') return;
+    try {
+      localStorage.removeItem(BUSINESS_OWNER_STORAGE_KEY);
+      localStorage.removeItem(WORKSPACE_VIEW_ALL_STORAGE_KEY);
+    } catch {
+      /* ignore */
+    }
+  }, [session?.user?.role, session?.user?.status, session?.user?._id]);
+
+  useEffect(() => {
+    registerSessionExpiredHandler(() => {
+      localStorage.removeItem(SESSION_KEY);
+      setSession(null);
+      try {
+        localStorage.removeItem(BUSINESS_OWNER_STORAGE_KEY);
+        localStorage.removeItem(WORKSPACE_VIEW_ALL_STORAGE_KEY);
+      } catch {
+        /* ignore */
+      }
+      const pathname = window.location.pathname;
+      /** Allow anon tools (personal khata) without forcing login redirect */
+      const allowNoRedirect =
+        pathname.startsWith('/login') ||
+        pathname.startsWith('/signup') ||
+        pathname.startsWith('/forgot-password') ||
+        pathname.startsWith('/reset-password') ||
+        pathname.startsWith('/personal-khata');
+      const loginPath = `${window.location.origin}/login`;
+      if (!allowNoRedirect) {
+        window.location.assign(loginPath);
+      }
+    });
+    return () => registerSessionExpiredHandler(null);
   }, []);
 
   const signup = useCallback(async ({ name, email, password, role, partyId, partyName, adminEmail }) => {
@@ -72,6 +120,12 @@ export function AuthProvider({ children }) {
 
   const logout = useCallback(() => {
     localStorage.removeItem(SESSION_KEY);
+    try {
+      localStorage.removeItem(BUSINESS_OWNER_STORAGE_KEY);
+      localStorage.removeItem(WORKSPACE_VIEW_ALL_STORAGE_KEY);
+    } catch {
+      /* ignore */
+    }
     setSession(null);
   }, []);
 

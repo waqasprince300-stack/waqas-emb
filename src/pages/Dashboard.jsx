@@ -4,9 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { StatusBadge } from '../components/UI';
 import LoaderDashboard from '../components/LoaderDashboard';
 import { DateRangeSelect, isWithinDateRange, latestDateFrom, compareRowsByUpdatedNewestFirst } from '../utils/dateFilters';
-
-const toTitleCase = (s) =>
-  String(s || '').split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+import { workspaceDisplayTitleForLot } from '../utils/businessWorkspace';
 
 function lotBelongsToPartyUser(lot, partyId, partyName) {
   const pid = String(partyId || '').trim();
@@ -26,6 +24,9 @@ function paymentBelongsToPartyUser(payment, partyId, partyName) {
   return String(payment.party || '').trim() === pname;
 }
 
+const toTitleCase = (s) =>
+  String(s || '').split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+
 export default function Dashboard() {
   const {
     reportingLots,
@@ -35,6 +36,7 @@ export default function Dashboard() {
     partyCrossLots,
     partyCrossPayments,
     payments,
+    businessOwners,
   } = useApp();
   const { isParty, user } = useAuth();
   const [dateRange, setDateRange] = useState('all');
@@ -357,6 +359,7 @@ export default function Dashboard() {
                   <tr>
                     <th>Lot / Design</th>
                     <th>Party</th>
+                    <th>Business</th>
                     <th style={{ textAlign: 'right' }}>Amount</th>
                   </tr>
                 </thead>
@@ -367,6 +370,9 @@ export default function Dashboard() {
                     <tr key={l.id}>
                       <td><span style={{ fontWeight: 600 }}>{l.lotNo || l.lotNumber}</span> / {l.designNo}</td>
                       <td style={{ color: 'var(--text-secondary)' }}>{l.partyName}</td>
+                      <td style={{ color: 'var(--text-secondary)', fontSize: 12 }}>
+                        {workspaceDisplayTitleForLot(l, businessOwners)}
+                      </td>
                       <td style={{ textAlign: 'right', fontWeight: 600, color: '#0369a1' }}>
                         ₨{Number(l.billAmount).toLocaleString()}
                       </td>
@@ -384,13 +390,14 @@ export default function Dashboard() {
       <div style={{ marginBottom: 24 }}>
         <div className="card">
           <div className="card-header"><span className="card-title">Recent Lots</span></div>
-          <div className="card-body" style={{ padding: 0 }}>
+          <div className="card-body table-scroll" style={{ padding: 0 }}>
             <table>
               <thead>
                 <tr>
                   <th>Lot</th>
                   <th>Design</th>
                   {!isParty && <th>Party</th>}
+                  <th style={{ minWidth: 130 }}>Business</th>
                   <th>Status</th>
                 </tr>
               </thead>
@@ -402,6 +409,11 @@ export default function Dashboard() {
                     {!isParty && (
                       <td style={{ color: 'var(--text-secondary)', fontSize: 12 }}>{l.partyName}</td>
                     )}
+                    <td style={{ color: 'var(--text-secondary)', fontSize: 12, minWidth: 120 }}>
+                      {workspaceDisplayTitleForLot(l, businessOwners, {
+                        shortIdFallback: isParty,
+                      })}
+                    </td>
                     <td><StatusBadge status={toTitleCase(l.status)} /></td>
                   </tr>
                 ))}

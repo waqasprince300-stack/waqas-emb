@@ -6,6 +6,7 @@ import { Modal, FormGroup, StatusBadge, ActionBtn, SearchBar, EmptyState, Confir
 import Loader from '../components/Loader';
 import LoaderDashboard from '../components/LoaderDashboard';
 import { DateRangeSelect, isWithinDateRange, latestDateFrom, compareRowsByUpdatedNewestFirst } from '../utils/dateFilters';
+import { workspaceDisplayTitleForLot } from '../utils/businessWorkspace';
 
 const FABRICS = ['Lawn', 'Velvet', 'Cambric'];
 const COLOR_OPTIONS = Array.from({ length: 13 }, (_, i) => i);
@@ -1080,13 +1081,15 @@ export default function GhausiaCollection() {
                 <th>Lot No</th><th>Design No</th><th>Description</th><th>Item Type</th>
                 <th>Colors</th>
                 <th>Pieces</th>
-                <th>Allot Date</th><th>Party Name</th>
+                <th>Allot Date</th>
+                <th>Business</th>
+                <th>Party Name</th>
                 <th>Status</th><th style={{ textAlign: 'right' }}>Bill Amount</th><th>Actions</th>
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 ? (
-                <tr><td colSpan={11}><EmptyState message="No lots found" /></td></tr>
+                <tr><td colSpan={12}><EmptyState message="No lots found" /></td></tr>
               ) : paginatedLots.map(l => (
                 <tr key={l.id}>
                   <td style={{ fontWeight: 700, color: '#1e40af' }}>{l.lotNumber}</td>
@@ -1096,6 +1099,9 @@ export default function GhausiaCollection() {
                   <td>{l.colors}</td>
                   <td>{l.pieces}</td>
                   <td>{l.allotDate}</td>
+                  <td style={{ color: 'var(--text-secondary)', fontSize: 13, maxWidth: 160 }}>
+                    {workspaceDisplayTitleForLot(l, businessOwners)}
+                  </td>
                   <td>
                     <select
                       className="form-select"
