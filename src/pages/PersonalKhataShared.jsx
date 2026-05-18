@@ -29,12 +29,12 @@ export default function PersonalKhataShared() {
     return (
       <div style={{ minHeight: '100vh', background: '#f0f2f5', padding: 24 }}>
         <div style={{ maxWidth: 520, margin: '80px auto', background: '#fff', borderRadius: 16, padding: 24, border: '1px solid #e2e8f0' }}>
-          <h1 style={{ fontSize: 20, margin: '0 0 12px' }}>Share link kharab hai</h1>
+          <h1 style={{ fontSize: 20, margin: '0 0 12px' }}>Invalid or expired link</h1>
           <p style={{ color: '#64748b', fontSize: 14, margin: '0 0 16px', lineHeight: 1.5 }}>
-            Pura URL copy karke dekhein, ya dubara share link banwayein.
+            Copy the full URL, or ask for a new share link from Personal Khata.
           </p>
           <Link to="/personal-khata" style={{ color: '#6366f1', fontWeight: 700 }}>
-            Personal Khata khud kholen →
+            Open Personal Khata →
           </Link>
         </div>
       </div>
@@ -42,6 +42,8 @@ export default function PersonalKhataShared() {
   }
 
   const { business, contacts = [], entries = [] } = snapshot;
+  const singleContact =
+    snapshot.shareScope === 'contact' && contacts.length === 1 ? contacts[0] : null;
   let receivable = 0;
   let payable = 0;
   contacts.forEach((c) => {
@@ -65,11 +67,20 @@ export default function PersonalKhataShared() {
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start' }}>
             <div>
               <h1 style={{ fontSize: 22, fontWeight: 900, margin: '0 0 8px', letterSpacing: '-0.02em' }}>
-                Shared Khata · dekh sakte hain (read-only)
+                Shared khata (read-only)
               </h1>
               <div style={{ fontSize: 14, opacity: 0.93, fontWeight: 600 }}>
-                {business?.name || 'Karobar'}{' '}
-                <span style={{ opacity: 0.75, fontWeight: 500 }}>(copy — changes yahan save nahi hote)</span>
+                {business?.name || 'Business'}
+                {singleContact ? (
+                  <>
+                    {' '}
+                    · <span style={{ fontWeight: 800 }}>{singleContact.name}</span>
+                    <span style={{ opacity: 0.82, fontWeight: 500 }}> (one contact)</span>
+                  </>
+                ) : null}
+                <span style={{ display: 'block', marginTop: 6, opacity: 0.75, fontWeight: 500, fontSize: 13 }}>
+                  View only — changes are not saved here.
+                </span>
               </div>
             </div>
             <BookOpen size={36} style={{ opacity: 0.4 }} aria-hidden />
@@ -108,7 +119,7 @@ export default function PersonalKhataShared() {
               textUnderlineOffset: 3,
             }}
           >
-            Apna khata (edit) kholne ke liye yahan dabayein →
+            Open full Personal Khata (edit) →
           </Link>
         </div>
 
@@ -151,7 +162,7 @@ export default function PersonalKhataShared() {
                     <div style={{ fontWeight: 900, fontSize: 16, color: net === 0 ? '#64748b' : net > 0 ? '#e11d48' : '#059669' }}>
                       {net === 0 ? '₨0' : `${net > 0 ? '' : '−'}${fmtMoney(net)}`}
                     </div>
-                    <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>{open ? 'Chhupa dein' : 'Taafilaat dekhein'}</div>
+                    <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>{open ? 'Hide details' : 'Show details'}</div>
                   </div>
                 </button>
 

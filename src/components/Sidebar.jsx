@@ -1,6 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { Modal } from './UI';
 
 const navItems = [
   {
@@ -113,6 +115,7 @@ const navItems = [
 
 export default function Sidebar({ sidebarOpen, setSidebarOpen }) {
   const { user, isAdmin, isSuperAdmin, logout } = useAuth();
+  const [logoutModalOpen, setLogoutModalOpen] = useState(false);
   const handleNavClick = () => {
     if (window.innerWidth <= 768) {
       setSidebarOpen(false);
@@ -133,21 +136,24 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen }) {
   });
 
   return (
-    <aside style={{
-      width: 230,
-      minHeight: '100vh',
-      background: '#1e1e2e',
-      display: 'flex',
-      flexDirection: 'column',
-      position: 'fixed',
-      left: 0,
-      top: 0,
-      bottom: 0,
-      zIndex: 200,
-      boxShadow: '2px 0 12px rgba(0,0,0,0.15)',
-      transform: window.innerWidth <= 768 ? (sidebarOpen ? 'translateX(0)' : 'translateX(-100%)') : 'translateX(0)',
-      transition: 'transform 0.3s ease',
-    }}>
+    <>
+      <aside
+        style={{
+          width: 230,
+          minHeight: '100vh',
+          background: '#1e1e2e',
+          display: 'flex',
+          flexDirection: 'column',
+          position: 'fixed',
+          left: 0,
+          top: 0,
+          bottom: 0,
+          zIndex: 200,
+          boxShadow: '2px 0 12px rgba(0,0,0,0.15)',
+          transform: window.innerWidth <= 768 ? (sidebarOpen ? 'translateX(0)' : 'translateX(-100%)') : 'translateX(0)',
+          transition: 'transform 0.3s ease',
+        }}
+      >
       {/* Mobile close button */}
       <div style={{ 
         display: window.innerWidth <= 768 ? 'flex' : 'none',
@@ -174,10 +180,10 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen }) {
       {/* Logo */}
       <div style={{ padding: '24px 20px 20px', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
         <div style={{ fontFamily: "'Playfair Display', serif", fontSize: 20, fontWeight: 600, color: '#fff', lineHeight: 1.2 }}>
-          Ghausia
+          Seam & Grance
         </div>
         <div style={{ fontSize: 11, color: '#64748b', marginTop: 3, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-          Textile Manager
+          Grace in every stitch
         </div>
       </div>
 
@@ -236,7 +242,7 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen }) {
             </div>
             <button
               type="button"
-              onClick={logout}
+              onClick={() => setLogoutModalOpen(true)}
               style={{
                 marginTop: 10,
                 width: '100%',
@@ -253,8 +259,41 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen }) {
             </button>
           </div>
         )}
-        © 2025 Ghausia Collection
+        © 2026 Seam & Grance
       </div>
     </aside>
+
+    {logoutModalOpen &&
+      typeof document !== 'undefined' &&
+      createPortal(
+        <Modal
+          overlayClassName="modal-overlay-global"
+          title="Log out?"
+          onClose={() => setLogoutModalOpen(false)}
+          footer={(
+            <>
+              <button type="button" className="btn btn-ghost" onClick={() => setLogoutModalOpen(false)}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => {
+                  setLogoutModalOpen(false);
+                  logout();
+                }}
+              >
+                Log out
+              </button>
+            </>
+          )}
+        >
+          <p style={{ margin: 0, fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.55 }}>
+            Are you sure you want to logout?
+          </p>
+        </Modal>,
+        document.body,
+      )}
+    </>
   );
 }

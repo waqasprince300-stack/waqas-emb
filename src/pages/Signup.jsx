@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
 import AuthCard from '../components/AuthCard';
+import PasswordField from '../components/PasswordField';
 import { useAuth, normalizeAuthResponse } from '../context/AuthContext';
 import { getRegistrationEmailError } from '../utils/registrationEmail';
 import { formatApiError } from '../utils/formatApiError';
@@ -163,14 +164,14 @@ export default function Signup() {
 
         <label className="auth-label">
           <span className="auth-label-text">Password</span>
-          <input
-            className="form-input"
-            type="password"
+          <PasswordField
+            name="password"
             placeholder="Minimum 8 characters"
             value={form.password}
             onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
             minLength={8}
             required
+            autoComplete="new-password"
           />
         </label>
 

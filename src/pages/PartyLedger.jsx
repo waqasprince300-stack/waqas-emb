@@ -18,7 +18,6 @@ import {
   compareRowsByUpdatedNewestFirst,
 } from "../utils/dateFilters";
 import {
-  getAdminLedgerOrBusinessBill,
   getPartyLedgerBillDisplay,
   getPartyLedgerBillNumeric,
 } from "../utils/partyBillPrivacy";
@@ -73,8 +72,8 @@ function readReceiptAsStoredValue(file) {
   });
 }
 
-/** Smaller JPEG for ledger storage (party bill snaps). */
-const LEDGER_BILL_IMG_MAX_BYTES = 320 * 1024;
+/** Target max decoded size for bill photos (JPEG); keeps JSON payload under typical proxy limits. */
+const LEDGER_BILL_IMG_MAX_BYTES = 240 * 1024;
 
 function approxBytesFromDataUrl(dataUrl) {
   const i = String(dataUrl || "").indexOf(",");
@@ -95,13 +94,14 @@ function dataUrlToImage(dataUrl) {
 
 async function compressPartyLedgerBillImage(dataUrl, maxBytes = LEDGER_BILL_IMG_MAX_BYTES) {
   if (!dataUrl || !/^data:image\//i.test(dataUrl)) return dataUrl;
-  if (approxBytesFromDataUrl(dataUrl) <= maxBytes) return dataUrl;
 
   let img;
   try {
     img = await dataUrlToImage(dataUrl);
   } catch {
-    return dataUrl;
+    throw new Error(
+      "Could not read this image (try JPG/PNG or a smaller file).",
+    );
   }
 
   const mime = "image/jpeg";
@@ -124,14 +124,23 @@ async function compressPartyLedgerBillImage(dataUrl, maxBytes = LEDGER_BILL_IMG_
   };
 
   let out = encode(maxEdge, quality);
-  for (let i = 0; i < 18 && approxBytesFromDataUrl(out) > maxBytes; i += 1) {
-    if (quality > 0.35) {
+  for (let i = 0; i < 22 && approxBytesFromDataUrl(out) > maxBytes; i += 1) {
+    if (quality > 0.28) {
       quality -= 0.06;
       out = encode(maxEdge, quality);
     } else {
       maxEdge = Math.round(maxEdge * 0.82);
-      if (maxEdge < 220) break;
+      if (maxEdge < 200) break;
       quality = 0.82;
+      out = encode(maxEdge, quality);
+    }
+  }
+  if (approxBytesFromDataUrl(out) > maxBytes) {
+    maxEdge = 180;
+    quality = 0.72;
+    out = encode(maxEdge, quality);
+    for (let i = 0; i < 8 && approxBytesFromDataUrl(out) > maxBytes; i += 1) {
+      quality = Math.max(0.22, quality - 0.08);
       out = encode(maxEdge, quality);
     }
   }
@@ -385,11 +394,10 @@ export default function PartyLedger() {
   const getPartyNameLocal = (partyId, fallback) =>
     parties.find((p) => samePartyId(p.id, partyId))?.name || fallback || "—";
 
-  /** Amounts for totals & admin column: party login uses ledger-only; admin uses ledger-or-business. */
+  /** Totals use party ledger amounts only (same figure party and admin see in the table — never lot bill fallback). */
   const getLedgerAmountForTotals = (l) => {
     const pe = ledgerPartyEdits[l.id] || {};
-    if (isParty) return getPartyLedgerBillNumeric(pe);
-    return getAdminLedgerOrBusinessBill(l, pe);
+    return getPartyLedgerBillNumeric(pe);
   };
 
   const filtered = useMemo(() => {
@@ -567,11 +575,10 @@ export default function PartyLedger() {
       formatYmd(pe.completeDate) || formatYmd(lot.receivedBackDate) || "";
     setLedgerFormErrors({});
     const peOpen = ledgerPartyEdits[lot.id] || {};
-    const initialBill = isParty
-      ? peOpen.partyBillAmount != null && peOpen.partyBillAmount !== ""
+    const initialBill =
+      peOpen.partyBillAmount != null && peOpen.partyBillAmount !== ""
         ? String(peOpen.partyBillAmount)
-        : ""
-      : String(getAdminLedgerOrBusinessBill(lot, peOpen) || "");
+        : "";
 
     setEditForm({
       allotDate: lot.allotDate || "",
@@ -610,13 +617,26 @@ export default function PartyLedger() {
       setLedgerFormErrors({});
       setLedgerSaving(true);
       try {
+        let receiptToSave;
+        try {
+          receiptToSave = await finalizeLedgerReceiptStoredValue(
+            editForm.receipt,
+          );
+        } catch (receiptErr) {
+          await Swal.fire({
+            icon: "error",
+            title: "Receipt could not be processed",
+            text:
+              receiptErr?.message ||
+              "Try a smaller JPG/PNG or a different photo.",
+          });
+          return;
+        }
         const partyChanged =
           String(editForm.partyId || "").trim() !== "" &&
           !samePartyId(editForm.partyId, lot.partyId);
         const prevPe = ledgerPartyEdits[lot.id] || {};
-        const previousLedgerAmount = isParty
-          ? getPartyLedgerBillNumeric(prevPe)
-          : getAdminLedgerOrBusinessBill(lot, prevPe);
+        const previousLedgerAmount = getPartyLedgerBillNumeric(prevPe);
         const nextLedgerAmount = Number(editForm.billAmount) || 0;
         const ghausiaAmount = Number(lot.billAmount || 0);
         let pendingRevisionPayload = null;
@@ -662,10 +682,7 @@ export default function PartyLedger() {
             completeDate:
               editForm.completeDate || new Date().toISOString().slice(0, 10),
             partyBillAmount: nextLedgerAmount,
-            receipt: editForm.receipt,
-            notes: editForm.notes,
-            overrideStatus: "Pending Approval",
-            pendingRevision: pendingRevisionPayload,
+            receipt: receiptToSave,
           },
           lotWorkspaceOpts(lot),
         );
@@ -715,12 +732,28 @@ export default function PartyLedger() {
 
     setLedgerSaving(true);
     try {
+      let receiptToSave;
+      try {
+        receiptToSave = await finalizeLedgerReceiptStoredValue(
+          editForm.receipt,
+        );
+      } catch (receiptErr) {
+        await Swal.fire({
+          icon: "error",
+          title: "Receipt could not be processed",
+          text:
+            receiptErr?.message ||
+            "Try a smaller JPG/PNG or a different photo.",
+        });
+        return;
+      }
+
       const partyChanged =
         String(editForm.partyId || "").trim() !== "" &&
         !samePartyId(editForm.partyId, lot.partyId);
 
       const prevPeStd = ledgerPartyEdits[lot.id] || {};
-      const previousLedgerAmount = getAdminLedgerOrBusinessBill(lot, prevPeStd);
+      const previousLedgerAmount = getPartyLedgerBillNumeric(prevPeStd);
       const nextLedgerAmount = Number(editForm.billAmount) || 0;
       const completedAmountChanged =
         getDisplayStatus(lot) === "Completed" &&
@@ -765,7 +798,7 @@ export default function PartyLedger() {
           completeDate:
             editForm.completeDate || new Date().toISOString().slice(0, 10),
           partyBillAmount: Number(editForm.billAmount) || 0,
-          receipt: editForm.receipt,
+          receipt: receiptToSave,
           notes: editForm.notes,
           overrideStatus: "Pending Approval",
           ...(amountChangeNote ? { amountChangeNote } : {}),
@@ -806,7 +839,7 @@ export default function PartyLedger() {
         await updatePartyEdit(editingId, {
           completeDate: editForm.completeDate || null,
           partyBillAmount: Number(editForm.billAmount) || 0,
-          receipt: editForm.receipt,
+          receipt: receiptToSave,
           notes: editForm.notes,
           overrideStatus: nextOverrideStatus,
         }, lotWorkspaceOpts(lot));
@@ -1303,7 +1336,6 @@ export default function PartyLedger() {
                   const pe = ledgerPartyEdits[l.id] || {};
                   const displayStatus = getDisplayStatus(l);
                   const partyBillOnly = getPartyLedgerBillDisplay(pe);
-                  const adminBillDisplay = getAdminLedgerOrBusinessBill(l, pe);
                   const displayComplete = getDisplayCompleteDate(l, pe);
                   return (
                     <tr key={l.id}>
@@ -1439,10 +1471,10 @@ export default function PartyLedger() {
                           color: "#1e40af",
                         }}
                       >
-                        {isParty && partyBillOnly == null ? (
+                        {partyBillOnly == null ? (
                           <span style={{ color: "var(--text-muted)", fontWeight: 600 }}>—</span>
                         ) : (
-                          `₨${(isParty ? partyBillOnly : adminBillDisplay).toLocaleString()}`
+                          `₨${partyBillOnly.toLocaleString()}`
                         )}
                       </td>
                       <td>
@@ -1890,8 +1922,15 @@ export default function PartyLedger() {
                   const stored = await readReceiptAsStoredValue(file);
                   const cropped = await finalizeLedgerReceiptStoredValue(stored);
                   setEditForm((f) => ({ ...f, receipt: cropped }));
-                } catch {
-                  setEditForm((f) => ({ ...f, receipt: file.name }));
+                } catch (err) {
+                  await Swal.fire({
+                    icon: "error",
+                    title: "Could not process file",
+                    text:
+                      err?.message ||
+                      "Try a smaller JPG/PNG. PDFs must be under a few MB.",
+                  });
+                  setEditForm((f) => ({ ...f, receipt: "" }));
                 }
               }}
             />
@@ -1906,51 +1945,151 @@ export default function PartyLedger() {
                 }}
               >
                 {receiptPreviewKind(editForm.receipt) === "image" && (
-                  <button
-                    type="button"
-                    className="btn btn-ghost btn-sm"
-                    style={{ padding: 0, border: "none" }}
-                    onClick={() =>
-                      setReceiptPreview({
-                        kind: "image",
-                        src: editForm.receipt,
-                        title: editingLot?.lotNo || editingLot?.lotNumber,
-                      })
-                    }
+                  <div
+                    style={{
+                      position: "relative",
+                      display: "inline-block",
+                      lineHeight: 0,
+                    }}
                   >
-                    <img
-                      src={editForm.receipt}
-                      alt=""
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      style={{ padding: 0, border: "none" }}
+                      onClick={() =>
+                        setReceiptPreview({
+                          kind: "image",
+                          src: editForm.receipt,
+                          title: editingLot?.lotNo || editingLot?.lotNumber,
+                        })
+                      }
+                    >
+                      <img
+                        src={editForm.receipt}
+                        alt=""
+                        style={{
+                          width: 56,
+                          height: 56,
+                          objectFit: "cover",
+                          borderRadius: 8,
+                          border: "1px solid var(--border)",
+                          display: "block",
+                        }}
+                      />
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      aria-label="Remove receipt"
+                      title="Remove receipt"
+                      onClick={() =>
+                        setEditForm((f) => ({ ...f, receipt: "" }))
+                      }
                       style={{
-                        width: 56,
-                        height: 56,
-                        objectFit: "cover",
-                        borderRadius: 8,
-                        border: "1px solid var(--border)",
+                        position: "absolute",
+                        top: -8,
+                        right: -8,
+                        width: 24,
+                        height: 24,
+                        minWidth: 24,
+                        minHeight: 24,
+                        padding: 0,
+                        borderRadius: "50%",
+                        border: "1px solid #e2e8f0",
+                        background: "#fff",
+                        color: "#64748b",
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontSize: 16,
+                        fontWeight: 700,
+                        lineHeight: 1,
+                        boxShadow: "0 1px 3px rgba(15,23,42,0.12)",
                       }}
-                    />
-                  </button>
+                    >
+                      ×
+                    </button>
+                  </div>
                 )}
                 {receiptPreviewKind(editForm.receipt) === "pdf" && (
-                  <button
-                    type="button"
-                    className="btn btn-ghost btn-sm"
-                    onClick={() =>
-                      setReceiptPreview({
-                        kind: "pdf",
-                        src: editForm.receipt,
-                        title: editingLot?.lotNo || editingLot?.lotNumber,
-                      })
-                    }
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                    }}
                   >
-                    Preview PDF
-                  </button>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      onClick={() =>
+                        setReceiptPreview({
+                          kind: "pdf",
+                          src: editForm.receipt,
+                          title: editingLot?.lotNo || editingLot?.lotNumber,
+                        })
+                      }
+                    >
+                      Preview PDF
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      aria-label="Remove receipt"
+                      title="Remove receipt"
+                      onClick={() =>
+                        setEditForm((f) => ({ ...f, receipt: "" }))
+                      }
+                      style={{
+                        width: 28,
+                        height: 28,
+                        minWidth: 28,
+                        padding: 0,
+                        borderRadius: "50%",
+                        border: "1px solid #e2e8f0",
+                        color: "#64748b",
+                        fontSize: 18,
+                        fontWeight: 700,
+                        lineHeight: 1,
+                      }}
+                    >
+                      ×
+                    </button>
+                  </div>
                 )}
                 <span style={{ fontSize: 12, color: "#15803d" }}>
                   {receiptPreviewKind(editForm.receipt) === "filename"
                     ? `📎 ${editForm.receipt}`
-                    : "Receipt attached — click thumbnail to enlarge"}
+                    : receiptPreviewKind(editForm.receipt) === "pdf"
+                      ? "PDF attached — preview or remove beside"
+                      : "Receipt attached — click thumbnail to enlarge"}
                 </span>
+                {receiptPreviewKind(editForm.receipt) === "filename" && (
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    aria-label="Remove receipt"
+                    title="Remove receipt"
+                    onClick={() =>
+                      setEditForm((f) => ({ ...f, receipt: "" }))
+                    }
+                    style={{
+                      width: 28,
+                      height: 28,
+                      minWidth: 28,
+                      padding: 0,
+                      borderRadius: "50%",
+                      border: "1px solid #e2e8f0",
+                      color: "#64748b",
+                      fontSize: 18,
+                      fontWeight: 700,
+                      lineHeight: 1,
+                    }}
+                  >
+                    ×
+                  </button>
+                )}
               </div>
             )}
           </FormGroup>

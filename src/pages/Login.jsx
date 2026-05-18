@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import AuthCard from '../components/AuthCard';
+import PasswordField from '../components/PasswordField';
 import { useAuth } from '../context/AuthContext';
 import { getRegistrationEmailError } from '../utils/registrationEmail';
 import { formatApiError } from '../utils/formatApiError';
@@ -13,6 +14,15 @@ export default function Login() {
   const [form, setForm] = useState({ email: '', password: '' });
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  React.useEffect(() => {
+    if (isAuthenticated) return;
+    const prev = document.title;
+    document.title = 'Sign in · Seam & Grace Embroidery';
+    return () => {
+      document.title = prev;
+    };
+  }, [isAuthenticated]);
 
   if (isAuthenticated) {
     const to = user?.role === 'super_admin' ? '/super-admin/pending-admins' : '/';
@@ -42,8 +52,14 @@ export default function Login() {
     }
   };
 
+  const brandLogoSrc = `${process.env.PUBLIC_URL || ''}/seam-grace-logo.png`;
+
   return (
     <AuthCard
+      brandLogoSrc={brandLogoSrc}
+      brandKicker="Embroidery workspace"
+      sideTitle="Stitch clarity into every job, ledger, and payment."
+      sideText="A calm, modern cockpit for Seam & Grace—production, parties, and cash flow aligned."
       title="Welcome back"
       subtitle="Sign in to continue managing lots, ledgers, and payments."
       footer={
@@ -87,13 +103,13 @@ export default function Login() {
             <span style={{ color: 'var(--text-secondary)' }}>Password</span>
             <Link className="auth-inline-link" to="/forgot-password">Forgot password?</Link>
           </span>
-          <input
-            className="form-input"
-            type="password"
+          <PasswordField
+            name="password"
             placeholder="Enter your password"
             value={form.password}
             onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
             required
+            autoComplete="current-password"
           />
         </label>
 

@@ -1,7 +1,8 @@
 import React from 'react';
 import Loader from './Loader';
 
-export function Modal({ title, onClose, children, footer, wide, onFormSubmit }) {
+export function Modal({ title, onClose, children, footer, wide, onFormSubmit, overlayClassName }) {
+  const overlayClass = ['modal-overlay', overlayClassName].filter(Boolean).join(' ');
   const body = (
     <>
       <div className="modal-body">{children}</div>
@@ -9,7 +10,7 @@ export function Modal({ title, onClose, children, footer, wide, onFormSubmit }) 
     </>
   );
   return (
-    <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+    <div className={overlayClass} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="modal-box" style={{ maxWidth: wide ? 820 : 680 }}>
         <div className="modal-header">
           <h3>{title}</h3>

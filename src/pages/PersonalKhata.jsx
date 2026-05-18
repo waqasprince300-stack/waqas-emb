@@ -3,7 +3,6 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowDownLeft,
   ArrowUpRight,
-  BookOpen,
   Briefcase,
   Camera,
   ChevronLeft,
@@ -26,7 +25,7 @@ import {
   contactBalance,
   entriesChronological,
   runningBalances,
-  buildBusinessShareSnapshot,
+  buildContactShareSnapshot,
 } from '../utils/personalKhataStorage';
 import {
   buildContactLedgerPdf,
@@ -448,65 +447,54 @@ export default function PersonalKhata({ standalone = false } = {}) {
     setFabOpen(false);
   };
 
-  const copyKhataShareLink = useCallback(async () => {
-    if (!scopedContacts.length) {
-      await Swal.fire({
-        icon: 'info',
-        title: 'Khaali',
-        text: 'Share karne se pehle is business main kam az kam ek shakhs hon.',
-      });
-      return;
-    }
-    const snap = buildBusinessShareSnapshot(
-      { businesses, activeBusinessId, contacts, entries },
-      activeBusinessId,
-    );
-    if (!snap) {
-      await Swal.fire({
-        icon: 'error',
-        title: 'Link nahi bana',
-        text: 'Dobara koshish karein.',
-      });
-      return;
-    }
-    const { url, warning } = buildKhataShareUrl(snap);
-    if (!url) {
-      await Swal.fire({
-        icon: 'warning',
-        title: 'Data bohot bara hai',
-        text: 'Bohot tasveeren hon to link chhota nahin ho sakta. PDF bhejin ya tasveeren kam kar ke dubara banayein.',
-      });
-      return;
-    }
-    try {
-      await navigator.clipboard.writeText(url);
-      const extra =
-        warning === 'long_url'
-          ? ' URL lambi hai — WhatsApp/desktop par test kar lein.'
-          : '';
-      await Swal.fire({
-        toast: true,
-        icon: 'success',
-        title: `Share link clipboard me${extra}`,
-        position: 'top-end',
-        timer: 3200,
-        showConfirmButton: false,
-      });
-    } catch {
-      await Swal.fire({
-        icon: 'info',
-        title: 'Khud copy karein',
-        input: 'textarea',
-        inputValue: url,
-      });
-    }
-  }, [
-    scopedContacts.length,
-    businesses,
-    activeBusinessId,
-    contacts,
-    entries,
-  ]);
+  const copyContactShareLink = useCallback(
+    async (contactId) => {
+      const snap = buildContactShareSnapshot(
+        { businesses, activeBusinessId, contacts, entries },
+        contactId,
+      );
+      if (!snap) {
+        await Swal.fire({
+          icon: 'error',
+          title: 'Could not create link',
+          text: 'Please try again.',
+        });
+        return;
+      }
+      const { url, warning } = buildKhataShareUrl(snap);
+      if (!url) {
+        await Swal.fire({
+          icon: 'warning',
+          title: 'Too much data',
+          text: 'This ledger has very large images. Try removing some bill photos, or send a PDF instead.',
+        });
+        return;
+      }
+      try {
+        await navigator.clipboard.writeText(url);
+        const extra =
+          warning === 'long_url'
+            ? ' The URL is long — test on WhatsApp or desktop if needed.'
+            : '';
+        await Swal.fire({
+          toast: true,
+          icon: 'success',
+          title: `Share link copied${extra}`,
+          position: 'top-end',
+          timer: 3200,
+          showConfirmButton: false,
+        });
+      } catch {
+        await Swal.fire({
+          icon: 'info',
+          title: 'Copy manually',
+          input: 'textarea',
+          inputValue: url,
+        });
+      }
+    },
+    [businesses, activeBusinessId, contacts, entries],
+  );
 
   useEffect(() => {
     if (!contactId || !khataHydrated || !activeBusinessId) return;
@@ -668,35 +656,140 @@ export default function PersonalKhata({ standalone = false } = {}) {
           }
           .pk-tx-head {
             display: grid;
-            grid-template-columns: 1.4fr 1fr 1fr;
-            gap: 8px;
-            padding: 12px 14px;
+            grid-template-columns: 1.35fr 1fr 1fr;
+            gap: 0;
+            padding: 0;
             font-size: 11px;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.06em;
-            color: var(--pk-muted);
-            background: linear-gradient(180deg, #f1f5f9 0%, #e2e8f0 100%);
+            font-weight: 800;
+            letter-spacing: 0.04em;
             border-bottom: 1px solid #e2e8f0;
+            overflow: hidden;
+            border-radius: 16px 16px 0 0;
+          }
+          .pk-tx-head > span {
+            padding: 12px 12px;
+          }
+          .pk-tx-head > span:first-child {
+            color: #475569;
+            text-transform: uppercase;
+            background: #f8fafc;
+          }
+          .pk-tx-head-out {
+            text-align: center;
+            color: #991b1b;
+            background: linear-gradient(180deg, #fee2e2 0%, #fecaca 100%);
+            border-left: 1px solid #fecaca;
+          }
+          .pk-tx-head-in {
+            text-align: center;
+            color: #14532d;
+            background: linear-gradient(180deg, #dcfce7 0%, #bbf7d0 100%);
+            border-left: 1px solid #bbf7d0;
           }
           .pk-tx-row {
             display: grid;
-            grid-template-columns: 1.4fr 1fr 1fr;
-            gap: 8px;
-            padding: 14px;
-            border-bottom: 1px solid #f1f5f9;
-            align-items: start;
+            grid-template-columns: 1.35fr 1fr 1fr;
+            gap: 0;
+            padding: 0;
+            border-bottom: 1px solid #eef2f7;
+            align-items: stretch;
           }
-          .pk-tx-row:nth-child(even) { background: #fafbfc; }
+          .pk-tx-row:nth-child(even) .pk-tx-main { background: #fbfcfe; }
+          .pk-tx-main {
+            padding: 14px 14px 12px;
+            min-width: 0;
+          }
+          .pk-tx-desc {
+            display: -webkit-box;
+            -webkit-box-orient: vertical;
+            -webkit-line-clamp: 3;
+            overflow: hidden;
+            word-break: break-word;
+          }
+          .pk-tx-row-actions {
+            margin-top: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+          }
+          .pk-tx-out, .pk-tx-in {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 12px 10px;
+            font-weight: 800;
+            font-size: 15px;
+            border-left: 1px solid #eef2f7;
+          }
+          .pk-tx-out { background: #fff5f5; color: #b91c1c; }
+          .pk-tx-in { background: #f0fdf4; color: #047857; }
+          .pk-tx-out.pk-tx-empty, .pk-tx-in.pk-tx-empty {
+            color: #cbd5e1;
+            font-weight: 600;
+            font-size: 20px;
+          }
+          .pk-tx-amt-pill {
+            padding: 8px 12px;
+            border-radius: 12px;
+            font-weight: 800;
+            font-size: 14px;
+            line-height: 1.2;
+          }
+          .pk-tx-amt-pill-out {
+            background: #fee2e2;
+            color: #991b1b;
+            border: 1px solid #fecaca;
+          }
+          .pk-tx-amt-pill-in {
+            background: #dcfce7;
+            color: #14532d;
+            border: 1px solid #bbf7d0;
+          }
           .pk-pill {
-            display: inline-block;
-            margin-top: 6px;
-            padding: 3px 10px;
+            display: inline-flex;
+            align-items: center;
+            padding: 4px 10px;
             border-radius: 999px;
             font-size: 11px;
             font-weight: 700;
-            background: #ffe4e6;
-            color: #be123c;
+            background: #f1f5f9;
+            color: #334155;
+            border: 1px solid #e2e8f0;
+          }
+          @media (max-width: 620px) {
+            .pk-tx-head { font-size: 10px; }
+            .pk-tx-head > span { padding: 10px 8px; }
+            .pk-tx-head {
+              grid-template-columns: 1fr 1fr;
+              grid-template-areas:
+                "hmain hmain"
+                "hout hin";
+            }
+            .pk-tx-head > span:first-child {
+              grid-area: hmain;
+              text-align: center;
+              border-bottom: 1px solid #e2e8f0;
+            }
+            .pk-tx-head-out { grid-area: hout; border-left: none; }
+            .pk-tx-head-in { grid-area: hin; }
+            .pk-tx-row {
+              grid-template-columns: 1fr 1fr;
+              grid-template-areas:
+                "main main"
+                "out in";
+            }
+            .pk-tx-main { grid-area: main; border-bottom: 1px solid #eef2f7; }
+            .pk-tx-out {
+              grid-area: out;
+              border-left: none;
+              min-height: 56px;
+            }
+            .pk-tx-in {
+              grid-area: in;
+              border-left: 1px solid #eef2f7;
+              min-height: 56px;
+            }
           }
           .pk-bottom {
             position: fixed;
@@ -759,11 +852,32 @@ export default function PersonalKhata({ standalone = false } = {}) {
                 ) : null}
               </div>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
               <button
                 type="button"
-                aria-label="PDF dekhein — preview"
-                title="Browser mein dekhein"
+                aria-label="Copy share link for this contact"
+                title="Read-only link for this person’s ledger"
+                style={{
+                  background: 'rgba(255,255,255,0.22)',
+                  border: 'none',
+                  borderRadius: 12,
+                  padding: 10,
+                  cursor: 'pointer',
+                  color: '#fff',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+                onClick={() => {
+                  void copyContactShareLink(active.id);
+                }}
+              >
+                <Share2 size={22} strokeWidth={2.25} aria-hidden />
+              </button>
+              <button
+                type="button"
+                aria-label="Preview PDF in browser"
+                title="Preview in browser"
                 style={{
                   background: 'rgba(255,255,255,0.22)',
                   border: 'none',
@@ -788,8 +902,8 @@ export default function PersonalKhata({ standalone = false } = {}) {
               </button>
               <button
                 type="button"
-                aria-label="PDF download"
-                title="File save"
+                aria-label="Download PDF"
+                title="Download PDF"
                 style={{
                   background: 'rgba(255,255,255,0.22)',
                   border: 'none',
@@ -807,7 +921,7 @@ export default function PersonalKhata({ standalone = false } = {}) {
                     Swal.fire({
                       toast: true,
                       icon: 'success',
-                      title: 'PDF download',
+                      title: 'PDF downloaded',
                       position: 'top-end',
                       timer: 1800,
                       showConfirmButton: false,
@@ -821,6 +935,19 @@ export default function PersonalKhata({ standalone = false } = {}) {
               </button>
             </div>
           </div>
+
+          <p
+            style={{
+              margin: '12px 0 0',
+              fontSize: 12,
+              opacity: 0.9,
+              fontWeight: 500,
+              lineHeight: 1.45,
+              maxWidth: 520,
+            }}
+          >
+            <strong>Share</strong> copies a read-only link for <strong>{active.name}</strong> only (not your whole list).
+          </p>
 
           <div className="pk-balance-chip">
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -868,9 +995,9 @@ export default function PersonalKhata({ standalone = false } = {}) {
 
         <div className="pk-tx-card">
           <div className="pk-tx-head">
-            <span>Details & time</span>
-            <span style={{ textAlign: 'center', color: '#e11d48' }}>Paid out</span>
-            <span style={{ textAlign: 'center', color: '#059669' }}>Received</span>
+            <span>Waqt & wazahat</span>
+            <span className="pk-tx-head-out">Dena (diye)</span>
+            <span className="pk-tx-head-in">Lena (liye)</span>
           </div>
           {chronological.length === 0 ? (
             <div style={{ padding: 40, textAlign: 'center', color: '#94a3b8', fontWeight: 600 }}>
@@ -879,60 +1006,74 @@ export default function PersonalKhata({ standalone = false } = {}) {
           ) : (
             chronological.map((e) => (
               <div key={e.id} className="pk-tx-row">
-                <div>
-                  <div style={{ fontWeight: 700, fontSize: 13, color: '#0f172a' }}>
+                <div className="pk-tx-main">
+                  <div style={{ fontWeight: 800, fontSize: 12.5, color: '#64748b', letterSpacing: '0.02em' }}>
                     {fmtWhen(e.updatedAt || e.createdAt)}
                   </div>
-                  <div style={{ fontSize: 12.5, color: '#475569', marginTop: 4, lineHeight: 1.45 }}>
+                  <div className="pk-tx-desc" style={{ fontSize: 13.5, color: '#0f172a', marginTop: 6, lineHeight: 1.5 }}>
                     {e.description}
                   </div>
-                  {e.billImage && /^data:image\//i.test(String(e.billImage)) ? (
+                  <div className="pk-tx-row-actions">
+                    <span className="pk-pill">Baqi {fmtMoney(runMap.get(e.id) ?? 0)}</span>
+                    {e.billImage && /^data:image\//i.test(String(e.billImage)) ? (
+                      <button
+                        type="button"
+                        onClick={() => setBillLightboxSrc(e.billImage)}
+                        title="Bill / receipt dekhein"
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 5,
+                          padding: '5px 10px',
+                          borderRadius: 8,
+                          border: '1px solid #c7d2fe',
+                          background: '#eef2ff',
+                          color: '#3730a3',
+                          fontWeight: 700,
+                          fontSize: 11,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <ImageIcon size={13} strokeWidth={2.5} aria-hidden /> Bill
+                      </button>
+                    ) : null}
                     <button
                       type="button"
-                      onClick={() => setBillLightboxSrc(e.billImage)}
-                      title="Bill / receipt dekhein"
+                      aria-label="Entry hata dein"
+                      onClick={() => deleteEntry(e.id)}
                       style={{
-                        marginTop: 8,
+                        marginLeft: 'auto',
+                        border: 'none',
+                        background: '#f8fafc',
+                        color: '#94a3b8',
+                        cursor: 'pointer',
+                        padding: 6,
+                        borderRadius: 8,
                         display: 'inline-flex',
                         alignItems: 'center',
-                        gap: 6,
-                        padding: '6px 12px',
-                        borderRadius: 999,
-                        border: '1px solid #c7d2fe',
-                        background: '#eef2ff',
-                        color: '#3730a3',
-                        fontWeight: 700,
-                        fontSize: 12,
-                        cursor: 'pointer',
                       }}
                     >
-                      <ImageIcon size={14} strokeWidth={2.5} aria-hidden /> Bill dekhein
+                      <Trash2 size={15} />
                     </button>
-                  ) : null}
-                  <span className="pk-pill">Bal. {fmtMoney(runMap.get(e.id) ?? 0)}</span>
-                  <button
-                    type="button"
-                    onClick={() => deleteEntry(e.id)}
-                    style={{
-                      marginTop: 8,
-                      border: 'none',
-                      background: 'transparent',
-                      color: '#94a3b8',
-                      cursor: 'pointer',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 4,
-                      fontSize: 11,
-                    }}
-                  >
-                    <Trash2 size={14} /> Delete
-                  </button>
+                  </div>
                 </div>
-                <div style={{ textAlign: 'center', fontWeight: 800, color: '#e11d48' }}>
-                  {e.type === 'given' ? fmtMoney(e.amount) : '—'}
+                <div
+                  className={`pk-tx-out${e.type === 'given' ? '' : ' pk-tx-empty'}`}
+                >
+                  {e.type === 'given' ? (
+                    <span className="pk-tx-amt-pill pk-tx-amt-pill-out">{fmtMoney(e.amount)}</span>
+                  ) : (
+                    '—'
+                  )}
                 </div>
-                <div style={{ textAlign: 'center', fontWeight: 800, color: '#059669' }}>
-                  {e.type === 'received' ? fmtMoney(e.amount) : '—'}
+                <div
+                  className={`pk-tx-in${e.type === 'received' ? '' : ' pk-tx-empty'}`}
+                >
+                  {e.type === 'received' ? (
+                    <span className="pk-tx-amt-pill pk-tx-amt-pill-in">{fmtMoney(e.amount)}</span>
+                  ) : (
+                    '—'
+                  )}
                 </div>
               </div>
             ))
@@ -946,14 +1087,14 @@ export default function PersonalKhata({ standalone = false } = {}) {
               className="pk-btn-give"
               onClick={() => openEntry('given', active.id)}
             >
-              <ArrowUpRight size={18} /> MAINE DIYE
+              <ArrowUpRight size={18} aria-hidden /> Dene
             </button>
             <button
               type="button"
               className="pk-btn-get"
               onClick={() => openEntry('received', active.id)}
             >
-              <ArrowDownLeft size={18} /> MAINE LIYE
+              <ArrowDownLeft size={18} aria-hidden /> Lena
             </button>
           </div>
         </div>
@@ -1081,6 +1222,13 @@ export default function PersonalKhata({ standalone = false } = {}) {
           max-width: 520px;
           line-height: 1.45;
         }
+        .pk-biz-strip {
+          margin-top: 16px;
+          padding: 12px 14px;
+          border-radius: 16px;
+          background: rgba(255, 255, 255, 0.14);
+          border: 1px solid rgba(255, 255, 255, 0.28);
+        }
         .pk-sumgrid {
           display: grid;
           grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -1092,15 +1240,36 @@ export default function PersonalKhata({ standalone = false } = {}) {
           padding: 16px 18px;
           display: flex;
           flex-direction: column;
-          gap: 6px;
+          gap: 8px;
         }
         .pk-sum-receive {
-          background: linear-gradient(145deg, rgba(255,255,255,0.3), rgba(255,255,255,0.12));
-          border: 1px solid rgba(255,255,255,0.35);
+          background: linear-gradient(155deg, #ecfdf5 0%, #d1fae5 55%, #a7f3d0 100%);
+          border: 2px solid #34d399;
+          box-shadow: 0 10px 28px rgba(16, 185, 129, 0.25);
+          color: #064e3b;
         }
         .pk-sum-pay {
-          background: linear-gradient(145deg, rgba(255,255,255,0.22), rgba(255,255,255,0.08));
-          border: 1px solid rgba(255,255,255,0.28);
+          background: linear-gradient(155deg, #fff1f2 0%, #fecdd3 55%, #fda4af 100%);
+          border: 2px solid #fb7185;
+          box-shadow: 0 10px 28px rgba(244, 63, 94, 0.22);
+          color: #881337;
+        }
+        .pk-sum-ribbon {
+          align-self: flex-start;
+          font-size: 10px;
+          font-weight: 900;
+          letter-spacing: 0.14em;
+          padding: 4px 10px;
+          border-radius: 8px;
+          color: #fff;
+        }
+        .pk-sum-ribbon-in { background: #059669; }
+        .pk-sum-ribbon-out { background: #dc2626; }
+        .pk-sum-note {
+          font-size: 12px;
+          font-weight: 600;
+          opacity: 0.88;
+          margin-top: 2px;
         }
         .pk-search {
           display: flex;
@@ -1122,85 +1291,113 @@ export default function PersonalKhata({ standalone = false } = {}) {
         .pk-quick-card {
           background: #fff;
           border-radius: 20px;
-          padding: 18px 18px 16px;
+          padding: 20px 18px 18px;
           border: 1px solid #e2e8f0;
           box-shadow: 0 8px 28px rgba(15,23,42,0.06);
-          margin-bottom: 20px;
+          margin-bottom: 22px;
         }
         .pk-quick-title {
-          font-size: 12px;
-          font-weight: 800;
+          font-size: 11px;
+          font-weight: 900;
           color: #64748b;
           text-transform: uppercase;
-          letter-spacing: 0.07em;
-          margin: 0 0 14px;
+          letter-spacing: 0.1em;
+          margin: 0 0 12px;
         }
-        .pk-quick-grid {
+        .pk-quick-title + .pk-quick-title {
+          margin-top: 22px;
+        }
+        .pk-money-row {
           display: grid;
-          grid-template-columns: repeat(2, 1fr);
+          grid-template-columns: 1fr 1fr;
           gap: 12px;
         }
-        @media (min-width: 700px) {
-          .pk-quick-grid { grid-template-columns: repeat(4, 1fr); }
-        }
-        .pk-tile {
+        .pk-money-tile {
           border: none;
           cursor: pointer;
-          border-radius: 16px;
-          padding: 14px 12px 14px;
-          text-align: left;
+          border-radius: 18px;
+          padding: 18px 14px;
+          text-align: center;
           display: flex;
           flex-direction: column;
+          align-items: center;
           gap: 6px;
-          min-height: 102px;
+          min-height: 108px;
+          justify-content: center;
           transition: transform 0.14s ease, box-shadow 0.14s ease;
-          box-shadow: 0 1px 2px rgba(15,23,42,0.05);
         }
-        .pk-tile:hover {
+        .pk-money-tile:hover {
           transform: translateY(-2px);
-          box-shadow: 0 10px 28px rgba(15,23,42,0.09);
+          box-shadow: 0 12px 30px rgba(15, 23, 42, 0.12);
         }
-        .pk-tile:active { transform: translateY(0); }
-        .pk-tile-icon {
-          width: 40px;
-          height: 40px;
-          border-radius: 12px;
+        .pk-money-tile-out {
+          background: linear-gradient(180deg, #fef2f2 0%, #fee2e2 100%);
+          border: 2px solid #f87171;
+          color: #991b1b;
+        }
+        .pk-money-tile-in {
+          background: linear-gradient(180deg, #ecfdf5 0%, #d1fae5 100%);
+          border: 2px solid #34d399;
+          color: #065f46;
+        }
+        .pk-money-tile-label {
+          font-size: 16px;
+          font-weight: 900;
+          line-height: 1.2;
+        }
+        .pk-money-tile-hint {
+          font-size: 11px;
+          font-weight: 600;
+          opacity: 0.9;
+          line-height: 1.3;
+        }
+        .pk-person-tile {
+          width: 100%;
+          cursor: pointer;
+          border-radius: 16px;
+          padding: 16px 16px;
           display: flex;
           align-items: center;
-          justify-content: center;
-          flex-shrink: 0;
+          gap: 12px;
+          background: linear-gradient(180deg, #faf5ff 0%, #f3e8ff 100%);
+          border: 2px solid #c4b5fd;
+          color: #5b21b6;
+          font-weight: 900;
+          font-size: 15px;
+          text-align: left;
+          transition: transform 0.14s ease;
         }
-        .pk-tile-label { font-size: 14px; font-weight: 800; color: #0f172a; line-height: 1.25; }
-        .pk-tile-hint { font-size: 11px; font-weight: 600; color: #64748b; line-height: 1.35; }
-        .pk-tile-violet { background: linear-gradient(180deg, #faf5ff 0%, #ede9fe 100%); border: 1px solid #ddd6fe; }
-        .pk-tile-rose { background: linear-gradient(180deg, #fff1f2 0%, #ffe4e6 100%); border: 1px solid #fecdd3; }
-        .pk-tile-emerald { background: linear-gradient(180deg, #ecfdf5 0%, #d1fae5 100%); border: 1px solid #a7f3d0; }
-        .pk-tile-slate { background: linear-gradient(180deg, #f8fafc 0%, #e2e8f0 100%); border: 1px solid #cbd5e1; }
-        .pk-tile-static {
-          cursor: default;
+        .pk-person-tile:hover {
+          transform: translateY(-1px);
         }
-        .pk-tile-static:hover {
-          transform: none;
-          box-shadow: 0 1px 2px rgba(15,23,42,0.05);
+        .pk-pdf-panel {
+          border-radius: 16px;
+          padding: 16px;
+          background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+          border: 1px solid #cbd5e1;
         }
-        .pk-pdf-actions {
+        .pk-pdf-panel-top {
           display: flex;
-          gap: 8px;
-          margin-top: 6px;
+          align-items: flex-start;
+          gap: 12px;
+          margin-bottom: 12px;
+        }
+        .pk-pdf-panel-actions {
+          display: flex;
+          gap: 10px;
         }
         .pk-pdf-btn {
           flex: 1;
           border: none;
           cursor: pointer;
           border-radius: 12px;
-          padding: 9px 8px;
-          font-size: 11px;
+          padding: 12px 10px;
+          font-size: 12px;
           font-weight: 800;
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          gap: 5px;
-          letter-spacing: 0.02em;
+          gap: 6px;
         }
         .pk-pdf-btn:hover { filter: brightness(1.05); }
         .pk-pdf-preview {
@@ -1209,42 +1406,10 @@ export default function PersonalKhata({ standalone = false } = {}) {
           box-shadow: 0 4px 14px rgba(99, 102, 241, 0.35);
         }
         .pk-pdf-save {
-          background: linear-gradient(145deg, #f472b6, #db2777);
-          color: #fff;
-          box-shadow: 0 4px 14px rgba(219, 39, 119, 0.3);
-        }
-        .pk-tile-pdf {
-          min-height: auto;
-          padding-bottom: 16px;
-        }
-        .pk-pdf-card-row {
-          display: flex;
-          align-items: flex-start;
-          gap: 12px;
-          width: 100%;
-        }
-        .pk-pdf-card-text {
-          flex: 1;
-          min-width: 0;
-          display: flex;
-          flex-direction: column;
-          gap: 6px;
-        }
-        .pk-pdf-card-title {
-          font-size: 15px;
-          font-weight: 800;
+          background: #fff;
           color: #0f172a;
-          line-height: 1.35;
-          letter-spacing: -0.01em;
-          -webkit-font-smoothing: antialiased;
+          border: 1px solid #cbd5e1;
         }
-        .pk-pdf-card-hint {
-          font-size: 11px;
-          font-weight: 600;
-          color: #64748b;
-          line-height: 1.45;
-        }
-        .pk-section-label {
           font-size: 13px;
           font-weight: 800;
           color: #334155;
@@ -1337,11 +1502,9 @@ export default function PersonalKhata({ standalone = false } = {}) {
           <div>
             <h1 className="pk-home-title">Personal Khata</h1>
             <p className="pk-home-sub">
-              Apne udhar / len den ka hisaab rakhain — diye aur liye dono alag rangon mein. Har entry ki wazahat
-              zaroor likhein.
+              Dena (red) aur lena (green) alag — har entry wazahat ke sath likhein.
             </p>
           </div>
-          <BookOpen size={40} style={{ opacity: 0.35 }} aria-hidden />
         </div>
         <div style={{ marginTop: 14, marginBottom: 6, flexWrap: 'wrap', gap: 10 }} className="pk-biz-strip">
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
@@ -1393,39 +1556,18 @@ export default function PersonalKhata({ standalone = false } = {}) {
             >
               + Naya business
             </button>
-            <button
-              type="button"
-              onClick={() => {
-                setFabOpen(false);
-                void copyKhataShareLink();
-              }}
-              style={{
-                border: 'none',
-                borderRadius: 12,
-                padding: '10px 14px',
-                fontWeight: 800,
-                fontSize: 13,
-                cursor: 'pointer',
-                background: 'rgba(255,255,255,0.28)',
-                color: '#fff',
-                border: '1px solid rgba(255,255,255,0.55)',
-              }}
-            >
-              <Share2 size={14} strokeWidth={2.5} style={{ verticalAlign: 'middle', marginRight: 6 }} />
-              Khata share
-            </button>
           </div>
         </div>
         <div className="pk-sumgrid">
           <div className="pk-sum pk-sum-receive">
-            <span style={{ fontSize: 12, fontWeight: 700 }}>Total receivable</span>
-            <span style={{ fontSize: 24, fontWeight: 900 }}>{fmtMoney(totals.receivable)}</span>
-            <span style={{ fontSize: 11, opacity: 0.9 }}>Owed to you</span>
+            <span className="pk-sum-ribbon pk-sum-ribbon-in">LENA</span>
+            <span className="pk-sum-note">Jo aap ko milna hai</span>
+            <span style={{ fontSize: 26, fontWeight: 900, lineHeight: 1.1 }}>{fmtMoney(totals.receivable)}</span>
           </div>
           <div className="pk-sum pk-sum-pay">
-            <span style={{ fontSize: 12, fontWeight: 700 }}>Total payable</span>
-            <span style={{ fontSize: 24, fontWeight: 900 }}>{fmtMoney(totals.payable)}</span>
-            <span style={{ fontSize: 11, opacity: 0.9 }}>You owe</span>
+            <span className="pk-sum-ribbon pk-sum-ribbon-out">DENA</span>
+            <span className="pk-sum-note">Jo aap ne dena hai</span>
+            <span style={{ fontSize: 26, fontWeight: 900, lineHeight: 1.1 }}>{fmtMoney(totals.payable)}</span>
           </div>
         </div>
       </div>
@@ -1440,68 +1582,66 @@ export default function PersonalKhata({ standalone = false } = {}) {
       </div>
 
       <div className="pk-quick-card">
-        <p className="pk-quick-title">Quick actions</p>
-        <div className="pk-quick-grid">
-          <button type="button" className="pk-tile pk-tile-violet" onClick={openAddContact}>
-            <div className="pk-tile-icon" style={{ background: '#ddd6fe', color: '#5b21b6' }}>
-              <UserPlus size={20} strokeWidth={2.25} />
-            </div>
-            <span className="pk-tile-label">Naya shakhs</span>
-            <span className="pk-tile-hint">Naam aur phone shamil karein</span>
-          </button>
+        <p className="pk-quick-title">Paisay</p>
+        <div className="pk-money-row">
           <button
             type="button"
-            className="pk-tile pk-tile-rose"
+            className="pk-money-tile pk-money-tile-out"
             onClick={() => (scopedContacts.length ? openEntry('given') : openAddContact())}
           >
-            <div className="pk-tile-icon" style={{ background: '#fecdd3', color: '#be123c' }}>
-              <ArrowUpRight size={20} strokeWidth={2.25} />
-            </div>
-            <span className="pk-tile-label">Maine diye</span>
-            <span className="pk-tile-hint">Jo paisay aap ne diye</span>
+            <ArrowUpRight size={26} strokeWidth={2.25} aria-hidden />
+            <span className="pk-money-tile-label">Dene (diye)</span>
+            <span className="pk-money-tile-hint">Jo aap ne kisi ko diye</span>
           </button>
           <button
             type="button"
-            className="pk-tile pk-tile-emerald"
+            className="pk-money-tile pk-money-tile-in"
             onClick={() => (scopedContacts.length ? openEntry('received') : openAddContact())}
           >
-            <div className="pk-tile-icon" style={{ background: '#a7f3d0', color: '#047857' }}>
-              <ArrowDownLeft size={20} strokeWidth={2.25} />
-            </div>
-            <span className="pk-tile-label">Maine liye</span>
-            <span className="pk-tile-hint">Jo paisay aap ne liye</span>
+            <ArrowDownLeft size={26} strokeWidth={2.25} aria-hidden />
+            <span className="pk-money-tile-label">Lene (liye)</span>
+            <span className="pk-money-tile-hint">Jo aap ne kisi se liye</span>
           </button>
-          <div
-            className="pk-tile pk-tile-slate pk-tile-static pk-tile-pdf"
-            style={{ gridColumn: '1 / -1' }}
-          >
-            <div className="pk-pdf-card-row">
-              <div className="pk-tile-icon" style={{ background: '#cbd5e1', color: '#0f172a' }}>
-                <FileDown size={20} strokeWidth={2.25} />
-              </div>
-              <div className="pk-pdf-card-text">
-                <div className="pk-pdf-card-title">PDF report</div>
-                <div className="pk-pdf-card-hint">
-                  Rangin hisaab · pehle yahin dekhein ya seedha save
-                </div>
-                <div className="pk-pdf-actions">
-                  <button
-                    type="button"
-                    className="pk-pdf-btn pk-pdf-preview"
-                    onClick={previewSummaryPdf}
-                  >
-                    <Eye size={15} strokeWidth={2.5} /> Dekhein
-                  </button>
-                  <button
-                    type="button"
-                    className="pk-pdf-btn pk-pdf-save"
-                    onClick={exportSummaryPdf}
-                  >
-                    <FileDown size={15} strokeWidth={2.5} /> Save
-                  </button>
-                </div>
+        </div>
+
+        <p className="pk-quick-title">Shakhs</p>
+        <button type="button" className="pk-person-tile" onClick={openAddContact}>
+          <UserPlus size={22} strokeWidth={2.25} aria-hidden />
+          <span>Naya shakhs joden</span>
+        </button>
+
+        <p className="pk-quick-title">PDF report</p>
+        <div className="pk-pdf-panel">
+          <div className="pk-pdf-panel-top">
+            <div
+              style={{
+                width: 44,
+                height: 44,
+                borderRadius: 12,
+                background: '#e2e8f0',
+                color: '#0f172a',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+              }}
+            >
+              <FileDown size={22} strokeWidth={2.25} aria-hidden />
+            </div>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontWeight: 900, fontSize: 16, color: '#0f172a' }}>Summary PDF</div>
+              <div style={{ fontSize: 12.5, fontWeight: 600, color: '#64748b', marginTop: 4, lineHeight: 1.45 }}>
+                Poora hisaab — pehle dekhein ya seedha save
               </div>
             </div>
+          </div>
+          <div className="pk-pdf-panel-actions">
+            <button type="button" className="pk-pdf-btn pk-pdf-preview" onClick={previewSummaryPdf}>
+              <Eye size={16} strokeWidth={2.5} aria-hidden /> Dekhein
+            </button>
+            <button type="button" className="pk-pdf-btn pk-pdf-save" onClick={exportSummaryPdf}>
+              <FileDown size={16} strokeWidth={2.5} aria-hidden /> Save
+            </button>
           </div>
         </div>
       </div>
@@ -1595,17 +1735,6 @@ export default function PersonalKhata({ standalone = false } = {}) {
               }}
             >
               <Briefcase size={18} /> Naya business
-            </button>
-            <button
-              type="button"
-              className="pk-fab-item"
-              style={{ background: '#eef2ff', color: '#312e81' }}
-              onClick={() => {
-                setFabOpen(false);
-                void copyKhataShareLink();
-              }}
-            >
-              <Share2 size={18} /> Khata share link
             </button>
             <button
               type="button"

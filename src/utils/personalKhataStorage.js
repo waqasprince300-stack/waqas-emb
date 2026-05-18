@@ -174,3 +174,23 @@ export function buildBusinessShareSnapshot(state, businessId) {
     entries,
   };
 }
+
+/** Read-only snapshot for a single contact’s ledger (share link). */
+export function buildContactShareSnapshot(state, contactId) {
+  const cid = String(contactId || '').trim();
+  const contact = state.contacts.find((c) => c.id === cid);
+  if (!contact) return null;
+  const bid = String(contact.businessId || state.activeBusinessId || '').trim();
+  const biz = state.businesses.find((b) => b.id === bid);
+  if (!biz) return null;
+  const entries = state.entries.filter((e) => e.contactId === cid);
+  return {
+    v: 2,
+    readOnly: true,
+    business: { id: biz.id, name: biz.name },
+    contacts: [contact],
+    entries,
+    shareScope: 'contact',
+    sharedContactId: cid,
+  };
+}

@@ -1,7 +1,7 @@
 // API utility for Express.js Backend
 // CRA only loads env vars that start with REACT_APP_ from .env in the project root (not src/).
 const API_BASE_URL = String(
-  process.env.REACT_APP_API_BASE_URL ||
+  // process.env.REACT_APP_API_BASE_URL ||
     (process.env.NODE_ENV === "development"
       ? "http://localhost:3001/api"
       : ""),
@@ -107,6 +107,15 @@ class ApiService {
           if (errBody.error && errBody.error !== detail) detail = `${detail} ${errBody.error}`.trim();
         } catch {
           errBody = null;
+        }
+        if (response.status === 413) {
+          detail =
+            typeof detail === 'string' && detail.trim()
+              ? detail
+              : 'Request too large — try a smaller receipt image or PDF.';
+        }
+        if (typeof detail === 'object' && detail != null) {
+          detail = String(detail.message || JSON.stringify(detail));
         }
         const err = new Error(detail ? `HTTP ${response.status}: ${detail}` : `HTTP error! status: ${response.status}`);
         err.status = response.status;

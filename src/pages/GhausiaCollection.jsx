@@ -7,6 +7,7 @@ import Loader from '../components/Loader';
 import LoaderDashboard from '../components/LoaderDashboard';
 import { DateRangeSelect, isWithinDateRange, latestDateFrom, compareRowsByUpdatedNewestFirst } from '../utils/dateFilters';
 import { workspaceDisplayTitleForLot } from '../utils/businessWorkspace';
+import { getAdminLedgerOrBusinessBill } from '../utils/partyBillPrivacy';
 
 const FABRICS = ['Lawn', 'Velvet', 'Cambric'];
 const COLOR_OPTIONS = Array.from({ length: 13 }, (_, i) => i);
@@ -346,7 +347,9 @@ export default function GhausiaCollection() {
   };
 
   const promptBillAmountForCompletion = (lot, options = {}) => new Promise((resolve) => {
-    const rawBill = Number(options.billAmountOverride ?? lot.billAmount ?? 0);
+    const effective = getAdminLedgerOrBusinessBill(lot, partyEdits[lot.id] || {});
+    const ov = options.billAmountOverride;
+    const rawBill = ov !== undefined && ov !== null ? Number(ov) : Number(effective || lot.billAmount || 0);
     completeBillResolveRef.current = resolve;
     setCompleteBillInput(rawBill > 0 ? String(rawBill) : '');
     setCompleteBillError('');
@@ -525,13 +528,9 @@ export default function GhausiaCollection() {
     ),
     [visibleLots],
   );
-  const getBillableAmount = (lot) => {
-    const change = partyEdits[lot.id]?.amountChangeNote;
-    if (change) {
-      return Math.max(Number(change.difference || 0), 0);
-    }
-    return Number(lot.billAmount || 0);
-  };
+  /** Same “reconciled” bill as Party Ledger (admin): party ledger amount when set, else lot bill. */
+  const getBillableAmount = (lot) =>
+    getAdminLedgerOrBusinessBill(lot, partyEdits[lot.id] || {});
   const billableTotal = billable.reduce((s, l) => s + getBillableAmount(l), 0);
   const ownerIn = payments.filter(p => p.type === 'Received').reduce((s, p) => s + p.amount, 0);
   const ownerPaidToOwner = payments
@@ -972,7 +971,7 @@ export default function GhausiaCollection() {
                       </div>
                     </div>
                   ) : (
-                    <strong style={{ color: '#92600A' }}>₨{Number(l.billAmount || 0).toLocaleString()}</strong>
+                    <strong style={{ color: '#92600A' }}>₨{getBillableAmount(l).toLocaleString()}</strong>
                   )}
                   <button
                     type="button"
@@ -1135,7 +1134,7 @@ export default function GhausiaCollection() {
                     }
                   </td>
                   <td style={{ textAlign: 'right', fontWeight: 700, color: '#1e40af' }}>
-                    ₨{Number(l.billAmount || 0).toLocaleString()}
+                    ₨{getBillableAmount(l).toLocaleString()}
                   </td>
                   <td>
                     <div style={{ display: 'flex', gap: 6 }}>
@@ -1189,7 +1188,9 @@ export default function GhausiaCollection() {
       {completeBillModal && (() => {
         const lot = completeBillModal.lot;
         const fromBillable = !!completeBillModal.fromBillable;
-        const rawBill = Number(completeBillModal.billAmountOverride ?? lot.billAmount ?? 0);
+        const ov = completeBillModal.billAmountOverride;
+        const effective = getAdminLedgerOrBusinessBill(lot, partyEdits[lot.id] || {});
+        const rawBill = ov !== undefined && ov !== null ? Number(ov) : Number(effective || lot.billAmount || 0);
         const confirmAmt = Number(completeBillInput);
         const amountForOwnerCheck = (!Number.isNaN(confirmAmt) && confirmAmt > 0 ? confirmAmt : rawBill);
         const amountBill = rawBill.toLocaleString();

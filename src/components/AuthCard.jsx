@@ -1,16 +1,39 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 
-export default function AuthCard({ title, subtitle, children, footer, sideTitle, sideText }) {
+const DEFAULT_SIDE_TITLE = 'Production, parties, and payments in one place.';
+const DEFAULT_SIDE_TEXT =
+  'Secure access for managing embroidery work, ledgers, and financial activity.';
+
+export default function AuthCard({
+  title,
+  subtitle,
+  children,
+  footer,
+  sideTitle,
+  sideText,
+  brandLogoSrc,
+  brandKicker,
+  brandHomeAriaLabel,
+  brandMarkLetter = 'G',
+}) {
+  const kicker = brandKicker ?? 'Ghausia Textile Manager';
+
   return (
-    <div className="auth-page">
-      <div className="auth-shell">
+    <div className={`auth-page${brandLogoSrc ? ' auth-page--seam-grace' : ''}`}>
+      <div className={`auth-shell${brandLogoSrc ? ' auth-shell--seam-grace' : ''}`}>
         <section className="auth-brand-panel">
-          <div className="auth-brand-mark">G</div>
+          {brandLogoSrc ? (
+            <div className="auth-brand-logo-shell">
+              <img className="auth-brand-logo-img" src={brandLogoSrc} alt="" decoding="async" />
+            </div>
+          ) : (
+            <div className="auth-brand-mark">{brandMarkLetter}</div>
+          )}
           <div>
-            <div className="auth-kicker">Ghausia Textile Manager</div>
-            <h1>{sideTitle || 'Production, parties, and payments in one place.'}</h1>
-            <p>{sideText || 'Secure access for managing embroidery work, ledgers, and financial activity.'}</p>
+            <div className="auth-kicker">{kicker}</div>
+            <h1>{sideTitle || DEFAULT_SIDE_TITLE}</h1>
+            <p>{sideText || DEFAULT_SIDE_TEXT}</p>
           </div>
           <div className="auth-brand-grid">
             <div>
@@ -29,7 +52,19 @@ export default function AuthCard({ title, subtitle, children, footer, sideTitle,
         </section>
 
         <section className="auth-card">
-          <Link className="auth-home-link" to="/login">Ghausia</Link>
+          {brandLogoSrc ? (
+            <Link
+              className="auth-home-link auth-home-link--logo"
+              to="/login"
+              aria-label={brandHomeAriaLabel || 'Seam & Grace Embroidery home'}
+            >
+              <img src={brandLogoSrc} alt="" decoding="async" />
+            </Link>
+          ) : (
+            <Link className="auth-home-link" to="/login">
+              Ghausia
+            </Link>
+          )}
           <div className="auth-card-header">
             <div className="auth-card-badge">Secure access</div>
             <h2>{title}</h2>
