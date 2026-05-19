@@ -5,6 +5,8 @@ import { useAuth } from '../context/AuthContext';
 import { getRegistrationEmailError } from '../utils/registrationEmail';
 import { formatApiError } from '../utils/formatApiError';
 
+const brandLogoSrc = `${process.env.PUBLIC_URL || ''}/seam-grace-logo.png`;
+
 export default function ForgotPassword() {
   const { forgotPassword } = useAuth();
   const [email, setEmail] = useState('');
@@ -42,6 +44,8 @@ export default function ForgotPassword() {
 
   return (
     <AuthCard
+      brandLogoSrc={brandLogoSrc}
+      brandKicker="Embroidery workspace"
       title="Recover password"
       subtitle="Enter your email and we will send a secure reset link."
       sideTitle="Reset access without losing your work history."

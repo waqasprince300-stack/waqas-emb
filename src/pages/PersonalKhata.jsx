@@ -34,6 +34,7 @@ import {
   downloadPersonalKhataSummaryPdf,
 } from '../utils/personalKhataPdf';
 import { buildKhataShareUrl } from '../utils/personalKhataShare';
+import { useAuth } from '../context/AuthContext';
 
 const fmtMoney = (n) =>
   `₨${Math.abs(Number(n) || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
@@ -127,6 +128,9 @@ async function compressImageDataUrl(dataUrl, maxBytes = PK_IMAGE_TARGET_BYTES) {
 }
 
 export default function PersonalKhata({ standalone = false } = {}) {
+  const { user } = useAuth();
+  const khataStorageScope =
+    user?.role === 'personal_khata' ? String(user.id || user._id || '').trim() : '';
   const { contactId } = useParams();
   const navigate = useNavigate();
   const [contacts, setContacts] = useState([]);
@@ -206,18 +210,22 @@ export default function PersonalKhata({ standalone = false } = {}) {
   }, [billLightboxSrc]);
 
   useEffect(() => {
-    const data = loadKhataState();
+    setKhataHydrated(false);
+    const data = loadKhataState(khataStorageScope || undefined);
     setBusinesses(data.businesses);
     setActiveBusinessId(data.activeBusinessId);
     setContacts(data.contacts);
     setEntries(data.entries);
     setKhataHydrated(true);
-  }, []);
+  }, [khataStorageScope]);
 
   useEffect(() => {
     if (!khataHydrated) return;
-    saveKhataState({ businesses, activeBusinessId, contacts, entries });
-  }, [khataHydrated, businesses, activeBusinessId, contacts, entries]);
+    saveKhataState(
+      { businesses, activeBusinessId, contacts, entries },
+      khataStorageScope || undefined,
+    );
+  }, [khataHydrated, khataStorageScope, businesses, activeBusinessId, contacts, entries]);
 
   const scopedContacts = useMemo(() => {
     const bid = String(activeBusinessId || '').trim();
@@ -1504,6 +1512,19 @@ export default function PersonalKhata({ standalone = false } = {}) {
             <p className="pk-home-sub">
               Dena (red) aur lena (green) alag — har entry wazahat ke sath likhein.
             </p>
+            {(!user || user.role !== 'personal_khata') && (
+              <p style={{ margin: '10px 0 0', fontSize: 13, lineHeight: 1.45 }}>
+                <Link to="/personal-khata/account" style={{ color: '#4f46e5', fontWeight: 700 }}>
+                  Account banayen ya sign in karein (email ya mobile)
+                </Link>
+                <span style={{ color: '#64748b', fontWeight: 500 }}> — apna khata har device par</span>
+              </p>
+            )}
+            {user?.role === 'personal_khata' && (
+              <p style={{ margin: '10px 0 0', fontSize: 12.5, color: '#4338ca', fontWeight: 600 }}>
+                Signed in — yeh khata is account ke naam par is browser me alag save hai.
+              </p>
+            )}
           </div>
         </div>
         <div style={{ marginTop: 14, marginBottom: 6, flexWrap: 'wrap', gap: 10 }} className="pk-biz-strip">

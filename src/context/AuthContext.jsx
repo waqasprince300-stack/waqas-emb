@@ -21,7 +21,9 @@ export const normalizeAuthResponse = (response) => {
   const user = payload.user || payload;
   const token = payload.token || payload.accessToken || response?.token || response?.accessToken || '';
   const rawRole = user?.role;
-  const role = ['super_admin', 'admin', 'party'].includes(rawRole) ? rawRole : 'party';
+  const role = ['super_admin', 'admin', 'party', 'personal_khata'].includes(rawRole)
+    ? rawRole
+    : 'party';
   return {
     token,
     user: {
@@ -92,10 +94,20 @@ export function AuthProvider({ children }) {
     return () => registerSessionExpiredHandler(null);
   }, []);
 
-  const signup = useCallback(async ({ name, email, password, role, partyId, partyName, adminEmail }) => {
+  const signup = useCallback(async ({
+    name,
+    email,
+    phone,
+    password,
+    role,
+    partyId,
+    partyName,
+    adminEmail,
+  }) => {
     return apiService.signup({
       name: String(name || '').trim(),
-      email: normalizeEmail(email),
+      email: email != null ? normalizeEmail(email) : '',
+      phone: phone != null ? String(phone || '').trim() : '',
       password,
       role,
       partyId,
@@ -104,11 +116,14 @@ export function AuthProvider({ children }) {
     });
   }, []);
 
-  const login = useCallback(async ({ email, password }) => {
-    const response = await apiService.login({
-      email: normalizeEmail(email),
+  /** `email` and/or `phone` — backend should accept one of them (Personal Khata). */
+  const login = useCallback(async ({ email, phone, password }) => {
+    const phoneTrim = phone != null ? String(phone || '').trim() : '';
+    const body = {
       password,
-    });
+      ...(phoneTrim ? { phone: phoneTrim } : { email: normalizeEmail(email) }),
+    };
+    const response = await apiService.login(body);
     return saveSession(normalizeAuthResponse(response));
   }, [saveSession]);
 
@@ -141,6 +156,7 @@ export function AuthProvider({ children }) {
     isTenantAdmin: user?.role === 'admin',
     isSuperAdmin: user?.role === 'super_admin',
     isParty: user?.role === 'party',
+    isPersonalKhata: user?.role === 'personal_khata',
     signup,
     login,
     forgotPassword,

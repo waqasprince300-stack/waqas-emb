@@ -122,6 +122,9 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen }) {
     }
   };
   const visibleNavItems = navItems.filter((item) => {
+    if (user?.role === 'personal_khata') {
+      return item.to === '/personal-khata';
+    }
     if (isSuperAdmin) {
       if (item.superOnly) return true;
       return item.to === '/personal-khata';
@@ -235,6 +238,19 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen }) {
                 title={user.email}
               >
                 {user.email}
+              </div>
+            ) : user.phone ? (
+              <div
+                style={{
+                  marginTop: 4,
+                  fontSize: 11,
+                  color: '#94a3b8',
+                  fontWeight: 500,
+                  lineHeight: 1.35,
+                }}
+                title={user.phone}
+              >
+                {user.phone}
               </div>
             ) : null}
             <div style={{ marginTop: 4, textTransform: 'capitalize' }}>

@@ -7,7 +7,7 @@ import Loader from '../components/Loader';
 import LoaderDashboard from '../components/LoaderDashboard';
 import { DateRangeSelect, isWithinDateRange, latestDateFrom, compareRowsByUpdatedNewestFirst } from '../utils/dateFilters';
 import { workspaceDisplayTitleForLot } from '../utils/businessWorkspace';
-import { getAdminLedgerOrBusinessBill } from '../utils/partyBillPrivacy';
+import { getAdminLedgerOrBusinessBill, getBusinessBillAmount } from '../utils/partyBillPrivacy';
 
 const FABRICS = ['Lawn', 'Velvet', 'Cambric'];
 const COLOR_OPTIONS = Array.from({ length: 13 }, (_, i) => i);
@@ -405,7 +405,7 @@ export default function GhausiaCollection() {
   };
 
   const handleCompleteFromBillable = async (lot) => {
-    const amount = await promptBillAmountForCompletion(lot, { fromBillable: true, billAmountOverride: getBillableAmount(lot) });
+    const amount = await promptBillAmountForCompletion(lot, { fromBillable: true, billAmountOverride: getOwnerBillableAmount(lot) });
     if (amount == null) return;
     await persistLotCompletedWithPayment(lot, amount, { fromBillable: true });
   };
@@ -528,10 +528,12 @@ export default function GhausiaCollection() {
     ),
     [visibleLots],
   );
-  /** Same “reconciled” bill as Party Ledger (admin): party ledger amount when set, else lot bill. */
-  const getBillableAmount = (lot) =>
-    getAdminLedgerOrBusinessBill(lot, partyEdits[lot.id] || {});
-  const billableTotal = billable.reduce((s, l) => s + getBillableAmount(l), 0);
+  /**
+   * Amount billable to owner: workspace lot bill only (not party ledger `partyBillAmount`).
+   * Party-facing figures stay on Party Ledger; this page’s owner tiles use the business-defined amount.
+   */
+  const getOwnerBillableAmount = (lot) => getBusinessBillAmount(lot);
+  const billableTotal = billable.reduce((s, l) => s + getOwnerBillableAmount(l), 0);
   const ownerIn = payments.filter(p => p.type === 'Received').reduce((s, p) => s + p.amount, 0);
   const ownerPaidToOwner = payments
     .filter((p) => p.type === 'Paid' && p.party === 'Owner')
@@ -965,13 +967,13 @@ export default function GhausiaCollection() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
                   {partyEdits[l.id]?.amountChangeNote ? (
                     <div style={{ textAlign: 'right', color: '#92600A' }}>
-                      <strong>₨{getBillableAmount(l).toLocaleString()}</strong>
+                      <strong>₨{getOwnerBillableAmount(l).toLocaleString()}</strong>
                       <div style={{ fontSize: 11, color: '#92400e', marginTop: 2 }}>
-                        Previous ₨{Number(partyEdits[l.id].amountChangeNote.previousAmount || 0).toLocaleString()} → Updated ₨{Number(partyEdits[l.id].amountChangeNote.updatedAmount || 0).toLocaleString()}
+                        Party ledger: Previous ₨{Number(partyEdits[l.id].amountChangeNote.previousAmount || 0).toLocaleString()} → Updated ₨{Number(partyEdits[l.id].amountChangeNote.updatedAmount || 0).toLocaleString()}
                       </div>
                     </div>
                   ) : (
-                    <strong style={{ color: '#92600A' }}>₨{getBillableAmount(l).toLocaleString()}</strong>
+                    <strong style={{ color: '#92600A' }}>₨{getOwnerBillableAmount(l).toLocaleString()}</strong>
                   )}
                   <button
                     type="button"
@@ -1134,7 +1136,7 @@ export default function GhausiaCollection() {
                     }
                   </td>
                   <td style={{ textAlign: 'right', fontWeight: 700, color: '#1e40af' }}>
-                    ₨{getBillableAmount(l).toLocaleString()}
+                    ₨{getOwnerBillableAmount(l).toLocaleString()}
                   </td>
                   <td>
                     <div style={{ display: 'flex', gap: 6 }}>

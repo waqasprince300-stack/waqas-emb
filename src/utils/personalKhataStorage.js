@@ -1,6 +1,12 @@
 const STORAGE_KEY_V1 = 'ghausia_personal_khata_v1';
 const STORAGE_KEY = 'ghausia_personal_khata_v2';
 
+/** Local persistence key: anonymous device khata vs logged-in Personal Khata account (per user id). */
+export function getKhataStorageKey(scopeUserId) {
+  const id = scopeUserId != null ? String(scopeUserId).trim() : '';
+  return id ? `${STORAGE_KEY}::user::${id}` : STORAGE_KEY;
+}
+
 export function nowIso() {
   return new Date().toISOString();
 }
@@ -26,9 +32,10 @@ function migrateV1ContactsEntries(defaultBizId, contacts = [], entries = []) {
 }
 
 /** Load raw state shape { businesses, activeBusinessId, contacts, entries } */
-export function loadKhataState() {
+export function loadKhataState(scopeUserId) {
+  const storageKey = getKhataStorageKey(scopeUserId);
   try {
-    const rawNew = localStorage.getItem(STORAGE_KEY);
+    const rawNew = localStorage.getItem(storageKey);
     if (rawNew) {
       const data = JSON.parse(rawNew);
       const businesses = Array.isArray(data.businesses) && data.businesses.length
@@ -98,14 +105,15 @@ export function loadKhataState() {
   };
 }
 
-export function saveKhataState(state) {
+export function saveKhataState(state, scopeUserId) {
+  const storageKey = getKhataStorageKey(scopeUserId);
   const payload = {
     businesses: state.businesses,
     activeBusinessId: state.activeBusinessId,
     contacts: state.contacts,
     entries: state.entries,
   };
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+  localStorage.setItem(storageKey, JSON.stringify(payload));
 }
 
 export function contactBalance(contactId, entries) {

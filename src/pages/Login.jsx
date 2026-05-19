@@ -25,7 +25,12 @@ export default function Login() {
   }, [isAuthenticated]);
 
   if (isAuthenticated) {
-    const to = user?.role === 'super_admin' ? '/super-admin/pending-admins' : '/';
+    const to =
+      user?.role === 'super_admin'
+        ? '/super-admin/pending-admins'
+        : user?.role === 'personal_khata'
+          ? '/personal-khata'
+          : '/';
     return <Navigate to={to} replace />;
   }
 
@@ -42,6 +47,8 @@ export default function Login() {
       const userAfter = await login(form);
       if (userAfter?.role === 'super_admin') {
         navigate('/super-admin/pending-admins', { replace: true });
+      } else if (userAfter?.role === 'personal_khata') {
+        navigate('/personal-khata', { replace: true });
       } else {
         navigate('/', { replace: true });
       }
@@ -66,8 +73,8 @@ export default function Login() {
         <>
           Need an account? <Link className="auth-inline-link" to="/signup">Create one</Link>
           <div style={{ marginTop: 12, fontSize: 13 }}>
-            <Link className="auth-inline-link" to="/personal-khata">
-              Personal Khata · bina login kholein →
+            <Link className="auth-inline-link" to="/personal-khata/account" style={{ fontWeight: 600 }}>
+              Personal Khata — register / sign in (email or phone)
             </Link>
           </div>
         </>

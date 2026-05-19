@@ -17,6 +17,7 @@ import UserApprovals from './pages/UserApprovals';
 import SuperAdminApprovals from './pages/SuperAdminApprovals';
 import ReviewLots from './pages/ReviewLots';
 import PersonalKhata from './pages/PersonalKhata';
+import PersonalKhataAccount from './pages/PersonalKhataAccount';
 import PersonalKhataShared from './pages/PersonalKhataShared';
 
 function PersonalKhataAccessibleRoute({ sidebarOpen, setSidebarOpen }) {
@@ -100,10 +101,14 @@ function Layout({ children, sidebarOpen, setSidebarOpen }) {
 }
 
 function RequireAuth({ children, adminOnly = false }) {
-  const { isAuthenticated, isAdmin, isSuperAdmin } = useAuth();
+  const { isAuthenticated, isAdmin, isSuperAdmin, isPersonalKhata } = useAuth();
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
+  }
+
+  if (isPersonalKhata) {
+    return <Navigate to="/personal-khata" replace />;
   }
 
   if (adminOnly && !isAdmin) {
@@ -161,6 +166,7 @@ function AppRoutes() {
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/signup" element={<Signup />} />
+      <Route path="/personal-khata/account" element={<PersonalKhataAccount />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password/:token" element={<ResetPassword />} />
       <Route

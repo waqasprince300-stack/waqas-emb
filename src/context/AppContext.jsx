@@ -203,6 +203,26 @@ export function AppProvider({ children }) {
       return;
     }
 
+    if (user?.role === 'personal_khata') {
+      setParties(INITIAL_PARTIES);
+      setGhausiaLots(INITIAL_GHAUSIA);
+      setPartyEdits(INITIAL_PARTY_EDITS);
+      setPayments(INITIAL_PAYMENTS);
+      setAdminReportingLots(INITIAL_GHAUSIA);
+      setAdminReportingPayments(INITIAL_PAYMENTS);
+      setAdminReportingPartyEdits(INITIAL_PARTY_EDITS);
+      setPartyCrossLots(INITIAL_GHAUSIA);
+      setPartyCrossPartyEdits(INITIAL_PARTY_EDITS);
+      setPartyCrossPayments(INITIAL_PAYMENTS);
+      setBusinessOwners([]);
+      try {
+        localStorage.removeItem(WORKSPACE_VIEW_ALL_KEY);
+      } catch { /* ignore */ }
+      setViewAllWorkspaces(false);
+      setInitialDataLoading(false);
+      return;
+    }
+
     async function loadAppData() {
       setInitialDataLoading(true);
       try {

@@ -6,6 +6,8 @@ import { useAuth, normalizeAuthResponse } from '../context/AuthContext';
 import { getRegistrationEmailError } from '../utils/registrationEmail';
 import { formatApiError } from '../utils/formatApiError';
 
+const brandLogoSrc = `${process.env.PUBLIC_URL || ''}/seam-grace-logo.png`;
+
 export default function Signup() {
   const { isAuthenticated, user, signup, refreshSession } = useAuth();
   const navigate = useNavigate();
@@ -22,7 +24,12 @@ export default function Signup() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   if (isAuthenticated) {
-    const to = user?.role === 'super_admin' ? '/super-admin/pending-admins' : '/';
+    const to =
+      user?.role === 'super_admin'
+        ? '/super-admin/pending-admins'
+        : user?.role === 'personal_khata'
+          ? '/personal-khata'
+          : '/';
     return <Navigate to={to} replace />;
   }
 
@@ -57,8 +64,16 @@ export default function Signup() {
       const token = payload.token || payload.accessToken;
 
       if (token) {
-        refreshSession(normalizeAuthResponse(raw));
-        navigate('/', { replace: true });
+        const session = normalizeAuthResponse(raw);
+        refreshSession(session);
+        const u = session.user;
+        const dest =
+          u?.role === 'super_admin'
+            ? '/super-admin/pending-admins'
+            : u?.role === 'personal_khata'
+              ? '/personal-khata'
+              : '/';
+        navigate(dest, { replace: true });
         return;
       }
 
@@ -92,6 +107,8 @@ export default function Signup() {
 
   return (
     <AuthCard
+      brandLogoSrc={brandLogoSrc}
+      brandKicker="Embroidery workspace"
       title="Create account"
       subtitle="Party users join an existing organization with their business administrator’s email. Additional business administrators can register and are activated after platform verification."
       sideTitle="Super administrator verifies each new organization admin. Each approved admin can run their own workspaces and approve their party users."

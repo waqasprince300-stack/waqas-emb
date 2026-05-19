@@ -4,6 +4,8 @@ import AuthCard from '../components/AuthCard';
 import { useAuth, normalizeAuthResponse } from '../context/AuthContext';
 import { formatApiError } from '../utils/formatApiError';
 
+const brandLogoSrc = `${process.env.PUBLIC_URL || ''}/seam-grace-logo.png`;
+
 export default function ResetPassword() {
   const { token } = useParams();
   const navigate = useNavigate();
@@ -31,7 +33,12 @@ export default function ResetPassword() {
       const payload = raw?.data || raw || {};
       if (payload.token && payload.user) {
         refreshSession(normalizeAuthResponse(raw));
-        const dest = payload.user?.role === 'super_admin' ? '/super-admin/pending-admins' : '/';
+        const dest =
+          payload.user?.role === 'super_admin'
+            ? '/super-admin/pending-admins'
+            : payload.user?.role === 'personal_khata'
+              ? '/personal-khata'
+              : '/';
         navigate(dest, { replace: true });
         return;
       }
@@ -48,6 +55,8 @@ export default function ResetPassword() {
 
   return (
     <AuthCard
+      brandLogoSrc={brandLogoSrc}
+      brandKicker="Embroidery workspace"
       title="Set new password"
       subtitle="Choose a fresh password with at least 8 characters."
       sideTitle="Secure your account and get back to production tracking."
