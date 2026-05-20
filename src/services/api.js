@@ -203,21 +203,26 @@ class ApiService {
   }
 
   async approveUser(id, data) {
-    return this.request(`/users/${id}/approve`, {
+    const safe = encodeURIComponent(String(id ?? '').trim());
+    return this.request(`/users/${safe}/approve`, {
       method: 'PATCH',
-      body: JSON.stringify(data),
+      body: JSON.stringify(data ?? {}),
     });
   }
 
   async rejectUser(id) {
-    return this.request(`/users/${id}/reject`, {
+    const safe = encodeURIComponent(String(id ?? '').trim());
+    return this.request(`/users/${safe}/reject`, {
       method: 'PATCH',
+      body: JSON.stringify({}),
     });
   }
 
   async disableUser(id) {
-    return this.request(`/users/${id}/disable`, {
+    const safe = encodeURIComponent(String(id ?? '').trim());
+    return this.request(`/users/${safe}/disable`, {
       method: 'PATCH',
+      body: JSON.stringify({}),
     });
   }
 

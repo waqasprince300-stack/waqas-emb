@@ -7,6 +7,20 @@ import { compareRowsByUpdatedNewestFirst } from '../utils/dateFilters';
 
 const getUserId = (user) => String(user?._id || user?.id || '');
 
+/** Mongo populate may expose `partyId` as `{ _id, name }` — API approve body expects an id string. */
+function normalizePartyIdRef(raw) {
+  if (raw == null || raw === '') return '';
+  if (typeof raw === 'object') {
+    const oid = raw._id ?? raw.id;
+    return oid != null && oid !== '' ? String(oid) : '';
+  }
+  return String(raw);
+}
+
+function normalizedPartyIdFromUser(user) {
+  return normalizePartyIdRef(user?.partyId);
+}
+
 export default function UserApprovals() {
   const { parties } = useApp();
   const [users, setUsers] = useState([]);
@@ -50,9 +64,10 @@ export default function UserApprovals() {
 
   const approveUser = async (user) => {
     const id = getUserId(user);
-    const form = approvalForms[id] || { partyId: user.partyId || '' };
+    const merged = approvalForms[id] || { partyId: normalizedPartyIdFromUser(user) };
+    const partyId = normalizePartyIdRef(merged.partyId).trim();
 
-    if (!form.partyId) {
+    if (!partyId) {
       setError('Select a party before approving a party user.');
       return;
     }
@@ -60,7 +75,7 @@ export default function UserApprovals() {
     setSavingId(id);
     setError('');
     try {
-      const updated = await apiService.approveUser(id, form);
+      const updated = await apiService.approveUser(id, { partyId });
       setUsers((current) => current.map((item) => (getUserId(item) === id ? updated : item)));
     } catch (err) {
       setError(err.message || 'Unable to approve user');
@@ -152,7 +167,7 @@ export default function UserApprovals() {
               ) : (
                 sortedUsers.map((user) => {
                   const id = getUserId(user);
-                  const form = approvalForms[id] || { partyId: user.partyId || '' };
+                  const form = approvalForms[id] || { partyId: normalizedPartyIdFromUser(user) };
                   const isPending = user.status === 'pending';
                   const isSaving = savingId === id;
 
