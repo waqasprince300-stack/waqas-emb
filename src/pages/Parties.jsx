@@ -239,7 +239,6 @@ export default function Parties() {
       });
     }
     return result;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [parties, rangedLots, rangedPayments, reportingPartyEdits]);
 
   const getLotStats = (partyId) => statsByPartyId.get(String(partyId ?? '')) || EMPTY_LOT_STATS;
