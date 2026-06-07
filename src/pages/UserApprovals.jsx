@@ -7,6 +7,14 @@ import { compareRowsByUpdatedNewestFirst } from '../utils/dateFilters';
 
 const getUserId = (user) => String(user?._id || user?.id || '');
 
+const STATUS_BADGES = {
+  pending: { color: '#92400e', bg: '#fef3c7', border: '#fcd34d' },
+  approved: { color: '#166534', bg: '#dcfce7', border: '#86efac' },
+  disabled: { color: '#991b1b', bg: '#fee2e2', border: '#fca5a5' },
+  rejected: { color: '#475569', bg: '#f1f5f9', border: '#cbd5e1' },
+  default: { color: '#475569', bg: '#f1f5f9', border: '#cbd5e1' },
+};
+
 /** Mongo populate may expose `partyId` as `{ _id, name }` — API approve body expects an id string. */
 function normalizePartyIdRef(raw) {
   if (raw == null || raw === '') return '';
@@ -45,11 +53,6 @@ export default function UserApprovals() {
   useEffect(() => {
     loadUsers();
   }, []);
-
-  const pendingUsers = useMemo(
-    () => users.filter((user) => user.status === 'pending'),
-    [users],
-  );
 
   const setFormValue = (userId, key, value) => {
     setApprovalForms((prev) => ({
@@ -112,6 +115,53 @@ export default function UserApprovals() {
     }
   };
 
+  const enableUser = async (user) => {
+    const id = getUserId(user);
+    setSavingId(id);
+    setError('');
+    try {
+      const updated = await apiService.enableUser(id);
+      setUsers((current) => current.map((item) => (getUserId(item) === id ? updated : item)));
+    } catch (err) {
+      setError(err.message || 'Unable to enable user');
+    } finally {
+      setSavingId('');
+    }
+  };
+
+  const saveParty = async (user) => {
+    const id = getUserId(user);
+    const merged = approvalForms[id] || { partyId: normalizedPartyIdFromUser(user) };
+    const partyId = normalizePartyIdRef(merged.partyId).trim();
+    if (!partyId) {
+      setError('Select a party first.');
+      return;
+    }
+    setSavingId(id);
+    setError('');
+    try {
+      const updated = await apiService.updateUserParty(id, { partyId });
+      setUsers((current) => current.map((item) => (getUserId(item) === id ? updated : item)));
+      setApprovalForms((prev) => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+    } catch (err) {
+      setError(err.message || 'Unable to change party');
+    } finally {
+      setSavingId('');
+    }
+  };
+
+  const counts = useMemo(() => {
+    const c = { pending: 0, approved: 0, disabled: 0, rejected: 0 };
+    for (const u of users) {
+      if (u.status in c) c[u.status] += 1;
+    }
+    return c;
+  }, [users]);
+
   const sortedUsers = useMemo(
     () =>
       [...users].sort((a, b) =>
@@ -133,16 +183,44 @@ export default function UserApprovals() {
       <div className="page-header">
         <div>
           <div className="page-title">Users / Approvals</div>
-          <div className="page-subtitle">Approve party users who requested your organization and link them to parties</div>
+          <div className="page-subtitle">
+            Approve party users, switch their linked party, or disable / re-enable access.
+          </div>
         </div>
         <button className="btn btn-ghost" onClick={loadUsers}>Refresh</button>
       </div>
 
       {error && <div className="alert alert-warning">{error}</div>}
 
-      <div className="stat-card" style={{ marginBottom: 18 }}>
-        <div className="stat-label">Pending Approvals</div>
-        <div style={{ fontSize: 28, fontWeight: 800, color: '#1e40af' }}>{pendingUsers.length}</div>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
+          gap: 12,
+          marginBottom: 18,
+        }}
+      >
+        {[
+          { label: 'Pending', value: counts.pending, color: '#b45309' },
+          { label: 'Approved', value: counts.approved, color: '#15803d' },
+          { label: 'Disabled', value: counts.disabled, color: '#b91c1c' },
+          { label: 'Rejected', value: counts.rejected, color: '#64748b' },
+        ].map((card) => (
+          <div
+            key={card.label}
+            style={{
+              background: '#fff',
+              border: '1px solid var(--border)',
+              borderRadius: 10,
+              padding: '14px 16px',
+            }}
+          >
+            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>
+              {card.label}
+            </div>
+            <div style={{ fontSize: 26, fontWeight: 800, color: card.color, marginTop: 4 }}>{card.value}</div>
+          </div>
+        ))}
       </div>
 
       <div className="table-wrapper">
@@ -169,19 +247,45 @@ export default function UserApprovals() {
                   const id = getUserId(user);
                   const form = approvalForms[id] || { partyId: normalizedPartyIdFromUser(user) };
                   const isPending = user.status === 'pending';
+                  const isApproved = user.status === 'approved';
+                  const isDisabled = user.status === 'disabled';
+                  const isRejected = user.status === 'rejected';
                   const isSaving = savingId === id;
+                  const canEditParty = isPending || isApproved || isDisabled;
+                  const partyChanged =
+                    !isPending &&
+                    normalizePartyIdRef(form.partyId).trim() !== normalizedPartyIdFromUser(user);
+
+                  const badge = STATUS_BADGES[user.status] || STATUS_BADGES.default;
 
                   return (
                     <tr key={id}>
                       <td style={{ fontWeight: 700 }}>{user.name}</td>
                       <td>{user.email}</td>
-                      <td style={{ textTransform: 'capitalize' }}>{user.status}</td>
+                      <td>
+                        <span
+                          style={{
+                            display: 'inline-block',
+                            padding: '3px 10px',
+                            borderRadius: 999,
+                            fontSize: 12,
+                            fontWeight: 700,
+                            color: badge.color,
+                            background: badge.bg,
+                            border: `1px solid ${badge.border}`,
+                            textTransform: 'capitalize',
+                          }}
+                        >
+                          {user.status}
+                        </span>
+                      </td>
                       <td>
                         <select
                           className="form-select"
                           value={form.partyId}
-                          disabled={!isPending || isSaving}
+                          disabled={!canEditParty || isSaving}
                           onChange={(event) => setFormValue(id, 'partyId', event.target.value)}
+                          style={partyChanged ? { borderColor: '#6366f1', boxShadow: '0 0 0 2px rgba(99,102,241,0.15)' } : undefined}
                         >
                           <option value="">Select party</option>
                           {parties.map((party) => (
@@ -193,10 +297,10 @@ export default function UserApprovals() {
                       </td>
                       <td>
                         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                          {isPending ? (
+                          {isPending && (
                             <>
                               <button
-                                className="btn btn-primary btn-sm"
+                                className="btn btn-success btn-sm"
                                 disabled={isSaving}
                                 onClick={() => approveUser(user)}
                               >
@@ -204,20 +308,48 @@ export default function UserApprovals() {
                               </button>
                               <button
                                 className="btn btn-ghost btn-sm"
+                                style={{ color: '#b91c1c', borderColor: '#fecaca' }}
                                 disabled={isSaving}
                                 onClick={() => rejectUser(user)}
                               >
                                 Reject
                               </button>
                             </>
-                          ) : (
+                          )}
+
+                          {(isApproved || isDisabled) && partyChanged && (
+                            <button
+                              className="btn btn-primary btn-sm"
+                              disabled={isSaving}
+                              onClick={() => saveParty(user)}
+                            >
+                              Save party
+                            </button>
+                          )}
+
+                          {isApproved && (
                             <button
                               className="btn btn-ghost btn-sm"
-                              disabled={isSaving || user.status === 'disabled'}
+                              style={{ color: '#b91c1c', borderColor: '#fecaca' }}
+                              disabled={isSaving}
                               onClick={() => disableUser(user)}
                             >
                               Disable
                             </button>
+                          )}
+
+                          {isDisabled && (
+                            <button
+                              className="btn btn-success btn-sm"
+                              disabled={isSaving}
+                              onClick={() => enableUser(user)}
+                            >
+                              Enable
+                            </button>
+                          )}
+
+                          {isRejected && (
+                            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>—</span>
                           )}
                         </div>
                       </td>

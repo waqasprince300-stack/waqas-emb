@@ -486,7 +486,7 @@ export default function PartyLedger() {
   const paginatedLots = filtered.slice(pageStart, pageStart + PAGE_SIZE);
 
   const savePartyLotReceiptFromFile = async (lot, file) => {
-    if (!file || !isParty) return;
+    if (!file) return;
     setBillPicSavingLotId(lot.id);
     try {
       const raw = await readReceiptAsStoredValue(file);
@@ -507,7 +507,6 @@ export default function PartyLedger() {
   };
 
   const removePartyLotReceipt = async (lot) => {
-    if (!isParty) return;
     const ok = await Swal.fire({
       icon: "question",
       title: "Delete bill photo?",
@@ -677,28 +676,32 @@ export default function PartyLedger() {
           };
         }
 
-        await updatePartyEdit(
-          editingId,
-          {
-            completeDate:
-              editForm.completeDate || new Date().toISOString().slice(0, 10),
-            partyBillAmount: nextLedgerAmount,
-            receipt: receiptToSave,
-          },
-          lotWorkspaceOpts(lot),
-        );
-
-        if (partyChanged) {
-          const sel = parties.find((p) => samePartyId(p.id, editForm.partyId));
-          await updateLot(
+        const reviewTasks = [
+          updatePartyEdit(
             editingId,
             {
-              partyId: editForm.partyId,
-              partyName: sel?.name || editForm.partyName,
+              completeDate:
+                editForm.completeDate || new Date().toISOString().slice(0, 10),
+              partyBillAmount: nextLedgerAmount,
+              receipt: receiptToSave,
             },
             lotWorkspaceOpts(lot),
+          ),
+        ];
+        if (partyChanged) {
+          const sel = parties.find((p) => samePartyId(p.id, editForm.partyId));
+          reviewTasks.push(
+            updateLot(
+              editingId,
+              {
+                partyId: editForm.partyId,
+                partyName: sel?.name || editForm.partyName,
+              },
+              lotWorkspaceOpts(lot),
+            ),
           );
         }
+        await Promise.all(reviewTasks);
 
         setEditingId(null);
         setLedgerEditKind(null);
@@ -795,15 +798,6 @@ export default function PartyLedger() {
       }
 
       if (editForm.status === "Completed") {
-        await updatePartyEdit(editingId, {
-          completeDate:
-            editForm.completeDate || new Date().toISOString().slice(0, 10),
-          partyBillAmount: Number(editForm.billAmount) || 0,
-          receipt: receiptToSave,
-          notes: editForm.notes,
-          overrideStatus: "Pending Approval",
-          ...(amountChangeNote ? { amountChangeNote } : {}),
-        }, lotWorkspaceOpts(lot));
         const lotUpdates = {
           status: "pending approval",
           receivedBackDate:
@@ -814,7 +808,18 @@ export default function PartyLedger() {
           lotUpdates.partyId = editForm.partyId;
           lotUpdates.partyName = sel?.name || editForm.partyName;
         }
-        await updateLot(editingId, lotUpdates, lotWorkspaceOpts(lot));
+        await Promise.all([
+          updatePartyEdit(editingId, {
+            completeDate:
+              editForm.completeDate || new Date().toISOString().slice(0, 10),
+            partyBillAmount: Number(editForm.billAmount) || 0,
+            receipt: receiptToSave,
+            notes: editForm.notes,
+            overrideStatus: "Pending Approval",
+            ...(amountChangeNote ? { amountChangeNote } : {}),
+          }, lotWorkspaceOpts(lot)),
+          updateLot(editingId, lotUpdates, lotWorkspaceOpts(lot)),
+        ]);
       } else {
         if (
           isParty &&
@@ -837,13 +842,6 @@ export default function PartyLedger() {
           return;
         }
         const nextOverrideStatus = editForm.status === "Pending" ? "Pending" : "In Progress";
-        await updatePartyEdit(editingId, {
-          completeDate: editForm.completeDate || null,
-          partyBillAmount: Number(editForm.billAmount) || 0,
-          receipt: receiptToSave,
-          notes: editForm.notes,
-          overrideStatus: nextOverrideStatus,
-        }, lotWorkspaceOpts(lot));
         const lotUpdates = {};
         const lowerStatus = (lot.status || "").toLowerCase();
         if (editForm.status === "Pending") {
@@ -861,9 +859,19 @@ export default function PartyLedger() {
           lotUpdates.partyId = editForm.partyId;
           lotUpdates.partyName = sel?.name || editForm.partyName;
         }
+        const stdTasks = [
+          updatePartyEdit(editingId, {
+            completeDate: editForm.completeDate || null,
+            partyBillAmount: Number(editForm.billAmount) || 0,
+            receipt: receiptToSave,
+            notes: editForm.notes,
+            overrideStatus: nextOverrideStatus,
+          }, lotWorkspaceOpts(lot)),
+        ];
         if (Object.keys(lotUpdates).length > 0) {
-          await updateLot(editingId, lotUpdates, lotWorkspaceOpts(lot));
+          stdTasks.push(updateLot(editingId, lotUpdates, lotWorkspaceOpts(lot)));
         }
+        await Promise.all(stdTasks);
       }
 
       setEditingId(null);
@@ -1524,7 +1532,7 @@ export default function PartyLedger() {
                               No bill
                             </span>
                           )}
-                          {isParty ? (
+                          {(isAdmin || (isParty && displayStatus !== "Completed")) ? (
                             <>
                               <input
                                 id={`pl-bill-${l.id}`}

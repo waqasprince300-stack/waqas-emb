@@ -35,6 +35,25 @@ import {
 } from '../utils/personalKhataPdf';
 import { buildKhataShareUrl } from '../utils/personalKhataShare';
 import { useAuth } from '../context/AuthContext';
+import { apiService } from '../services/api';
+
+/** Ensure a khata state from any source has a valid business list + active id. */
+function normalizeKhataState(raw) {
+  const businesses =
+    Array.isArray(raw?.businesses) && raw.businesses.length
+      ? raw.businesses
+      : [{ id: newId(), name: 'Main business', createdAt: nowIso() }];
+  let activeBusinessId = String(raw?.activeBusinessId || '').trim();
+  if (!businesses.some((b) => b.id === activeBusinessId)) {
+    activeBusinessId = businesses[0].id;
+  }
+  return {
+    businesses,
+    activeBusinessId,
+    contacts: Array.isArray(raw?.contacts) ? raw.contacts : [],
+    entries: Array.isArray(raw?.entries) ? raw.entries : [],
+  };
+}
 
 const fmtMoney = (n) =>
   `₨${Math.abs(Number(n) || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
@@ -210,21 +229,79 @@ export default function PersonalKhata({ standalone = false } = {}) {
   }, [billLightboxSrc]);
 
   useEffect(() => {
+    let cancelled = false;
+
+    const applyState = (data) => {
+      if (cancelled) return;
+      setBusinesses(data.businesses);
+      setActiveBusinessId(data.activeBusinessId);
+      setContacts(data.contacts);
+      setEntries(data.entries);
+      setKhataHydrated(true);
+    };
+
     setKhataHydrated(false);
-    const data = loadKhataState(khataStorageScope || undefined);
-    setBusinesses(data.businesses);
-    setActiveBusinessId(data.activeBusinessId);
-    setContacts(data.contacts);
-    setEntries(data.entries);
-    setKhataHydrated(true);
+
+    // Anonymous device khata stays local-only.
+    if (!khataStorageScope) {
+      applyState(loadKhataState(undefined));
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    // Logged-in Personal Khata: server is the source of truth so any device/browser sees the same data.
+    (async () => {
+      try {
+        const remote = await apiService.getPersonalKhata();
+        let state = normalizeKhataState(remote);
+        const remoteEmpty = state.contacts.length === 0 && state.entries.length === 0;
+        if (remoteEmpty) {
+          // First sync on this account — push up any data this device had stored locally.
+          const local = loadKhataState(khataStorageScope);
+          if (local.contacts.length > 0 || local.entries.length > 0) {
+            state = local;
+            try {
+              await apiService.savePersonalKhata(state);
+            } catch {
+              /* keep local copy; next change will retry */
+            }
+          }
+        }
+        // Mirror to localStorage as an offline cache.
+        try {
+          saveKhataState(state, khataStorageScope);
+        } catch {
+          /* ignore */
+        }
+        applyState(state);
+      } catch {
+        // Offline / server error — fall back to the local cache so the user is never blocked.
+        applyState(loadKhataState(khataStorageScope));
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [khataStorageScope]);
 
   useEffect(() => {
-    if (!khataHydrated) return;
-    saveKhataState(
-      { businesses, activeBusinessId, contacts, entries },
-      khataStorageScope || undefined,
-    );
+    if (!khataHydrated) return undefined;
+    const payload = { businesses, activeBusinessId, contacts, entries };
+
+    // Always keep a local cache (offline + fast reloads).
+    saveKhataState(payload, khataStorageScope || undefined);
+
+    if (!khataStorageScope) return undefined;
+
+    // Debounce server writes so rapid edits don't spam the API.
+    const t = setTimeout(() => {
+      apiService.savePersonalKhata(payload).catch(() => {
+        /* local cache already saved; will retry on next change */
+      });
+    }, 800);
+    return () => clearTimeout(t);
   }, [khataHydrated, khataStorageScope, businesses, activeBusinessId, contacts, entries]);
 
   const scopedContacts = useMemo(() => {
@@ -554,7 +631,7 @@ export default function PersonalKhata({ standalone = false } = {}) {
               gap: 10,
               flexWrap: 'wrap',
               padding: '10px 14px',
-              background: 'linear-gradient(90deg, #4f46e5, #7c3aed)',
+              background: '#1e293b',
               color: '#fff',
             }}
           >
@@ -625,11 +702,10 @@ export default function PersonalKhata({ standalone = false } = {}) {
             font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
           }
           .pk-hero {
-            background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 45%, #c026d3 100%);
-            border-radius: 20px;
+            background: #1e293b;
+            border-radius: 16px;
             padding: 20px 22px 22px;
             color: #fff;
-            box-shadow: 0 18px 40px rgba(79, 70, 229, 0.28);
             margin-bottom: 20px;
           }
           .pk-back {
@@ -824,8 +900,7 @@ export default function PersonalKhata({ standalone = false } = {}) {
             font-size: 13px;
             letter-spacing: 0.04em;
             color: #fff;
-            background: linear-gradient(145deg, #fb7185, #e11d48);
-            box-shadow: 0 10px 28px rgba(225,29,72,0.35);
+            background: #e11d48;
             display: flex; align-items: center; justify-content: center; gap: 8px;
           }
           .pk-btn-get {
@@ -838,8 +913,7 @@ export default function PersonalKhata({ standalone = false } = {}) {
             font-size: 13px;
             letter-spacing: 0.04em;
             color: #fff;
-            background: linear-gradient(145deg, #34d399, #059669);
-            box-shadow: 0 10px 28px rgba(5,150,105,0.35);
+            background: #059669;
             display: flex; align-items: center; justify-content: center; gap: 8px;
           }
         `}</style>
@@ -1210,12 +1284,11 @@ export default function PersonalKhata({ standalone = false } = {}) {
           font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
         }
         .pk-home-top {
-          background: linear-gradient(125deg, #0ea5e9 0%, #6366f1 42%, #a855f7 100%);
-          border-radius: 24px;
-          padding: 24px 22px 26px;
+          background: #1e293b;
+          border-radius: 16px;
+          padding: 22px 22px 24px;
           color: #fff;
-          box-shadow: 0 20px 50px rgba(99, 102, 241, 0.28);
-          margin-bottom: 22px;
+          margin-bottom: 20px;
         }
         .pk-home-title {
           font-size: 26px;
@@ -1251,16 +1324,14 @@ export default function PersonalKhata({ standalone = false } = {}) {
           gap: 8px;
         }
         .pk-sum-receive {
-          background: linear-gradient(155deg, #ecfdf5 0%, #d1fae5 55%, #a7f3d0 100%);
-          border: 2px solid #34d399;
-          box-shadow: 0 10px 28px rgba(16, 185, 129, 0.25);
-          color: #064e3b;
+          background: #f0fdf4;
+          border: 1px solid #bbf7d0;
+          color: #065f46;
         }
         .pk-sum-pay {
-          background: linear-gradient(155deg, #fff1f2 0%, #fecdd3 55%, #fda4af 100%);
-          border: 2px solid #fb7185;
-          box-shadow: 0 10px 28px rgba(244, 63, 94, 0.22);
-          color: #881337;
+          background: #fef2f2;
+          border: 1px solid #fecaca;
+          color: #991b1b;
         }
         .pk-sum-ribbon {
           align-self: flex-start;
@@ -1339,13 +1410,13 @@ export default function PersonalKhata({ standalone = false } = {}) {
           box-shadow: 0 12px 30px rgba(15, 23, 42, 0.12);
         }
         .pk-money-tile-out {
-          background: linear-gradient(180deg, #fef2f2 0%, #fee2e2 100%);
-          border: 2px solid #f87171;
+          background: #fef2f2;
+          border: 1px solid #fecaca;
           color: #991b1b;
         }
         .pk-money-tile-in {
-          background: linear-gradient(180deg, #ecfdf5 0%, #d1fae5 100%);
-          border: 2px solid #34d399;
+          background: #f0fdf4;
+          border: 1px solid #bbf7d0;
           color: #065f46;
         }
         .pk-money-tile-label {
@@ -1362,21 +1433,21 @@ export default function PersonalKhata({ standalone = false } = {}) {
         .pk-person-tile {
           width: 100%;
           cursor: pointer;
-          border-radius: 16px;
-          padding: 16px 16px;
+          border-radius: 12px;
+          padding: 14px 16px;
           display: flex;
           align-items: center;
           gap: 12px;
-          background: linear-gradient(180deg, #faf5ff 0%, #f3e8ff 100%);
-          border: 2px solid #c4b5fd;
-          color: #5b21b6;
-          font-weight: 900;
+          background: #fff;
+          border: 1px solid #e2e8f0;
+          color: #1e293b;
+          font-weight: 700;
           font-size: 15px;
           text-align: left;
-          transition: transform 0.14s ease;
+          transition: border-color 0.14s ease;
         }
         .pk-person-tile:hover {
-          transform: translateY(-1px);
+          border-color: #cbd5e1;
         }
         .pk-pdf-panel {
           border-radius: 16px;
@@ -1409,9 +1480,8 @@ export default function PersonalKhata({ standalone = false } = {}) {
         }
         .pk-pdf-btn:hover { filter: brightness(1.05); }
         .pk-pdf-preview {
-          background: linear-gradient(145deg, #818cf8, #6366f1);
+          background: #4f46e5;
           color: #fff;
-          box-shadow: 0 4px 14px rgba(99, 102, 241, 0.35);
         }
         .pk-pdf-save {
           background: #fff;
@@ -1491,14 +1561,14 @@ export default function PersonalKhata({ standalone = false } = {}) {
           white-space: nowrap;
         }
         .pk-fab-main {
-          width: 58px;
-          height: 58px;
+          width: 56px;
+          height: 56px;
           border-radius: 999px;
           border: none;
           cursor: pointer;
-          background: linear-gradient(145deg, #f472b6, #9333ea);
+          background: #4f46e5;
           color: #fff;
-          box-shadow: 0 16px 40px rgba(147, 51, 234, 0.45);
+          box-shadow: 0 10px 26px rgba(79, 70, 229, 0.35);
           display: flex;
           align-items: center;
           justify-content: center;
@@ -1514,15 +1584,15 @@ export default function PersonalKhata({ standalone = false } = {}) {
             </p>
             {(!user || user.role !== 'personal_khata') && (
               <p style={{ margin: '10px 0 0', fontSize: 13, lineHeight: 1.45 }}>
-                <Link to="/personal-khata/account" style={{ color: '#4f46e5', fontWeight: 700 }}>
+                <Link to="/personal-khata/account" style={{ color: '#93c5fd', fontWeight: 700 }}>
                   Account banayen ya sign in karein (email ya mobile)
                 </Link>
-                <span style={{ color: '#64748b', fontWeight: 500 }}> — apna khata har device par</span>
+                <span style={{ color: '#cbd5e1', fontWeight: 500 }}> — apna khata har device par</span>
               </p>
             )}
             {user?.role === 'personal_khata' && (
-              <p style={{ margin: '10px 0 0', fontSize: 12.5, color: '#4338ca', fontWeight: 600 }}>
-                Signed in — yeh khata is account ke naam par is browser me alag save hai.
+              <p style={{ margin: '10px 0 0', fontSize: 12.5, color: '#cbd5e1', fontWeight: 600 }}>
+                Signed in — yeh khata aapke account se juda hai, har device aur browser par same data dikhega.
               </p>
             )}
           </div>
@@ -1687,12 +1757,7 @@ export default function PersonalKhata({ standalone = false } = {}) {
         ) : (
           sortedContactList.map((c, i) => {
             const { net } = contactBalance(c.id, entries);
-            const grad = [
-              'linear-gradient(145deg,#6366f1,#8b5cf6)',
-              'linear-gradient(145deg,#ec4899,#f43f5e)',
-              'linear-gradient(145deg,#06b6d4,#3b82f6)',
-              'linear-gradient(145deg,#10b981,#14b8a6)',
-            ][i % 4];
+            const grad = ['#6366f1', '#0ea5e9', '#0d9488', '#64748b'][i % 4];
             return (
               <Link key={c.id} to={`/personal-khata/contact/${c.id}`} className="pk-row">
                 <div className="pk-row-av" style={{ background: grad }}>

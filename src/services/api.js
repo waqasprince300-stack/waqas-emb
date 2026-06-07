@@ -240,6 +240,34 @@ class ApiService {
     });
   }
 
+  async enableUser(id) {
+    const safe = encodeURIComponent(String(id ?? '').trim());
+    return this.request(`/users/${safe}/enable`, {
+      method: 'PATCH',
+      body: JSON.stringify({}),
+    });
+  }
+
+  async updateUserParty(id, data) {
+    const safe = encodeURIComponent(String(id ?? '').trim());
+    return this.request(`/users/${safe}/party`, {
+      method: 'PATCH',
+      body: JSON.stringify(data ?? {}),
+    });
+  }
+
+  // Personal Khata — server-synced so the same account shows the same data on any device/browser.
+  async getPersonalKhata() {
+    return this.request('/personal-khata');
+  }
+
+  async savePersonalKhata(payload) {
+    return this.request('/personal-khata', {
+      method: 'PUT',
+      body: JSON.stringify(payload ?? {}),
+    });
+  }
+
   // Business Owners
   async getBusinessOwners(filters = {}) {
     return this.request('/businessOwners', {}, metaPartySkipTenant(filters));

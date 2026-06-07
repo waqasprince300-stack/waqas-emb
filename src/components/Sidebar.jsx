@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useApp } from '../context/AppContext';
 import { Modal } from './UI';
 
 const navItems = [
@@ -115,7 +116,17 @@ const navItems = [
 
 export default function Sidebar({ sidebarOpen, setSidebarOpen }) {
   const { user, isAdmin, isSuperAdmin, logout } = useAuth();
+  const { reportingLots } = useApp();
   const [logoutModalOpen, setLogoutModalOpen] = useState(false);
+
+  /** Lots party-submitted and waiting for admin approval — shown as a badge on "Review Lots". */
+  const reviewLotsCount = useMemo(
+    () =>
+      (Array.isArray(reportingLots) ? reportingLots : []).filter(
+        (l) => String(l?.status || '').toLowerCase().trim() === 'pending approval',
+      ).length,
+    [reportingLots],
+  );
   const handleNavClick = () => {
     if (window.innerWidth <= 768) {
       setSidebarOpen(false);
@@ -215,7 +226,26 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen }) {
             })}
           >
             <span style={{ opacity: 0.85 }}>{item.icon}</span>
-            {!isAdmin && !isSuperAdmin && item.partyLabel ? item.partyLabel : item.label}
+            <span>{!isAdmin && !isSuperAdmin && item.partyLabel ? item.partyLabel : item.label}</span>
+            {item.to === '/review-lots' && isAdmin && reviewLotsCount > 0 && (
+              <span
+                title={`${reviewLotsCount} lot${reviewLotsCount === 1 ? '' : 's'} awaiting review`}
+                style={{
+                  marginLeft: 'auto',
+                  background: '#ef4444',
+                  color: '#fff',
+                  fontSize: 11,
+                  fontWeight: 700,
+                  lineHeight: 1,
+                  borderRadius: 999,
+                  padding: '3px 7px',
+                  minWidth: 18,
+                  textAlign: 'center',
+                }}
+              >
+                {reviewLotsCount > 99 ? '99+' : reviewLotsCount}
+              </span>
+            )}
           </NavLink>
         ))}
       </nav>
