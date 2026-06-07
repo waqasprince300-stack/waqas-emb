@@ -306,6 +306,7 @@ export default function PartyLedger() {
     partyCrossPartyEdits,
     updateLot,
     updatePartyEdit,
+    addPayment,
     parties,
     businessOwners,
     initialDataLoading,
@@ -335,6 +336,12 @@ export default function PartyLedger() {
   const [currentPage, setCurrentPage] = useState(1);
   /** Split view: non-completed vs completed (same for admin & party) */
   const [ledgerLotsTab, setLedgerLotsTab] = useState("other");
+  /** Party: request a bill-amount change on a completed lot { lot, newAmount, reason } */
+  const [revisionRequest, setRevisionRequest] = useState(null);
+  const [revisionSaving, setRevisionSaving] = useState(false);
+  /** Admin: review a party's pending bill-change request */
+  const [revisionReview, setRevisionReview] = useState(null);
+  const [revisionReviewSaving, setRevisionReviewSaving] = useState(false);
 
   const workspaceNameForLot = (l) =>
     workspaceDisplayTitleForLot(l, businessOwners, { shortIdFallback: true });
@@ -344,6 +351,28 @@ export default function PartyLedger() {
 
   const lotWorkspaceOpts = (lot) =>
     lot?.businessOwnerId ? { businessOwnerId: lot.businessOwnerId } : {};
+
+  const normalizeLotKey = (v) => String(v ?? "").trim().toLowerCase();
+  const lotNumberOf = (lot) => lot?.lotNo || lot?.lotNumber || "";
+
+  /** Pending party request to change the agreed bill on an already-completed lot. */
+  const pendingRevisionRequest = (lot) => {
+    const req = (ledgerPartyEdits[lot.id] || {}).billRevisionRequest;
+    if (req && String(req.status || "").toLowerCase() === "pending") return req;
+    return null;
+  };
+
+  /** Owner settlement payments linked to this lot (admin already "made payment & settled"). */
+  const ownerSettlementForLot = (lot) => {
+    const key = normalizeLotKey(lotNumberOf(lot));
+    if (!key) return [];
+    return ledgerPayments.filter(
+      (p) =>
+        p.type === "Paid" &&
+        String(p.party || "").trim().toLowerCase() === "owner" &&
+        normalizeLotKey(p.linkedLot) === key,
+    );
+  };
 
   const assignedLots = useMemo(() => {
     const byWorkspace = (l) => {
@@ -477,6 +506,11 @@ export default function PartyLedger() {
       ),
     [assignedLots, ledgerPartyEdits],
   );
+  const pendingRevisionRequests = useMemo(
+    () => assignedLots.filter((l) => pendingRevisionRequest(l)),
+    [assignedLots, ledgerPartyEdits],
+  );
+
   const showPartyNameCol = !isParty;
   const showWorkspaceCol = (isAdmin && workspaceFilter === "All") || isParty;
   const ledgerTableColSpan = 13 + (showPartyNameCol ? 1 : 0) + (showWorkspaceCol ? 1 : 0);
@@ -526,6 +560,193 @@ export default function PartyLedger() {
       });
     } finally {
       setBillPicSavingLotId(null);
+    }
+  };
+
+  /** Party: submit a request to the admin to change the agreed bill on a completed lot. */
+  const submitRevisionRequest = async () => {
+    if (!revisionRequest) return;
+    const { lot } = revisionRequest;
+    const pe = ledgerPartyEdits[lot.id] || {};
+    const current = getPartyLedgerBillNumeric(pe) || 0;
+    const next = Number(revisionRequest.newAmount);
+    const reason = String(revisionRequest.reason || "").trim();
+    if (!Number.isFinite(next) || next < 0) {
+      await Swal.fire({ icon: "error", title: "Sahi amount likhein" });
+      return;
+    }
+    if (next === current) {
+      await Swal.fire({ icon: "info", title: "Amount wahi hai", text: "Nayi amount mojooda se alag honi chahiye." });
+      return;
+    }
+    if (!reason) {
+      await Swal.fire({ icon: "error", title: "Wajah likhein", text: "Bill change ki wajah zaroori hai." });
+      return;
+    }
+    setRevisionSaving(true);
+    try {
+      await updatePartyEdit(
+        lot.id,
+        {
+          billRevisionRequest: {
+            fromAmount: current,
+            toAmount: next,
+            reason,
+            requestedAt: new Date().toISOString(),
+            status: "pending",
+          },
+        },
+        lotWorkspaceOpts(lot),
+      );
+      setRevisionRequest(null);
+      await Swal.fire({
+        icon: "success",
+        title: "Request bhej di gayi",
+        text: "Admin ko aapki bill change request bhej di gayi hai. Approve hone par amount update ho jayega.",
+        timer: 2200,
+        showConfirmButton: false,
+      });
+    } catch (e) {
+      await Swal.fire({ icon: "error", title: "Request fail", text: e?.message || "Dobara koshish karein." });
+    } finally {
+      setRevisionSaving(false);
+    }
+  };
+
+  /** Admin: approve a party's bill-change request and reconcile the owner bill + settlement. */
+  const approveRevision = async () => {
+    if (!revisionReview) return;
+    const { lot } = revisionReview;
+    const pe = ledgerPartyEdits[lot.id] || {};
+    const req = pe.billRevisionRequest || {};
+    const fromAmount = Number(req.fromAmount) || getPartyLedgerBillNumeric(pe) || 0;
+    const toAmount = Number(req.toAmount) || 0;
+    const updateOwner = !!revisionReview.updateOwnerBill;
+    const prevOwnerBill = Number(lot.billAmount) || 0;
+    const customOwner =
+      revisionReview.useCustomOwner && revisionReview.customOwnerAmount !== ""
+        ? Number(revisionReview.customOwnerAmount)
+        : null;
+    const newOwnerBill = updateOwner
+      ? customOwner != null && Number.isFinite(customOwner) && customOwner >= 0
+        ? customOwner
+        : toAmount
+      : prevOwnerBill;
+    const settlements = ownerSettlementForLot(lot);
+    const ownerChanged = updateOwner && newOwnerBill !== prevOwnerBill;
+
+    setRevisionReviewSaving(true);
+    try {
+      const tasks = [
+        updatePartyEdit(
+          lot.id,
+          {
+            partyBillAmount: toAmount,
+            amountChangeNote: {
+              previousAmount: fromAmount,
+              updatedAmount: toAmount,
+              difference: toAmount - fromAmount,
+              ghausiaAmount: prevOwnerBill,
+              changedAt: new Date().toISOString(),
+              source: "party-request",
+            },
+            billRevisionRequest: null,
+          },
+          lotWorkspaceOpts(lot),
+        ),
+      ];
+      if (ownerChanged) {
+        tasks.push(
+          updateLot(
+            lot.id,
+            { billAmount: newOwnerBill, totalAmount: newOwnerBill },
+            lotWorkspaceOpts(lot),
+          ),
+        );
+      }
+      await Promise.all(tasks);
+
+      if (ownerChanged && settlements.length > 0) {
+        const delta = newOwnerBill - prevOwnerBill;
+        const lotNo = lotNumberOf(lot);
+        const common = {
+          party: "Owner",
+          date: new Date().toISOString().slice(0, 10),
+          linkedLot: String(lotNo),
+        };
+        if (delta > 0) {
+          await addPayment(
+            {
+              ...common,
+              type: "Paid",
+              amount: delta,
+              note: `Bill revision adjustment (+) — lot ${lotNo}: owner bill ₨${prevOwnerBill.toLocaleString()} → ₨${newOwnerBill.toLocaleString()}`,
+            },
+            lotWorkspaceOpts(lot),
+          );
+        } else if (delta < 0) {
+          await addPayment(
+            {
+              ...common,
+              type: "Received",
+              amount: Math.abs(delta),
+              note: `Bill revision adjustment (−) — lot ${lotNo}: owner bill ₨${prevOwnerBill.toLocaleString()} → ₨${newOwnerBill.toLocaleString()}`,
+            },
+            lotWorkspaceOpts(lot),
+          );
+        }
+      }
+
+      setRevisionReview(null);
+      await Swal.fire({
+        icon: "success",
+        title: "Approve ho gaya",
+        text: ownerChanged && settlements.length > 0
+          ? "Party ledger update, owner bill update, aur settlement ke liye adjustment payment record ho gayi."
+          : ownerChanged
+            ? "Party ledger aur owner bill dono update ho gaye."
+            : "Party ledger amount update ho gaya (owner bill waisa hi rakha gaya).",
+        timer: 2600,
+        showConfirmButton: false,
+      });
+    } catch (e) {
+      await Swal.fire({ icon: "error", title: "Approve fail", text: e?.message || "Dobara koshish karein." });
+    } finally {
+      setRevisionReviewSaving(false);
+    }
+  };
+
+  /** Admin: reject a party's bill-change request with a reason. */
+  const rejectRevision = async () => {
+    if (!revisionReview) return;
+    const { lot } = revisionReview;
+    const pe = ledgerPartyEdits[lot.id] || {};
+    const req = pe.billRevisionRequest || {};
+    const note = String(revisionReview.rejectionNote || "").trim();
+    if (!note) {
+      await Swal.fire({ icon: "error", title: "Wajah likhein", text: "Reject karne ki wajah zaroori hai." });
+      return;
+    }
+    setRevisionReviewSaving(true);
+    try {
+      await updatePartyEdit(
+        lot.id,
+        {
+          billRevisionRequest: {
+            ...req,
+            status: "rejected",
+            rejectionNote: note,
+            resolvedAt: new Date().toISOString(),
+          },
+        },
+        lotWorkspaceOpts(lot),
+      );
+      setRevisionReview(null);
+      await Swal.fire({ icon: "success", title: "Request reject ho gayi", timer: 1800, showConfirmButton: false });
+    } catch (e) {
+      await Swal.fire({ icon: "error", title: "Reject fail", text: e?.message || "Dobara koshish karein." });
+    } finally {
+      setRevisionReviewSaving(false);
     }
   };
 
@@ -684,6 +905,7 @@ export default function PartyLedger() {
                 editForm.completeDate || new Date().toISOString().slice(0, 10),
               partyBillAmount: nextLedgerAmount,
               receipt: receiptToSave,
+              pendingRevision: pendingRevisionPayload,
             },
             lotWorkspaceOpts(lot),
           ),
@@ -1088,7 +1310,35 @@ export default function PartyLedger() {
           </div>
         </div>
       </div>
-      {/* {console.log(totals, 'totals')} */}
+      {isAdmin && pendingRevisionRequests.length > 0 && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+            flexWrap: "wrap",
+            background: "#fffbeb",
+            border: "1px solid #fcd34d",
+            borderRadius: 10,
+            padding: "12px 16px",
+            marginBottom: 16,
+          }}
+        >
+          <div style={{ fontSize: 13, color: "#92400e", fontWeight: 600 }}>
+            {pendingRevisionRequests.length} bill change request
+            {pendingRevisionRequests.length === 1 ? "" : "s"} party ki taraf se review ke liye pending hain.
+          </div>
+          <button
+            type="button"
+            className="btn btn-sm"
+            style={{ background: "#f59e0b", color: "#fff", border: "none" }}
+            onClick={() => setLedgerLotsTab("completed")}
+          >
+            Completed lots dekhein
+          </button>
+        </div>
+      )}
 
       {/* Summary */}
       <div className="pl-grid">
@@ -1612,29 +1862,107 @@ export default function PartyLedger() {
                             Party revised bill: ₨{Number(pe.pendingRevision.fromAmount || 0).toLocaleString()} → ₨{Number(pe.pendingRevision.toAmount || 0).toLocaleString()} (settle on approval)
                           </div>
                         )}
+                        {pe.billRevisionRequest &&
+                          String(pe.billRevisionRequest.status || "").toLowerCase() === "pending" && (
+                            <div style={{ fontSize: 11, color: "#92400e", marginTop: 4, fontWeight: 600 }}>
+                              Bill change request: ₨{Number(pe.billRevisionRequest.fromAmount || 0).toLocaleString()} → ₨{Number(pe.billRevisionRequest.toAmount || 0).toLocaleString()}
+                              {pe.billRevisionRequest.reason ? ` — ${pe.billRevisionRequest.reason}` : ""}
+                            </div>
+                          )}
+                        {pe.billRevisionRequest &&
+                          String(pe.billRevisionRequest.status || "").toLowerCase() === "rejected" && (
+                            <div style={{ fontSize: 11, color: "#b91c1c", marginTop: 4 }}>
+                              Bill change request rejected
+                              {pe.billRevisionRequest.rejectionNote ? `: ${pe.billRevisionRequest.rejectionNote}` : ""}
+                            </div>
+                          )}
                       </td>
                       <td>
-                        {displayStatus === "Completed" && !isAdmin ? (
-                          <span style={{ fontSize: 12, color: "var(--text-muted)" }}>Admin only</span>
+                        {displayStatus === "Completed" && isParty ? (
+                          (() => {
+                            const req = pe.billRevisionRequest;
+                            const st = String(req?.status || "").toLowerCase();
+                            if (st === "pending") {
+                              return (
+                                <span style={{ fontSize: 12, color: "#92400e", fontWeight: 600 }}>
+                                  Change requested
+                                </span>
+                              );
+                            }
+                            return (
+                              <button
+                                onClick={() =>
+                                  setRevisionRequest({
+                                    lot: l,
+                                    newAmount: String(getPartyLedgerBillNumeric(pe) ?? ""),
+                                    reason: "",
+                                  })
+                                }
+                                style={{
+                                  padding: "4px 12px",
+                                  fontSize: 12,
+                                  fontWeight: 600,
+                                  borderRadius: 6,
+                                  cursor: "pointer",
+                                  background: "#FFF7ED",
+                                  color: "#c2410c",
+                                  border: "1px solid #FED7AA",
+                                  fontFamily: "Inter, sans-serif",
+                                }}
+                              >
+                                {st === "rejected" ? "Request again" : "Request bill change"}
+                              </button>
+                            );
+                          })()
                         ) : displayStatus === "Pending" && isParty ? (
                           <span style={{ fontSize: 12, color: "var(--text-muted)" }}>—</span>
                         ) : (
-                          <button
-                            onClick={() => openEdit(l)}
-                            style={{
-                              padding: "4px 12px",
-                              fontSize: 12,
-                              fontWeight: 500,
-                              borderRadius: 6,
-                              cursor: "pointer",
-                              background: "#EFF6FF",
-                              color: "#1e40af",
-                              border: "1px solid #BFDBFE",
-                              fontFamily: "Inter, sans-serif",
-                            }}
-                          >
-                            Edit
-                          </button>
+                          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                            {isAdmin &&
+                              pe.billRevisionRequest &&
+                              String(pe.billRevisionRequest.status || "").toLowerCase() === "pending" && (
+                                <button
+                                  onClick={() =>
+                                    setRevisionReview({
+                                      lot: l,
+                                      updateOwnerBill: true,
+                                      useCustomOwner: false,
+                                      customOwnerAmount: "",
+                                      rejectionNote: "",
+                                    })
+                                  }
+                                  style={{
+                                    padding: "4px 12px",
+                                    fontSize: 12,
+                                    fontWeight: 700,
+                                    borderRadius: 6,
+                                    cursor: "pointer",
+                                    background: "#f59e0b",
+                                    color: "#fff",
+                                    border: "none",
+                                    fontFamily: "Inter, sans-serif",
+                                  }}
+                                >
+                                  Review request
+                                </button>
+                              )}
+                            <button
+                              onClick={() => openEdit(l)}
+                              style={{
+                                padding: "4px 12px",
+                                fontSize: 12,
+                                fontWeight: 500,
+                                borderRadius: 6,
+                                cursor: "pointer",
+                                background: "#EFF6FF",
+                                color: "#1e40af",
+                                border: "1px solid #BFDBFE",
+                                fontFamily: "Inter, sans-serif",
+                              }}
+                            >
+                              Edit
+                            </button>
+                          </div>
                         )}
                       </td>
                     </tr>
@@ -2217,6 +2545,261 @@ export default function PartyLedger() {
           )}
         </Modal>
       )}
+
+      {/* Party: request a bill change on a completed lot */}
+      {revisionRequest && (
+        <Modal
+          title={`Request bill change — ${revisionRequest.lot.lotNo || revisionRequest.lot.lotNumber}`}
+          onClose={() => {
+            if (!revisionSaving) setRevisionRequest(null);
+          }}
+          onFormSubmit={() => {
+            void submitRevisionRequest();
+          }}
+          footer={
+            <>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                disabled={revisionSaving}
+                onClick={() => setRevisionRequest(null)}
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="btn btn-primary"
+                disabled={revisionSaving}
+                style={{ display: "inline-flex", alignItems: "center", gap: 8 }}
+              >
+                {revisionSaving ? (
+                  <>
+                    <Loader /> Bhej rahe…
+                  </>
+                ) : (
+                  "Send request"
+                )}
+              </button>
+            </>
+          }
+        >
+          <div className="alert alert-warning" style={{ marginBottom: 16 }}>
+            Yeh lot complete ho chuki hai. Aap admin ko nayi bill amount ki request bhej rahe hain —
+            <strong> approve hone par hi</strong> amount update hoga.
+          </div>
+          <FormGroup label="Mojooda ledger amount (₨)">
+            <input
+              className="form-input"
+              value={`₨${Number(
+                getPartyLedgerBillNumeric(ledgerPartyEdits[revisionRequest.lot.id] || {}) || 0,
+              ).toLocaleString()}`}
+              disabled
+            />
+          </FormGroup>
+          <FormGroup label="Nayi amount (₨) *">
+            <input
+              className="form-input"
+              type="number"
+              value={revisionRequest.newAmount}
+              onChange={(e) =>
+                setRevisionRequest((r) => ({ ...r, newAmount: e.target.value }))
+              }
+              placeholder="0"
+            />
+          </FormGroup>
+          <FormGroup label="Wajah / Reason *">
+            <textarea
+              className="form-textarea"
+              rows={3}
+              value={revisionRequest.reason}
+              onChange={(e) =>
+                setRevisionRequest((r) => ({ ...r, reason: e.target.value }))
+              }
+              placeholder="Bill change ki wajah likhein..."
+              style={{ resize: "vertical" }}
+            />
+          </FormGroup>
+        </Modal>
+      )}
+
+      {/* Admin: review + approve/reject a party's bill change request */}
+      {revisionReview && (() => {
+        const lot = revisionReview.lot;
+        const pe = ledgerPartyEdits[lot.id] || {};
+        const req = pe.billRevisionRequest || {};
+        const fromA = Number(req.fromAmount) || 0;
+        const toA = Number(req.toAmount) || 0;
+        const ownerBill = Number(lot.billAmount) || 0;
+        const settled = ownerSettlementForLot(lot).length > 0;
+        const newOwner = revisionReview.updateOwnerBill
+          ? revisionReview.useCustomOwner && revisionReview.customOwnerAmount !== ""
+            ? Number(revisionReview.customOwnerAmount) || 0
+            : toA
+          : ownerBill;
+        const delta = newOwner - ownerBill;
+        return (
+          <Modal
+            title={`Bill change request — ${lot.lotNo || lot.lotNumber}`}
+            onClose={() => {
+              if (!revisionReviewSaving) setRevisionReview(null);
+            }}
+            footer={
+              <>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  style={{ color: "#b91c1c", borderColor: "#fecaca" }}
+                  disabled={revisionReviewSaving}
+                  onClick={() => void rejectRevision()}
+                >
+                  Reject
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  disabled={revisionReviewSaving}
+                  style={{ display: "inline-flex", alignItems: "center", gap: 8 }}
+                  onClick={() => void approveRevision()}
+                >
+                  {revisionReviewSaving ? (
+                    <>
+                      <Loader /> Saving…
+                    </>
+                  ) : (
+                    "Approve & apply"
+                  )}
+                </button>
+              </>
+            }
+          >
+            <div
+              style={{
+                background: "#F8FAFC",
+                border: "1px solid var(--border)",
+                borderRadius: 10,
+                padding: "14px 16px",
+                marginBottom: 16,
+                fontSize: 13,
+                lineHeight: 1.7,
+              }}
+            >
+              <div>
+                <span style={{ color: "var(--text-muted)" }}>Party: </span>
+                {getPartyNameLocal(lot.partyId, lot.partyName)}
+              </div>
+              <div>
+                <span style={{ color: "var(--text-muted)" }}>Party ledger change: </span>
+                <strong>₨{fromA.toLocaleString()} → ₨{toA.toLocaleString()}</strong>{" "}
+                <span style={{ color: delta === 0 ? "#64748b" : toA - fromA >= 0 ? "#0f766e" : "#dc2626" }}>
+                  ({toA - fromA >= 0 ? "+" : "−"}₨{Math.abs(toA - fromA).toLocaleString()})
+                </span>
+              </div>
+              {req.reason ? (
+                <div>
+                  <span style={{ color: "var(--text-muted)" }}>Reason: </span>
+                  {req.reason}
+                </div>
+              ) : null}
+              <div>
+                <span style={{ color: "var(--text-muted)" }}>Current owner (Ghausia) bill: </span>
+                ₨{ownerBill.toLocaleString()}
+              </div>
+              <div>
+                <span style={{ color: "var(--text-muted)" }}>Settlement: </span>
+                {settled ? (
+                  <span style={{ color: "#92400e", fontWeight: 600 }}>
+                    Is lot ki payment ho chuki hai (settled)
+                  </span>
+                ) : (
+                  <span style={{ color: "#64748b" }}>Koi settlement payment nahi</span>
+                )}
+              </div>
+            </div>
+
+            <FormGroup label="Owner bill handling">
+              <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, marginBottom: 8 }}>
+                <input
+                  type="checkbox"
+                  checked={revisionReview.updateOwnerBill}
+                  onChange={(e) =>
+                    setRevisionReview((r) => ({ ...r, updateOwnerBill: e.target.checked }))
+                  }
+                />
+                Owner ka bill bhi update karein
+              </label>
+              {revisionReview.updateOwnerBill && (
+                <>
+                  <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, marginBottom: 8 }}>
+                    <input
+                      type="checkbox"
+                      checked={revisionReview.useCustomOwner}
+                      onChange={(e) =>
+                        setRevisionReview((r) => ({ ...r, useCustomOwner: e.target.checked }))
+                      }
+                    />
+                    Custom owner amount use karein (warna nayi party amount lagegi)
+                  </label>
+                  {revisionReview.useCustomOwner && (
+                    <input
+                      className="form-input"
+                      type="number"
+                      value={revisionReview.customOwnerAmount}
+                      onChange={(e) =>
+                        setRevisionReview((r) => ({ ...r, customOwnerAmount: e.target.value }))
+                      }
+                      placeholder="Custom owner bill (₨)"
+                    />
+                  )}
+                </>
+              )}
+            </FormGroup>
+
+            <div
+              style={{
+                background: revisionReview.updateOwnerBill ? "#eff6ff" : "#f8fafc",
+                border: "1px solid var(--border)",
+                borderRadius: 10,
+                padding: "12px 14px",
+                fontSize: 12.5,
+                color: "#334155",
+                lineHeight: 1.6,
+              }}
+            >
+              <div>
+                Naya owner bill:{" "}
+                <strong>₨{Number(newOwner).toLocaleString()}</strong>
+                {revisionReview.updateOwnerBill ? (
+                  <span style={{ color: delta === 0 ? "#64748b" : delta > 0 ? "#0f766e" : "#dc2626" }}>
+                    {" "}({delta >= 0 ? "+" : "−"}₨{Math.abs(delta).toLocaleString()})
+                  </span>
+                ) : (
+                  <span style={{ color: "#64748b" }}> (waisa hi rahega)</span>
+                )}
+              </div>
+              {revisionReview.updateOwnerBill && settled && delta !== 0 && (
+                <div style={{ marginTop: 6, color: "#92400e", fontWeight: 600 }}>
+                  {delta > 0
+                    ? `Adjustment: ₨${delta.toLocaleString()} ki extra "Paid → Owner" payment record hogi.`
+                    : `Adjustment: ₨${Math.abs(delta).toLocaleString()} ki "Received ← Owner" reversing payment record hogi.`}
+                </div>
+              )}
+            </div>
+
+            <FormGroup label="Reject karne ki wajah (sirf Reject ke liye)">
+              <textarea
+                className="form-textarea"
+                rows={2}
+                value={revisionReview.rejectionNote}
+                onChange={(e) =>
+                  setRevisionReview((r) => ({ ...r, rejectionNote: e.target.value }))
+                }
+                placeholder="Agar reject kar rahe hain to wajah likhein..."
+                style={{ resize: "vertical" }}
+              />
+            </FormGroup>
+          </Modal>
+        );
+      })()}
     </div>
   );
 }

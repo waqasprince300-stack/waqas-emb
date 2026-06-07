@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useRef, useMemo } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { apiService } from '../services/api';
 import { useAuth } from './AuthContext';
@@ -133,10 +133,17 @@ export function AppProvider({ children }) {
   /** 'idle' = nothing yet, 'minimal' = dashboard/reporting data ready, 'full' = scoped data ready. */
   const [initialDataPhase, setInitialDataPhase] = useState('idle');
   const [scopedDataLoading, setScopedDataLoading] = useState(true);
+  /** True only during a background (post-navigation) refresh — does NOT block the UI. */
+  const [backgroundRefreshing, setBackgroundRefreshing] = useState(false);
   /** Receipt images are excluded from the fast bootstrap and streamed in afterwards. */
   const [receiptsLoading, setReceiptsLoading] = useState(false);
   const queryClient = useQueryClient();
   const hasLoadedOnceRef = useRef(false);
+  /** Bumped to re-run the loader for a background refresh (e.g. on page navigation). */
+  const [refreshTick, setRefreshTick] = useState(0);
+  const lastRefreshRef = useRef(0);
+  /** True for the next loader run only when it was triggered as a non-blocking background refresh. */
+  const isBackgroundRefreshRef = useRef(false);
   const initialDataLoading = initialDataPhase === 'idle';
 
   const readViewAllWorkspaces = () => {
@@ -153,6 +160,21 @@ export function AppProvider({ children }) {
   const invalidateBootstrapCache = () => {
     queryClient.invalidateQueries({ queryKey: ['bootstrap'] });
   };
+
+  /**
+   * Background refresh of all app data (no full-screen loader). Used on page navigation so each
+   * page shows the latest server state without a manual browser reload. Throttled to avoid spam.
+   */
+  const refreshData = useCallback(() => {
+    if (!isAuthenticated) return;
+    if (user?.role === 'super_admin' || user?.role === 'personal_khata') return;
+    const now = Date.now();
+    if (now - lastRefreshRef.current < 800) return;
+    lastRefreshRef.current = now;
+    isBackgroundRefreshRef.current = true;
+    queryClient.invalidateQueries({ queryKey: ['bootstrap'] });
+    setRefreshTick((t) => t + 1);
+  }, [isAuthenticated, user?.role, queryClient]);
 
   const selectBusinessOwner = (id) => {
     const nextId = String(id || '');
@@ -193,6 +215,7 @@ export function AppProvider({ children }) {
     const markLoaded = () => {
       setInitialDataPhase('full');
       setScopedDataLoading(false);
+      setBackgroundRefreshing(false);
       hasLoadedOnceRef.current = true;
     };
 
@@ -281,8 +304,17 @@ export function AppProvider({ children }) {
 
     async function loadAppData() {
       const isFirst = !hasLoadedOnceRef.current;
-      if (isFirst) setInitialDataPhase('idle');
-      setScopedDataLoading(true);
+      // Background nav refresh: don't block the UI. Workspace switch / first load keep the loader.
+      const isBg = !isFirst && isBackgroundRefreshRef.current;
+      isBackgroundRefreshRef.current = false;
+      if (isFirst) {
+        setInitialDataPhase('idle');
+        setScopedDataLoading(true);
+      } else if (isBg) {
+        setBackgroundRefreshing(true);
+      } else {
+        setScopedDataLoading(true);
+      }
 
       try {
         // Phase A — minimal payload: businessOwners + parties + reporting/partyCross.
@@ -340,7 +372,9 @@ export function AppProvider({ children }) {
           applyPartyCross(full?.partyCross);
         }
         markLoaded();
-        hydrateReceipts();
+        // Receipts are heavy (base64) — stream them on first load and workspace switches,
+        // but skip on lightweight background nav refreshes (in-session edits update state directly).
+        if (!isBg) hydrateReceipts();
       } catch (error) {
         console.error('Unable to load bootstrap data', error);
         markLoaded();
@@ -348,7 +382,7 @@ export function AppProvider({ children }) {
     }
 
     loadAppData();
-  }, [activeBusinessOwnerId, isAuthenticated, user?._id, user?.role, queryClient]);
+  }, [activeBusinessOwnerId, isAuthenticated, user?._id, user?.role, queryClient, refreshTick]);
 
   const createBusinessOwner = async (data) => {
     const created = await apiService.createBusinessOwner(data);
@@ -642,7 +676,9 @@ export function AppProvider({ children }) {
       initialDataLoading,
       initialDataPhase,
       scopedDataLoading,
+      backgroundRefreshing,
       receiptsLoading,
+      refreshData,
     }}>
       {children}
     </AppContext.Provider>

@@ -1,6 +1,6 @@
-import React, { useState, lazy, Suspense } from 'react';
+import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import { BrowserRouter, Navigate, Routes, Route, useLocation } from 'react-router-dom';
-import { AppProvider } from './context/AppContext';
+import { AppProvider, useApp } from './context/AppContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Sidebar from './components/Sidebar';
 import LoaderDashboard from './components/LoaderDashboard';
@@ -169,11 +169,64 @@ function SuperAdminShell({ children }) {
   return children;
 }
 
+/** On each page navigation, refresh app data in the background so pages show the latest
+ *  server state without a manual full-page reload. The first render is skipped (initial
+ *  bootstrap already loads the data). refreshData is throttled + role-guarded internally. */
+function RouteChangeRefresher() {
+  const { pathname } = useLocation();
+  const { refreshData } = useApp();
+  const firstRef = useRef(true);
+
+  useEffect(() => {
+    if (firstRef.current) {
+      firstRef.current = false;
+      return;
+    }
+    refreshData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname]);
+
+  return null;
+}
+
+/** Subtle, non-blocking indicator shown while a background data refresh is in flight. */
+function BackgroundRefreshIndicator() {
+  const { backgroundRefreshing } = useApp();
+  if (!backgroundRefreshing) return null;
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        bottom: 16,
+        left: '50%',
+        transform: 'translateX(-50%)',
+        zIndex: 400,
+        background: '#1e293b',
+        color: '#fff',
+        fontSize: 12,
+        fontWeight: 600,
+        padding: '6px 14px',
+        borderRadius: 999,
+        boxShadow: '0 6px 20px rgba(15,23,42,0.25)',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
+        pointerEvents: 'none',
+      }}
+    >
+      <span style={{ width: 8, height: 8, borderRadius: 999, background: '#38bdf8', display: 'inline-block' }} />
+      Updating…
+    </div>
+  );
+}
+
 function AppRoutes() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
     <SuperAdminShell>
+    <RouteChangeRefresher />
+    <BackgroundRefreshIndicator />
     <Suspense
       fallback={(
         <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>

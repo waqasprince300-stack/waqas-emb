@@ -116,7 +116,7 @@ const navItems = [
 
 export default function Sidebar({ sidebarOpen, setSidebarOpen }) {
   const { user, isAdmin, isSuperAdmin, logout } = useAuth();
-  const { reportingLots } = useApp();
+  const { reportingLots, reportingPartyEdits } = useApp();
   const [logoutModalOpen, setLogoutModalOpen] = useState(false);
 
   /** Lots party-submitted and waiting for admin approval — shown as a badge on "Review Lots". */
@@ -126,6 +126,17 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen }) {
         (l) => String(l?.status || '').toLowerCase().trim() === 'pending approval',
       ).length,
     [reportingLots],
+  );
+
+  /** Party-initiated bill-change requests awaiting admin — shown as a badge on "Party Ledger". */
+  const billRevisionCount = useMemo(
+    () =>
+      Object.values(reportingPartyEdits || {}).filter(
+        (pe) =>
+          pe?.billRevisionRequest &&
+          String(pe.billRevisionRequest.status || '').toLowerCase() === 'pending',
+      ).length,
+    [reportingPartyEdits],
   );
   const handleNavClick = () => {
     if (window.innerWidth <= 768) {
@@ -244,6 +255,25 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen }) {
                 }}
               >
                 {reviewLotsCount > 99 ? '99+' : reviewLotsCount}
+              </span>
+            )}
+            {item.to === '/party-ledger' && isAdmin && billRevisionCount > 0 && (
+              <span
+                title={`${billRevisionCount} bill change request${billRevisionCount === 1 ? '' : 's'} pending`}
+                style={{
+                  marginLeft: 'auto',
+                  background: '#f59e0b',
+                  color: '#fff',
+                  fontSize: 11,
+                  fontWeight: 700,
+                  lineHeight: 1,
+                  borderRadius: 999,
+                  padding: '3px 7px',
+                  minWidth: 18,
+                  textAlign: 'center',
+                }}
+              >
+                {billRevisionCount > 99 ? '99+' : billRevisionCount}
               </span>
             )}
           </NavLink>
