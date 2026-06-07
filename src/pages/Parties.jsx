@@ -177,38 +177,72 @@ export default function Parties() {
     return Number(pe.partyBillAmount !== undefined ? pe.partyBillAmount : (l.billAmount || 0));
   };
 
-  const getLotStats = (partyId) => {
-    const pid = String(partyId ?? '');
-    const lots = rangedLots.filter(l => String(l.partyId ?? '') === pid);
-    const partyName = getPartyName(partyId);
-    let activeAmount = 0;
-    let completedAmount = 0;
-    for (const l of lots) {
-      const amt = lotBillAmount(l);
-      if (lotStatusKey(l) === 'completed') completedAmount += amt;
-      else activeAmount += amt;
-    }
-    const totalPayable = lots.reduce((s, l) => s + lotBillAmount(l), 0);
-    const totalPaid = rangedPayments.filter(p => {
-      if (p.type !== 'Paid') return false;
-      if (p.partyId != null && String(p.partyId).trim() !== '') {
-        return String(p.partyId) === pid;
-      }
-      const payParty = String(p.party || '').trim();
-      return payParty === String(partyName).trim();
-    }).reduce((s, p) => s + Number(p.amount || 0), 0);
-    const remaining = totalPayable - totalPaid;
-    return {
-      total: lots.length,
-      active: lots.filter(l => lotStatusKey(l) !== 'completed').length,
-      completed: lots.filter(l => lotStatusKey(l) === 'completed').length,
-      activeAmount,
-      completedAmount,
-      totalValue: totalPayable,
-      paid: totalPaid,
-      remaining,
-    };
+  const EMPTY_LOT_STATS = {
+    total: 0, active: 0, completed: 0, activeAmount: 0,
+    completedAmount: 0, totalValue: 0, paid: 0, remaining: 0,
   };
+
+  /** Pre-compute stats for every party in one pass instead of scanning all lots per card. */
+  const statsByPartyId = useMemo(() => {
+    const lotsByParty = new Map();
+    for (const l of rangedLots) {
+      const pid = String(l.partyId ?? '');
+      if (!lotsByParty.has(pid)) lotsByParty.set(pid, []);
+      lotsByParty.get(pid).push(l);
+    }
+
+    const paidByPartyId = new Map();
+    const paidByPartyName = new Map();
+    for (const p of rangedPayments) {
+      if (p.type !== 'Paid') continue;
+      const amt = Number(p.amount || 0);
+      if (p.partyId != null && String(p.partyId).trim() !== '') {
+        const k = String(p.partyId);
+        paidByPartyId.set(k, (paidByPartyId.get(k) || 0) + amt);
+      } else {
+        const k = String(p.party || '').trim();
+        paidByPartyName.set(k, (paidByPartyName.get(k) || 0) + amt);
+      }
+    }
+
+    const result = new Map();
+    for (const party of parties) {
+      const pid = String(party.id ?? '');
+      const lots = lotsByParty.get(pid) || [];
+      const partyName = String(party.name || 'Unknown').trim();
+      let activeAmount = 0;
+      let completedAmount = 0;
+      let totalPayable = 0;
+      let active = 0;
+      let completed = 0;
+      for (const l of lots) {
+        const amt = lotBillAmount(l);
+        totalPayable += amt;
+        if (lotStatusKey(l) === 'completed') {
+          completedAmount += amt;
+          completed += 1;
+        } else {
+          activeAmount += amt;
+          active += 1;
+        }
+      }
+      const totalPaid = (paidByPartyId.get(pid) || 0) + (paidByPartyName.get(partyName) || 0);
+      result.set(pid, {
+        total: lots.length,
+        active,
+        completed,
+        activeAmount,
+        completedAmount,
+        totalValue: totalPayable,
+        paid: totalPaid,
+        remaining: totalPayable - totalPaid,
+      });
+    }
+    return result;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [parties, rangedLots, rangedPayments, reportingPartyEdits]);
+
+  const getLotStats = (partyId) => statsByPartyId.get(String(partyId ?? '')) || EMPTY_LOT_STATS;
 
   const handleSave = async (formData) => {
     setPartySaving(true);

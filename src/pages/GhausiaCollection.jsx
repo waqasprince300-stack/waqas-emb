@@ -262,6 +262,7 @@ export default function GhausiaCollection() {
     deletePayment,
     updatePartyEdit,
     initialDataLoading,
+    scopedDataLoading,
     activeBusinessOwnerId,
     businessOwners,
     viewAllWorkspaces,
@@ -726,7 +727,7 @@ export default function GhausiaCollection() {
     }
   };
 
-  if (initialDataLoading) {
+  if (initialDataLoading || (!viewAllWorkspaces && scopedDataLoading)) {
     return (
       <div style={{ textAlign: 'center', display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
         <LoaderDashboard height={30} width={30} />

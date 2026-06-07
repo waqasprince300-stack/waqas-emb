@@ -1,7 +1,7 @@
 // API utility for Express.js Backend
 // CRA only loads env vars that start with REACT_APP_ from .env in the project root (not src/).
 const API_BASE_URL = String(
-  process.env.REACT_APP_API_BASE_URL ||
+  // process.env.REACT_APP_API_BASE_URL ||
     (process.env.NODE_ENV === "development"
       ? "http://localhost:3001/api"
       : ""),
@@ -136,6 +136,20 @@ class ApiService {
       console.error('API request failed:', error);
       throw error;
     }
+  }
+
+  // Bootstrap — consolidated initial-load payload (one round-trip instead of 7+ calls)
+  async getBootstrap(opts = {}) {
+    const { minimal = false, includeReceipts = false } = opts;
+    const qs = new URLSearchParams();
+    if (minimal) qs.set('minimal', '1');
+    if (includeReceipts) qs.set('includeReceipts', '1');
+    const q = qs.toString();
+    const meta = { ...metaPartySkipTenant(opts) };
+    // The minimal payload is workspace-independent (reporting = scope=all, parties by user).
+    // Never send a possibly-stale x-business-owner-id header, which would 404 before owners resolve.
+    if (minimal) meta.skipBusinessOwnerHeader = true;
+    return this.request(`/bootstrap${q ? `?${q}` : ''}`, {}, meta);
   }
 
   // Auth
@@ -379,6 +393,7 @@ class ApiService {
     const qs = new URLSearchParams();
     if (opts.scope === 'all') qs.set('scope', 'all');
     if (opts.partyScope === 'all') qs.set('partyScope', 'all');
+    if (opts.includeReceipts) qs.set('includeReceipts', '1');
     const q = qs.toString();
     return this.request(`/partyEdits${q ? `?${q}` : ''}`, {}, metaPartySkipTenant(opts));
   }

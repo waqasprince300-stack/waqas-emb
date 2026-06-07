@@ -309,6 +309,7 @@ export default function PartyLedger() {
     parties,
     businessOwners,
     initialDataLoading,
+    receiptsLoading,
   } = useApp();
   const { isAdmin, isParty, user } = useAuth();
 
@@ -1510,6 +1511,12 @@ export default function PartyLedger() {
                                 </span>
                               )}
                             </>
+                          ) : receiptsLoading ? (
+                            <span
+                              className="skeleton-box"
+                              aria-label="Loading receipt"
+                              style={{ width: 40, height: 40 }}
+                            />
                           ) : (
                             <span
                               style={{ color: "var(--text-muted)", fontSize: 12 }}

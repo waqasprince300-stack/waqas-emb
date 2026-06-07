@@ -121,6 +121,7 @@ export default function Payments() {
     ghausiaLots,
     parties,
     initialDataLoading,
+    scopedDataLoading,
     businessOwners,
     activeBusinessOwnerId,
     partyCrossPayments,
@@ -556,7 +557,7 @@ export default function Payments() {
     return bo ? businessOwnerDisplayName(bo) : "—";
   };
 
-  if (initialDataLoading) {
+  if (initialDataLoading || scopedDataLoading) {
     return (
       <div
         style={{

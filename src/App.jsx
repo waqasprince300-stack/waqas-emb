@@ -1,24 +1,26 @@
-import React, { useState } from 'react';
+import React, { useState, lazy, Suspense } from 'react';
 import { BrowserRouter, Navigate, Routes, Route, useLocation } from 'react-router-dom';
 import { AppProvider } from './context/AppContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Sidebar from './components/Sidebar';
-import Dashboard from './pages/Dashboard';
-import GhausiaCollection from './pages/GhausiaCollection';
-import PartyLedger from './pages/PartyLedger';
-import Parties from './pages/Parties';
-import Payments from './pages/Payments';
-import RateCalculations from './pages/RateCalculations';
-import Login from './pages/Login';
-import Signup from './pages/Signup';
-import ForgotPassword from './pages/ForgotPassword';
-import ResetPassword from './pages/ResetPassword';
-import UserApprovals from './pages/UserApprovals';
-import SuperAdminApprovals from './pages/SuperAdminApprovals';
-import ReviewLots from './pages/ReviewLots';
-import PersonalKhata from './pages/PersonalKhata';
-import PersonalKhataAccount from './pages/PersonalKhataAccount';
-import PersonalKhataShared from './pages/PersonalKhataShared';
+import LoaderDashboard from './components/LoaderDashboard';
+
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const GhausiaCollection = lazy(() => import('./pages/GhausiaCollection'));
+const PartyLedger = lazy(() => import('./pages/PartyLedger'));
+const Parties = lazy(() => import('./pages/Parties'));
+const Payments = lazy(() => import('./pages/Payments'));
+const RateCalculations = lazy(() => import('./pages/RateCalculations'));
+const Login = lazy(() => import('./pages/Login'));
+const Signup = lazy(() => import('./pages/Signup'));
+const ForgotPassword = lazy(() => import('./pages/ForgotPassword'));
+const ResetPassword = lazy(() => import('./pages/ResetPassword'));
+const UserApprovals = lazy(() => import('./pages/UserApprovals'));
+const SuperAdminApprovals = lazy(() => import('./pages/SuperAdminApprovals'));
+const ReviewLots = lazy(() => import('./pages/ReviewLots'));
+const PersonalKhata = lazy(() => import('./pages/PersonalKhata'));
+const PersonalKhataAccount = lazy(() => import('./pages/PersonalKhataAccount'));
+const PersonalKhataShared = lazy(() => import('./pages/PersonalKhataShared'));
 
 function PersonalKhataAccessibleRoute({ sidebarOpen, setSidebarOpen }) {
   const { isAuthenticated } = useAuth();
@@ -94,7 +96,16 @@ function Layout({ children, sidebarOpen, setSidebarOpen }) {
         background: '#F0F2F5',
         paddingTop: window.innerWidth <= 768 ? 72 : undefined
       }}>
-        {children}
+        {/* Keep the sidebar visible while a lazy page chunk loads — only the content area shows the loader. */}
+        <Suspense
+          fallback={(
+            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
+              <LoaderDashboard height={30} width={30} />
+            </div>
+          )}
+        >
+          {children}
+        </Suspense>
       </main>
     </div>
   );
@@ -163,6 +174,13 @@ function AppRoutes() {
 
   return (
     <SuperAdminShell>
+    <Suspense
+      fallback={(
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
+          <LoaderDashboard height={30} width={30} />
+        </div>
+      )}
+    >
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/signup" element={<Signup />} />
@@ -274,6 +292,7 @@ function AppRoutes() {
       />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+    </Suspense>
     </SuperAdminShell>
   );
 }

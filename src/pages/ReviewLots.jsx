@@ -146,6 +146,7 @@ export default function ReviewLots() {
     approveLotCompletion,
     rejectLotCompletion,
     initialDataLoading,
+    receiptsLoading,
   } = useApp();
   const [search, setSearch] = useState("");
   const [busyId, setBusyId] = useState(null);
@@ -440,6 +441,12 @@ export default function ReviewLots() {
                             receipt={pe.receipt}
                             lotLabel={l.lotNo || l.lotNumber}
                             onOpen={setReceiptPreview}
+                          />
+                        ) : receiptsLoading ? (
+                          <span
+                            className="skeleton-box"
+                            aria-label="Loading receipt"
+                            style={{ width: 36, height: 36 }}
                           />
                         ) : (
                           <span

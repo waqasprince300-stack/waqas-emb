@@ -1,13 +1,10 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, useMemo } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { apiService } from '../services/api';
 import { useAuth } from './AuthContext';
 import {
-  workspaceLabelEmbeddedInLot,
   normalizedBusinessOwnerId,
-  normalizeBusinessOwnersListResponse,
-  extractBusinessOwnersArrayFromResponse,
-  ownerDisplayNameFromRow,
-  businessOwnerDisplayFromApiPayload,
+  workspaceLabelEmbeddedInLot,
 } from '../utils/businessWorkspace';
 
 const AppContext = createContext(null);
@@ -133,7 +130,14 @@ export function AppProvider({ children }) {
   const [partyCrossLots, setPartyCrossLots] = useState(INITIAL_GHAUSIA);
   const [partyCrossPartyEdits, setPartyCrossPartyEdits] = useState(INITIAL_PARTY_EDITS);
   const [partyCrossPayments, setPartyCrossPayments] = useState(INITIAL_PAYMENTS);
-  const [initialDataLoading, setInitialDataLoading] = useState(true);
+  /** 'idle' = nothing yet, 'minimal' = dashboard/reporting data ready, 'full' = scoped data ready. */
+  const [initialDataPhase, setInitialDataPhase] = useState('idle');
+  const [scopedDataLoading, setScopedDataLoading] = useState(true);
+  /** Receipt images are excluded from the fast bootstrap and streamed in afterwards. */
+  const [receiptsLoading, setReceiptsLoading] = useState(false);
+  const queryClient = useQueryClient();
+  const hasLoadedOnceRef = useRef(false);
+  const initialDataLoading = initialDataPhase === 'idle';
 
   const readViewAllWorkspaces = () => {
     try {
@@ -145,11 +149,20 @@ export function AppProvider({ children }) {
 
   const [viewAllWorkspaces, setViewAllWorkspaces] = useState(readViewAllWorkspaces);
 
+  /** Local CRUD keeps state in sync per workspace; drop cached bootstrap so a workspace switch refetches fresh data. */
+  const invalidateBootstrapCache = () => {
+    queryClient.invalidateQueries({ queryKey: ['bootstrap'] });
+  };
+
   const selectBusinessOwner = (id) => {
     const nextId = String(id || '');
+    if (nextId === String(activeBusinessOwnerId || '') && !viewAllWorkspaces) {
+      return;
+    }
     try {
       localStorage.removeItem(WORKSPACE_VIEW_ALL_KEY);
     } catch { /* ignore */ }
+    invalidateBootstrapCache();
     setViewAllWorkspaces(false);
     localStorage.setItem(BUSINESS_OWNER_KEY, nextId);
     setActiveBusinessOwnerId(nextId);
@@ -163,7 +176,7 @@ export function AppProvider({ children }) {
   };
 
   useEffect(() => {
-    if (!isAuthenticated) {
+    const clearAllData = () => {
       setParties(INITIAL_PARTIES);
       setGhausiaLots(INITIAL_GHAUSIA);
       setPartyEdits(INITIAL_PARTY_EDITS);
@@ -175,305 +188,171 @@ export function AppProvider({ children }) {
       setPartyCrossPartyEdits(INITIAL_PARTY_EDITS);
       setPartyCrossPayments(INITIAL_PAYMENTS);
       setBusinessOwners([]);
+    };
+
+    const markLoaded = () => {
+      setInitialDataPhase('full');
+      setScopedDataLoading(false);
+      hasLoadedOnceRef.current = true;
+    };
+
+    // Roles without business data: clear and finish immediately.
+    if (!isAuthenticated || user?.role === 'super_admin' || user?.role === 'personal_khata') {
+      clearAllData();
       try {
         localStorage.removeItem(WORKSPACE_VIEW_ALL_KEY);
       } catch { /* ignore */ }
       setViewAllWorkspaces(false);
-      setInitialDataLoading(false);
+      markLoaded();
       return;
     }
 
-    if (user?.role === 'super_admin') {
-      setParties(INITIAL_PARTIES);
-      setGhausiaLots(INITIAL_GHAUSIA);
-      setPartyEdits(INITIAL_PARTY_EDITS);
-      setPayments(INITIAL_PAYMENTS);
-      setAdminReportingLots(INITIAL_GHAUSIA);
-      setAdminReportingPayments(INITIAL_PAYMENTS);
-      setAdminReportingPartyEdits(INITIAL_PARTY_EDITS);
-      setPartyCrossLots(INITIAL_GHAUSIA);
-      setPartyCrossPartyEdits(INITIAL_PARTY_EDITS);
-      setPartyCrossPayments(INITIAL_PAYMENTS);
-      setBusinessOwners([]);
-      try {
-        localStorage.removeItem(WORKSPACE_VIEW_ALL_KEY);
-      } catch { /* ignore */ }
-      setViewAllWorkspaces(false);
-      setInitialDataLoading(false);
-      return;
-    }
+    const normalizeOwners = (owners) =>
+      (Array.isArray(owners) ? owners : []).map((o) => {
+        const id = normalizedBusinessOwnerId(o?.id ?? o?._id);
+        return { ...o, id, _id: id };
+      });
 
-    if (user?.role === 'personal_khata') {
-      setParties(INITIAL_PARTIES);
-      setGhausiaLots(INITIAL_GHAUSIA);
-      setPartyEdits(INITIAL_PARTY_EDITS);
-      setPayments(INITIAL_PAYMENTS);
-      setAdminReportingLots(INITIAL_GHAUSIA);
-      setAdminReportingPayments(INITIAL_PAYMENTS);
-      setAdminReportingPartyEdits(INITIAL_PARTY_EDITS);
-      setPartyCrossLots(INITIAL_GHAUSIA);
-      setPartyCrossPartyEdits(INITIAL_PARTY_EDITS);
-      setPartyCrossPayments(INITIAL_PAYMENTS);
-      setBusinessOwners([]);
-      try {
-        localStorage.removeItem(WORKSPACE_VIEW_ALL_KEY);
-      } catch { /* ignore */ }
-      setViewAllWorkspaces(false);
-      setInitialDataLoading(false);
-      return;
-    }
+    const applyReporting = (reporting) => {
+      if (!reporting) return;
+      if (Array.isArray(reporting.lots)) setAdminReportingLots(reporting.lots.map(normalizeLotData));
+      if (Array.isArray(reporting.payments)) setAdminReportingPayments(reporting.payments);
+      setAdminReportingPartyEdits(partyEditsArrayToMap(reporting.partyEdits));
+    };
 
-    async function loadAppData() {
-      setInitialDataLoading(true);
+    const applyPartyCross = (cross) => {
+      if (!cross) return;
+      if (Array.isArray(cross.lots)) setPartyCrossLots(cross.lots.map(normalizeLotData));
+      if (Array.isArray(cross.payments)) setPartyCrossPayments(cross.payments);
+      setPartyCrossPartyEdits(partyEditsArrayToMap(cross.partyEdits));
+    };
+
+    const applyScoped = (data) => {
+      if (Array.isArray(data.ghausiaLots)) setGhausiaLots(data.ghausiaLots.map(normalizeLotData));
+      if (Array.isArray(data.payments)) setPayments(data.payments);
+      setPartyEdits(partyEditsArrayToMap(data.partyEdits));
+    };
+
+    const mergeReceipts = (setter, rows) => {
+      if (!Array.isArray(rows) || rows.length === 0) return;
+      setter((prev) => {
+        const next = { ...prev };
+        rows.forEach((row) => {
+          const lotId = row?.lotId;
+          if (lotId == null) return;
+          const existing = next[lotId];
+          if (!existing) return;
+          if (existing.receipt === (row.receipt ?? '')) return;
+          next[lotId] = { ...existing, receipt: row.receipt ?? '' };
+        });
+        return next;
+      });
+    };
+
+    /** Stream receipt images in after the page is interactive (kept out of the fast bootstrap). */
+    async function hydrateReceipts() {
+      setReceiptsLoading(true);
       try {
         if (user?.role === 'admin') {
-          const remoteOwners = await apiService.getBusinessOwners();
-          if (Array.isArray(remoteOwners)) {
-            setBusinessOwners(remoteOwners);
-            if (remoteOwners.length === 0) {
-              try {
-                localStorage.removeItem(BUSINESS_OWNER_KEY);
-                localStorage.removeItem(WORKSPACE_VIEW_ALL_KEY);
-              } catch { /* ignore */ }
-              setViewAllWorkspaces(false);
-              setActiveBusinessOwnerId('');
-              setParties(INITIAL_PARTIES);
-              setGhausiaLots(INITIAL_GHAUSIA);
-              setPartyEdits(INITIAL_PARTY_EDITS);
-              setPayments(INITIAL_PAYMENTS);
-              setAdminReportingLots(INITIAL_GHAUSIA);
-              setAdminReportingPayments(INITIAL_PAYMENTS);
-              setAdminReportingPartyEdits(INITIAL_PARTY_EDITS);
-              setInitialDataLoading(false);
-              return;
-            }
-            const selectedExists = remoteOwners.some((owner) => String(owner.id || owner._id) === String(activeBusinessOwnerId));
-            const nextOwner = selectedExists
-              ? activeBusinessOwnerId
-              : String(remoteOwners[0]?.id || remoteOwners[0]?._id || '');
-            if (nextOwner && nextOwner !== activeBusinessOwnerId) {
-              localStorage.setItem(BUSINESS_OWNER_KEY, nextOwner);
-              setActiveBusinessOwnerId(nextOwner);
-              return;
-            }
-          }
-        }
-
-        const isAdminUser = user?.role === 'admin';
-
-        if (isAdminUser) {
-          const [
-            remoteParties,
-            remoteLots,
-            remotePayments,
-            remotePartyEdits,
-            allLots,
-            allPayments,
-            allPartyEdits,
-          ] = await Promise.all([
-            apiService.getParties(),
-            apiService.getGhausiaLots(),
-            apiService.getPayments(),
-            apiService.getPartyEdits(),
-            apiService.getGhausiaLots({ scope: 'all' }),
-            apiService.getPayments({ scope: 'all' }),
-            apiService.getPartyEdits({ scope: 'all' }),
+          const [scoped, reporting] = await Promise.all([
+            apiService.getPartyEdits({ includeReceipts: true }),
+            apiService.getPartyEdits({ scope: 'all', includeReceipts: true }),
           ]);
-
-          if (Array.isArray(remoteParties)) {
-            setParties(remoteParties.map(normalizeParty));
-          }
-
-          if (Array.isArray(remoteLots)) {
-            setGhausiaLots(remoteLots.map(normalizeLotData));
-          }
-
-          if (Array.isArray(remotePayments)) {
-            setPayments(remotePayments);
-          }
-
-          setPartyEdits(partyEditsArrayToMap(remotePartyEdits));
-
-          if (Array.isArray(allLots)) {
-            setAdminReportingLots(allLots.map(normalizeLotData));
-          }
-          if (Array.isArray(allPayments)) {
-            setAdminReportingPayments(allPayments);
-          }
-          setAdminReportingPartyEdits(partyEditsArrayToMap(allPartyEdits));
+          mergeReceipts(setPartyEdits, scoped);
+          mergeReceipts(setAdminReportingPartyEdits, reporting);
         } else {
-          /** Party JWT is cross-workspace — never reuse admin cached `x-business-owner-id` from localStorage. */
-          const partyReadOpts = { skipTenantHeader: true };
-
-          const [
-            remoteParties,
-            remoteLots,
-            remotePayments,
-            remotePartyEdits,
-            ledgerLots,
-            ledgerPartyEdits,
-            ledgerPayments,
-          ] = await Promise.all([
-            apiService.getParties(partyReadOpts),
-            apiService.getGhausiaLots(partyReadOpts),
-            apiService.getPayments(partyReadOpts),
-            apiService.getPartyEdits(partyReadOpts),
-            apiService.getGhausiaLots({ ...partyReadOpts, partyScope: 'all' }),
-            apiService.getPartyEdits({ ...partyReadOpts, partyScope: 'all' }),
-            apiService.getPayments({ ...partyReadOpts, partyScope: 'all' }),
+          const [scoped, cross] = await Promise.all([
+            apiService.getPartyEdits({ skipTenantHeader: true, includeReceipts: true }),
+            apiService.getPartyEdits({ skipTenantHeader: true, partyScope: 'all', includeReceipts: true }),
           ]);
-
-          if (Array.isArray(remoteParties)) {
-            setParties(remoteParties.map(normalizeParty));
-          }
-
-          if (Array.isArray(remoteLots)) {
-            setGhausiaLots(remoteLots.map(normalizeLotData));
-          }
-
-          if (Array.isArray(remotePayments)) {
-            setPayments(remotePayments);
-          }
-
-          setPartyEdits(partyEditsArrayToMap(remotePartyEdits));
-
-          const normalizedPartyLedgerLots = Array.isArray(ledgerLots)
-            ? ledgerLots.map(normalizeLotData)
-            : [];
-          if (Array.isArray(ledgerLots)) {
-            setPartyCrossLots(normalizedPartyLedgerLots);
-          }
-          setPartyCrossPartyEdits(partyEditsArrayToMap(ledgerPartyEdits));
-          if (Array.isArray(ledgerPayments)) {
-            setPartyCrossPayments(ledgerPayments);
-          }
-
-          /** Workspace names for party (admin gets full owners list separately). */
-          try {
-            const byId = new Map();
-
-            const ingestOwnerRow = (row) => {
-              if (!row || typeof row !== 'object') return;
-              const id = normalizedBusinessOwnerId(row?.id ?? row?._id);
-              if (!id) return;
-              const nm = ownerDisplayNameFromRow(row);
-              const existing = byId.get(id);
-              const name =
-                nm ||
-                (existing ? ownerDisplayNameFromRow(existing) : '') ||
-                String(existing?.name ?? '').trim();
-              const merged = {
-                ...(existing || {}),
-                ...row,
-                id,
-                _id: id,
-              };
-              if (name) merged.name = name;
-              byId.set(id, merged);
-            };
-
-            const ownersResp = await apiService.getBusinessOwners(partyReadOpts).catch(() => null);
-
-            /** Prefer legacy bare-array behaviour; then broaden with extract helper. */
-            if (Array.isArray(ownersResp) && ownersResp.length) {
-              ownersResp.forEach((o) => ingestOwnerRow({ ...o, id: normalizedBusinessOwnerId(o?.id ?? o?._id) }));
-            } else {
-              extractBusinessOwnersArrayFromResponse(ownersResp).forEach((o) =>
-                ingestOwnerRow(o && typeof o === 'object' ? o : {}),
-              );
-            }
-
-            try {
-              const colsResp = await apiService.getCollections(partyReadOpts).catch(() => null);
-              const colList = Array.isArray(colsResp)
-                ? colsResp
-                : normalizeBusinessOwnersListResponse(colsResp);
-              colList.forEach((c) => {
-                if (!c || typeof c !== 'object') return;
-                let cid = normalizedBusinessOwnerId(
-                  c.businessOwnerId ??
-                    c.businessOwner ??
-                    c.ownerId ??
-                    c.workspaceOwnerId,
-                );
-                const bo = c.businessOwner ?? c.owner;
-                if (bo != null && typeof bo === 'object') {
-                  const innerId = normalizedBusinessOwnerId(bo._id ?? bo.id);
-                  if (innerId) cid = innerId;
-                  ingestOwnerRow({ ...bo, id: innerId, _id: innerId });
-                }
-                const cname = ownerDisplayNameFromRow(c);
-                if (cid && cname && !ownerDisplayNameFromRow(byId.get(cid))) {
-                  ingestOwnerRow({ id: cid, name: cname });
-                }
-              });
-            } catch {
-              /* optional */
-            }
-
-            normalizedPartyLedgerLots.forEach((l) => {
-              const wid = normalizedBusinessOwnerId(l.businessOwnerId);
-              if (!wid) return;
-              const embedded = workspaceLabelEmbeddedInLot(l);
-              if (embedded) ingestOwnerRow({ id: wid, name: embedded });
-            });
-
-            const needFetchIds = [...new Set(
-              normalizedPartyLedgerLots
-                .map((l) => normalizedBusinessOwnerId(l.businessOwnerId))
-                .filter(Boolean),
-            )].filter((wid) => !ownerDisplayNameFromRow(byId.get(wid)));
-
-            await Promise.all(
-              needFetchIds.map(async (wid) => {
-                try {
-                  const raw = await apiService.getBusinessOwner(wid);
-                  const row = businessOwnerDisplayFromApiPayload(raw, wid);
-                  if (row) ingestOwnerRow(row);
-                } catch {
-                  /* route may be forbidden for party JWT */
-                }
-              }),
-            );
-
-            const sortLabel = (o) =>
-              ownerDisplayNameFromRow(o || {}) ||
-              String(o?.name ?? '').trim();
-
-            setBusinessOwners(
-              [...byId.values()].sort((a, b) =>
-                String(sortLabel(a)).localeCompare(String(sortLabel(b))),
-              ),
-            );
-          } catch (e) {
-            console.warn('Party workspace directory merge failed', e);
-            try {
-              const owners = await apiService.getBusinessOwners(partyReadOpts);
-              if (Array.isArray(owners) && owners.length) {
-                setBusinessOwners(
-                  owners.map((o) => ({
-                    ...o,
-                    id: normalizedBusinessOwnerId(o?.id ?? o?._id),
-                  })),
-                );
-              }
-            } catch {
-              /* keep previous businessOwners rather than wiping */
-            }
-          }
+          mergeReceipts(setPartyEdits, scoped);
+          mergeReceipts(setPartyCrossPartyEdits, cross);
         }
       } catch (error) {
-        console.error('Unable to load persisted data from JSON Server', error);
+        console.warn('Receipt hydration failed', error);
       } finally {
-        setInitialDataLoading(false);
+        setReceiptsLoading(false);
+      }
+    }
+
+    const isAdminUser = user?.role === 'admin';
+    /** Party JWT is cross-workspace — never reuse admin cached `x-business-owner-id` from localStorage. */
+    const partyOpts = isAdminUser ? {} : { skipTenantHeader: true };
+
+    async function loadAppData() {
+      const isFirst = !hasLoadedOnceRef.current;
+      if (isFirst) setInitialDataPhase('idle');
+      setScopedDataLoading(true);
+
+      try {
+        // Phase A — minimal payload: businessOwners + parties + reporting/partyCross.
+        // Unblocks Dashboard, Parties, PartyLedger, ReviewLots without waiting for scoped data.
+        const minimal = await queryClient.fetchQuery({
+          queryKey: ['bootstrap', user?._id, user?.role, 'minimal'],
+          queryFn: () => apiService.getBootstrap({ minimal: true, ...partyOpts }),
+        });
+
+        if (Array.isArray(minimal?.parties)) setParties(minimal.parties.map(normalizeParty));
+
+        if (isAdminUser) {
+          const remoteOwners = normalizeOwners(minimal?.businessOwners);
+          setBusinessOwners(remoteOwners);
+          if (remoteOwners.length === 0) {
+            try {
+              localStorage.removeItem(BUSINESS_OWNER_KEY);
+              localStorage.removeItem(WORKSPACE_VIEW_ALL_KEY);
+            } catch { /* ignore */ }
+            setViewAllWorkspaces(false);
+            setActiveBusinessOwnerId('');
+            clearAllData();
+            markLoaded();
+            return;
+          }
+          const selectedExists = remoteOwners.some((owner) => String(owner.id || owner._id) === String(activeBusinessOwnerId));
+          const nextOwner = selectedExists
+            ? activeBusinessOwnerId
+            : String(remoteOwners[0]?.id || remoteOwners[0]?._id || '');
+          if (nextOwner && nextOwner !== activeBusinessOwnerId) {
+            localStorage.setItem(BUSINESS_OWNER_KEY, nextOwner);
+            setActiveBusinessOwnerId(nextOwner);
+            return; // effect re-runs with the resolved workspace; minimal comes from cache
+          }
+          applyReporting(minimal?.reporting);
+        } else {
+          setBusinessOwners(normalizeOwners(minimal?.businessOwners));
+          applyPartyCross(minimal?.partyCross);
+        }
+
+        setInitialDataPhase('minimal');
+
+        // Phase B — full payload: workspace-scoped lots/payments/partyEdits for Ghausia / Payments.
+        const full = await queryClient.fetchQuery({
+          queryKey: ['bootstrap', user?._id, user?.role, isAdminUser ? String(activeBusinessOwnerId || '') : 'party', 'full'],
+          queryFn: () => apiService.getBootstrap({ ...partyOpts }),
+        });
+
+        if (Array.isArray(full?.parties)) setParties(full.parties.map(normalizeParty));
+        applyScoped(full || {});
+        if (isAdminUser) {
+          applyReporting(full?.reporting);
+        } else {
+          setBusinessOwners(normalizeOwners(full?.businessOwners));
+          applyPartyCross(full?.partyCross);
+        }
+        markLoaded();
+        hydrateReceipts();
+      } catch (error) {
+        console.error('Unable to load bootstrap data', error);
+        markLoaded();
       }
     }
 
     loadAppData();
-  }, [activeBusinessOwnerId, isAuthenticated, user?._id, user?.role]);
+  }, [activeBusinessOwnerId, isAuthenticated, user?._id, user?.role, queryClient]);
 
   const createBusinessOwner = async (data) => {
     const created = await apiService.createBusinessOwner(data);
+    invalidateBootstrapCache();
     setBusinessOwners((current) => [...current, created]);
     selectBusinessOwner(created.id || created._id);
     return created;
@@ -483,6 +362,7 @@ export function AppProvider({ children }) {
     const idStr = String(id ?? '').trim();
     if (!idStr) return;
     await apiService.deleteBusinessOwner(id, opts);
+    invalidateBootstrapCache();
 
     const removedLotIds = new Set();
     for (const l of ghausiaLots) {
@@ -727,10 +607,14 @@ export function AppProvider({ children }) {
     }
   };
 
+  const partiesById = useMemo(() => {
+    const map = new Map();
+    for (const p of parties) map.set(String(p.id), p);
+    return map;
+  }, [parties]);
   const getPartyById = (id) => {
     if (id == null || id === '') return undefined;
-    const idStr = String(id);
-    return parties.find(p => String(p.id) === idStr);
+    return partiesById.get(String(id));
   };
   const getPartyName = (id) => getPartyById(id)?.name || 'Unknown';
 
@@ -756,6 +640,9 @@ export function AppProvider({ children }) {
       deleteBusinessOwner,
       getPartyById, getPartyName,
       initialDataLoading,
+      initialDataPhase,
+      scopedDataLoading,
+      receiptsLoading,
     }}>
       {children}
     </AppContext.Provider>
