@@ -21,6 +21,7 @@ const ReviewLots = lazy(() => import('./pages/ReviewLots'));
 const PersonalKhata = lazy(() => import('./pages/PersonalKhata'));
 const PersonalKhataAccount = lazy(() => import('./pages/PersonalKhataAccount'));
 const PersonalKhataShared = lazy(() => import('./pages/PersonalKhataShared'));
+const UpgradeAccount = lazy(() => import('./pages/UpgradeAccount'));
 
 function PersonalKhataAccessibleRoute({ sidebarOpen, setSidebarOpen }) {
   const { isAuthenticated } = useAuth();
@@ -330,6 +331,7 @@ function AppRoutes() {
         )}
       />
       <Route path="/personal-khata/shared" element={<PersonalKhataShared />} />
+      <Route path="/personal-khata/upgrade" element={<UpgradeAccount />} />
       <Route
         path="/personal-khata"
         element={(

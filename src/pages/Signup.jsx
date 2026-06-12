@@ -14,6 +14,7 @@ export default function Signup() {
   const [form, setForm] = useState({
     name: '',
     email: '',
+    phone: '',
     password: '',
     role: 'party',
     partyName: '',
@@ -96,7 +97,7 @@ export default function Signup() {
       }
 
       setForm({
-        name: '', email: '', password: '', role: 'party', partyName: '', adminEmail: '',
+        name: '', email: '', phone: '', password: '', role: 'party', partyName: '', adminEmail: '',
       });
     } catch (err) {
       setError(formatApiError(err, 'Unable to create account'));
@@ -176,6 +177,19 @@ export default function Signup() {
             value={form.email}
             onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
             required
+          />
+        </label>
+
+        <label className="auth-label">
+          <span className="auth-label-text">Mobile number (optional)</span>
+          <input
+            className="form-input"
+            type="tel"
+            inputMode="tel"
+            placeholder="e.g. 03001234567 — used for sign-in codes"
+            value={form.phone}
+            onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
+            autoComplete="tel"
           />
         </label>
 

@@ -148,8 +148,9 @@ async function compressImageDataUrl(dataUrl, maxBytes = PK_IMAGE_TARGET_BYTES) {
 
 export default function PersonalKhata({ standalone = false } = {}) {
   const { user } = useAuth();
-  const khataStorageScope =
-    user?.role === 'personal_khata' ? String(user.id || user._id || '').trim() : '';
+  // Every logged-in account (admin / party / personal_khata) gets its own server-synced
+  // khata, keyed by user id, so it shows the same data on any device. Anonymous = local only.
+  const khataStorageScope = user ? String(user.id || user._id || '').trim() : '';
   const { contactId } = useParams();
   const navigate = useNavigate();
   const [contacts, setContacts] = useState([]);
@@ -258,7 +259,15 @@ export default function PersonalKhata({ standalone = false } = {}) {
         const remoteEmpty = state.contacts.length === 0 && state.entries.length === 0;
         if (remoteEmpty) {
           // First sync on this account — push up any data this device had stored locally.
-          const local = loadKhataState(khataStorageScope);
+          let local = loadKhataState(khataStorageScope);
+          // If nothing under this account locally, adopt the anonymous device khata so users
+          // who started before signing in (or existing accounts) keep their data linked.
+          if (local.contacts.length === 0 && local.entries.length === 0) {
+            const anon = loadKhataState(undefined);
+            if (anon.contacts.length > 0 || anon.entries.length > 0) {
+              local = anon;
+            }
+          }
           if (local.contacts.length > 0 || local.entries.length > 0) {
             state = local;
             try {
@@ -1593,6 +1602,10 @@ export default function PersonalKhata({ standalone = false } = {}) {
             {user?.role === 'personal_khata' && (
               <p style={{ margin: '10px 0 0', fontSize: 12.5, color: '#cbd5e1', fontWeight: 600 }}>
                 Signed in — yeh khata aapke account se juda hai, har device aur browser par same data dikhega.
+                <br />
+                <Link to="/personal-khata/upgrade" style={{ color: '#93c5fd', fontWeight: 700 }}>
+                  Business account banayen (admin ya party) — khata data linked rahega
+                </Link>
               </p>
             )}
           </div>

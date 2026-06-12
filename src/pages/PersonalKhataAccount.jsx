@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
 import AuthCard from '../components/AuthCard';
 import PasswordField from '../components/PasswordField';
+import OtpVerify from '../components/OtpVerify';
 import { useAuth, normalizeAuthResponse } from '../context/AuthContext';
 import { formatApiError } from '../utils/formatApiError';
 import {
@@ -12,7 +13,7 @@ import {
 const brandLogoSrc = `${process.env.PUBLIC_URL || ''}/seam-grace-logo.png`;
 
 export default function PersonalKhataAccount() {
-  const { isAuthenticated, user, login, signup, refreshSession } = useAuth();
+  const { isAuthenticated, user, login, signup, refreshSession, verifyLoginOtp, resendLoginOtp } = useAuth();
   const navigate = useNavigate();
   const [mode, setMode] = useState('signin');
   const [idMethod, setIdMethod] = useState('email');
@@ -26,6 +27,11 @@ export default function PersonalKhataAccount() {
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const [otpStage, setOtpStage] = useState(false);
+  const [otp, setOtp] = useState(null);
+  const [otpError, setOtpError] = useState('');
+  const [otpSubmitting, setOtpSubmitting] = useState(false);
 
   React.useEffect(() => {
     const prev = document.title;
@@ -61,13 +67,39 @@ export default function PersonalKhataAccount() {
     setIsSubmitting(true);
     try {
       const { email, phone } = identifiersForPersonalKhataSignup(idMethod, form.email, form.phone);
-      await login({ email, phone, password: form.password });
+      const result = await login({ email, phone, password: form.password });
+      if (result?.otpRequired) {
+        setOtp(result);
+        setOtpStage(true);
+        setOtpError('');
+        return;
+      }
       navigate('/personal-khata', { replace: true });
     } catch (err) {
       setError(formatApiError(err, 'Unable to sign in'));
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleVerifyOtp = async (code) => {
+    setOtpError('');
+    setOtpSubmitting(true);
+    try {
+      await verifyLoginOtp({ otpId: otp.otpId, code });
+      navigate('/personal-khata', { replace: true });
+    } catch (err) {
+      setOtpError(formatApiError(err, 'Unable to verify code'));
+    } finally {
+      setOtpSubmitting(false);
+    }
+  };
+
+  const handleResendOtp = async (channel) => {
+    const res = await resendLoginOtp({ otpId: otp.otpId, channel });
+    const payload = res?.data || res || {};
+    setOtp((prev) => ({ ...prev, ...payload }));
+    return payload;
   };
 
   const runRegister = async (event) => {
@@ -165,6 +197,23 @@ export default function PersonalKhataAccount() {
         </>
       )}
     >
+      {otpStage ? (
+        <OtpVerify
+          title="Enter your sign-in code"
+          destinationMasked={otp?.destinationMasked}
+          channel={otp?.channel}
+          channels={otp?.channels}
+          devCode={otp?.devCode}
+          deliveryNote={otp?.deliveryNote}
+          error={otpError}
+          submitting={otpSubmitting}
+          submitLabel="Verify & continue"
+          onSubmit={handleVerifyOtp}
+          onResend={handleResendOtp}
+          onBack={() => { setOtpStage(false); setOtpError(''); }}
+        />
+      ) : (
+      <>
       <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
         <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', alignSelf: 'center' }}>Sign in with</span>
         <button
@@ -286,6 +335,8 @@ export default function PersonalKhataAccount() {
         <code style={{ fontSize: 11 }}>phone</code>, and login with either <code style={{ fontSize: 11 }}>email</code> or{' '}
         <code style={{ fontSize: 11 }}>phone</code>. See README for API details.
       </p>
+      </>
+      )}
     </AuthCard>
   );
 }

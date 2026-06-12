@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import apiService, { registerSessionExpiredHandler } from '../services/api';
+import { getDeviceId, getDeviceLabel } from '../utils/deviceId';
 
 const AuthContext = createContext(null);
 const SESSION_KEY = 'waqas_emb_auth_session';
@@ -113,18 +114,83 @@ export function AuthProvider({ children }) {
       partyId,
       partyName,
       adminEmail,
+      deviceId: getDeviceId(),
+      deviceLabel: getDeviceLabel(),
     });
   }, []);
 
-  /** `email` and/or `phone` — backend should accept one of them (Personal Khata). */
-  const login = useCallback(async ({ email, phone, password }) => {
+  /**
+   * `email` and/or `phone` — backend accepts one of them.
+   * Returns `{ otpRequired: true, otpId, channel, ... }` when a new device must be verified,
+   * otherwise `{ otpRequired: false, user }` after the session is saved.
+   */
+  const login = useCallback(async ({ email, phone, password, otpChannel }) => {
     const phoneTrim = phone != null ? String(phone || '').trim() : '';
     const body = {
       password,
+      deviceId: getDeviceId(),
+      deviceLabel: getDeviceLabel(),
+      ...(otpChannel ? { otpChannel } : {}),
       ...(phoneTrim ? { phone: phoneTrim } : { email: normalizeEmail(email) }),
     };
     const response = await apiService.login(body);
+    const payload = response?.data || response || {};
+    if (payload.otpRequired) {
+      return { otpRequired: true, ...payload };
+    }
+    const user = saveSession(normalizeAuthResponse(response));
+    return { otpRequired: false, user };
+  }, [saveSession]);
+
+  /** Verify the new-device login code and save the session. Returns the signed-in user. */
+  const verifyLoginOtp = useCallback(async ({ otpId, code }) => {
+    const response = await apiService.verifyLoginOtp({
+      otpId,
+      code: String(code || '').trim(),
+      deviceId: getDeviceId(),
+      deviceLabel: getDeviceLabel(),
+    });
     return saveSession(normalizeAuthResponse(response));
+  }, [saveSession]);
+
+  const resendLoginOtp = useCallback(({ otpId, channel }) => {
+    return apiService.resendLoginOtp({ otpId, ...(channel ? { channel } : {}) });
+  }, []);
+
+  /** OTP password reset — step 1. `email` or `phone`, optional `channel`. */
+  const requestPasswordReset = useCallback(({ email, phone, channel }) => {
+    const phoneTrim = phone != null ? String(phone || '').trim() : '';
+    return apiService.requestPasswordResetOtp({
+      ...(channel ? { channel } : {}),
+      ...(phoneTrim ? { phone: phoneTrim } : { email: normalizeEmail(email) }),
+    });
+  }, []);
+
+  /** OTP password reset — step 2. Auto-signs in when the account is approved. */
+  const verifyPasswordReset = useCallback(async ({ otpId, code, password }) => {
+    const response = await apiService.verifyPasswordResetOtp({
+      otpId,
+      code: String(code || '').trim(),
+      password,
+      deviceId: getDeviceId(),
+    });
+    const payload = response?.data || response || {};
+    if (payload.token && payload.user) {
+      saveSession(normalizeAuthResponse(response));
+      return { ...payload, loggedIn: true };
+    }
+    return { ...payload, loggedIn: false };
+  }, [saveSession]);
+
+  /** Upgrade the current Personal Khata account to admin/party. Auto-signs in when approved. */
+  const upgradeAccount = useCallback(async (data) => {
+    const response = await apiService.upgradeAccount(data);
+    const payload = response?.data || response || {};
+    if (payload.token && payload.user) {
+      saveSession(normalizeAuthResponse(response));
+      return { ...payload, loggedIn: true };
+    }
+    return { ...payload, loggedIn: false };
   }, [saveSession]);
 
   const forgotPassword = useCallback(({ email }) => {
@@ -159,11 +225,29 @@ export function AuthProvider({ children }) {
     isPersonalKhata: user?.role === 'personal_khata',
     signup,
     login,
+    verifyLoginOtp,
+    resendLoginOtp,
+    requestPasswordReset,
+    verifyPasswordReset,
+    upgradeAccount,
     forgotPassword,
     resetPassword,
     logout,
     refreshSession: saveSession,
-  }), [forgotPassword, login, logout, resetPassword, saveSession, signup, user]);
+  }), [
+    forgotPassword,
+    login,
+    verifyLoginOtp,
+    resendLoginOtp,
+    requestPasswordReset,
+    verifyPasswordReset,
+    upgradeAccount,
+    logout,
+    resetPassword,
+    saveSession,
+    signup,
+    user,
+  ]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

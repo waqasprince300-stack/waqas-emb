@@ -109,6 +109,26 @@ const partyEditsArrayToMap = (remotePartyEdits) => {
   }, {});
 };
 
+/** Merge bootstrap party edits without wiping already-hydrated receipt images. */
+const mergePartyEditsFromRemote = (remotePartyEdits, prev = {}) => {
+  if (!Array.isArray(remotePartyEdits)) return prev;
+  const incoming = partyEditsArrayToMap(remotePartyEdits);
+  const next = { ...prev };
+  Object.keys(incoming).forEach((lotId) => {
+    const remote = incoming[lotId];
+    const existing = prev[lotId];
+    const remoteReceipt = remote.receipt;
+    next[lotId] = {
+      ...remote,
+      receipt:
+        remoteReceipt != null && remoteReceipt !== ''
+          ? remoteReceipt
+          : (existing?.receipt ?? ''),
+    };
+  });
+  return next;
+};
+
 export function AppProvider({ children }) {
   const { isAuthenticated, user } = useAuth();
   const [parties, setParties] = useState(INITIAL_PARTIES);
@@ -144,7 +164,70 @@ export function AppProvider({ children }) {
   const lastRefreshRef = useRef(0);
   /** True for the next loader run only when it was triggered as a non-blocking background refresh. */
   const isBackgroundRefreshRef = useRef(false);
+  const hydrateReceiptsTimerRef = useRef(null);
   const initialDataLoading = initialDataPhase === 'idle';
+
+  const mergeReceiptRows = useCallback((setter, rows) => {
+    if (!Array.isArray(rows) || rows.length === 0) return;
+    setter((prev) => {
+      const next = { ...prev };
+      rows.forEach((row) => {
+        const lotId = row?.lotId;
+        if (lotId == null) return;
+        const incomingReceipt = row.receipt ?? '';
+        const existing = next[lotId];
+        if (!existing) {
+          if (incomingReceipt) {
+            next[lotId] = { lotId, receipt: incomingReceipt };
+          }
+          return;
+        }
+        if (existing.receipt === incomingReceipt) return;
+        next[lotId] = { ...existing, receipt: incomingReceipt };
+      });
+      return next;
+    });
+  }, []);
+
+  /**
+   * Bill photos load after the page is interactive (never block bootstrap).
+   * Runs after every data refresh and when the tab becomes visible again.
+   */
+  const hydrateReceipts = useCallback(async () => {
+    setReceiptsLoading(true);
+    try {
+      if (user?.role === 'admin') {
+        const [scoped, reporting] = await Promise.all([
+          apiService.getPartyEdits({ includeReceipts: true }),
+          apiService.getPartyEdits({ scope: 'all', includeReceipts: true }),
+        ]);
+        mergeReceiptRows(setPartyEdits, scoped);
+        mergeReceiptRows(setAdminReportingPartyEdits, reporting);
+      } else if (user?.role === 'party') {
+        const [scoped, cross] = await Promise.all([
+          apiService.getPartyEdits({ skipTenantHeader: true, includeReceipts: true }),
+          apiService.getPartyEdits({ skipTenantHeader: true, partyScope: 'all', includeReceipts: true }),
+        ]);
+        mergeReceiptRows(setPartyEdits, scoped);
+        mergeReceiptRows(setPartyCrossPartyEdits, cross);
+      }
+    } catch (error) {
+      console.warn('Receipt hydration failed', error);
+    } finally {
+      setReceiptsLoading(false);
+    }
+  }, [mergeReceiptRows, user?.role]);
+
+  /** Debounce rapid navigations so we don't spam receipt API calls. */
+  const scheduleHydrateReceipts = useCallback(() => {
+    if (hydrateReceiptsTimerRef.current) {
+      clearTimeout(hydrateReceiptsTimerRef.current);
+    }
+    hydrateReceiptsTimerRef.current = setTimeout(() => {
+      hydrateReceiptsTimerRef.current = null;
+      hydrateReceipts();
+    }, 250);
+  }, [hydrateReceipts]);
 
   const readViewAllWorkspaces = () => {
     try {
@@ -240,63 +323,27 @@ export function AppProvider({ children }) {
       if (!reporting) return;
       if (Array.isArray(reporting.lots)) setAdminReportingLots(reporting.lots.map(normalizeLotData));
       if (Array.isArray(reporting.payments)) setAdminReportingPayments(reporting.payments);
-      setAdminReportingPartyEdits(partyEditsArrayToMap(reporting.partyEdits));
+      if (Array.isArray(reporting.partyEdits)) {
+        setAdminReportingPartyEdits((prev) => mergePartyEditsFromRemote(reporting.partyEdits, prev));
+      }
     };
 
     const applyPartyCross = (cross) => {
       if (!cross) return;
       if (Array.isArray(cross.lots)) setPartyCrossLots(cross.lots.map(normalizeLotData));
       if (Array.isArray(cross.payments)) setPartyCrossPayments(cross.payments);
-      setPartyCrossPartyEdits(partyEditsArrayToMap(cross.partyEdits));
+      if (Array.isArray(cross.partyEdits)) {
+        setPartyCrossPartyEdits((prev) => mergePartyEditsFromRemote(cross.partyEdits, prev));
+      }
     };
 
     const applyScoped = (data) => {
       if (Array.isArray(data.ghausiaLots)) setGhausiaLots(data.ghausiaLots.map(normalizeLotData));
       if (Array.isArray(data.payments)) setPayments(data.payments);
-      setPartyEdits(partyEditsArrayToMap(data.partyEdits));
-    };
-
-    const mergeReceipts = (setter, rows) => {
-      if (!Array.isArray(rows) || rows.length === 0) return;
-      setter((prev) => {
-        const next = { ...prev };
-        rows.forEach((row) => {
-          const lotId = row?.lotId;
-          if (lotId == null) return;
-          const existing = next[lotId];
-          if (!existing) return;
-          if (existing.receipt === (row.receipt ?? '')) return;
-          next[lotId] = { ...existing, receipt: row.receipt ?? '' };
-        });
-        return next;
-      });
-    };
-
-    /** Stream receipt images in after the page is interactive (kept out of the fast bootstrap). */
-    async function hydrateReceipts() {
-      setReceiptsLoading(true);
-      try {
-        if (user?.role === 'admin') {
-          const [scoped, reporting] = await Promise.all([
-            apiService.getPartyEdits({ includeReceipts: true }),
-            apiService.getPartyEdits({ scope: 'all', includeReceipts: true }),
-          ]);
-          mergeReceipts(setPartyEdits, scoped);
-          mergeReceipts(setAdminReportingPartyEdits, reporting);
-        } else {
-          const [scoped, cross] = await Promise.all([
-            apiService.getPartyEdits({ skipTenantHeader: true, includeReceipts: true }),
-            apiService.getPartyEdits({ skipTenantHeader: true, partyScope: 'all', includeReceipts: true }),
-          ]);
-          mergeReceipts(setPartyEdits, scoped);
-          mergeReceipts(setPartyCrossPartyEdits, cross);
-        }
-      } catch (error) {
-        console.warn('Receipt hydration failed', error);
-      } finally {
-        setReceiptsLoading(false);
+      if (Array.isArray(data.partyEdits)) {
+        setPartyEdits((prev) => mergePartyEditsFromRemote(data.partyEdits, prev));
       }
-    }
+    };
 
     const isAdminUser = user?.role === 'admin';
     /** Party JWT is cross-workspace — never reuse admin cached `x-business-owner-id` from localStorage. */
@@ -372,9 +419,8 @@ export function AppProvider({ children }) {
           applyPartyCross(full?.partyCross);
         }
         markLoaded();
-        // Receipts are heavy (base64) — stream them on first load and workspace switches,
-        // but skip on lightweight background nav refreshes (in-session edits update state directly).
-        if (!isBg) hydrateReceipts();
+        // Receipts are heavy — page data shows first; bill photos stream in after (non-blocking).
+        scheduleHydrateReceipts();
       } catch (error) {
         console.error('Unable to load bootstrap data', error);
         markLoaded();
@@ -382,7 +428,28 @@ export function AppProvider({ children }) {
     }
 
     loadAppData();
-  }, [activeBusinessOwnerId, isAuthenticated, user?._id, user?.role, queryClient, refreshTick]);
+  }, [activeBusinessOwnerId, isAuthenticated, user?._id, user?.role, queryClient, refreshTick, scheduleHydrateReceipts]);
+
+  // When the user returns to this tab, pull in any bill photos added on another device.
+  useEffect(() => {
+    if (!isAuthenticated) return undefined;
+    if (user?.role === 'super_admin' || user?.role === 'personal_khata') return undefined;
+
+    const onVisible = () => {
+      if (document.visibilityState === 'visible' && hasLoadedOnceRef.current) {
+        scheduleHydrateReceipts();
+      }
+    };
+
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      if (hydrateReceiptsTimerRef.current) {
+        clearTimeout(hydrateReceiptsTimerRef.current);
+        hydrateReceiptsTimerRef.current = null;
+      }
+    };
+  }, [isAuthenticated, user?.role, scheduleHydrateReceipts]);
 
   const createBusinessOwner = async (data) => {
     const created = await apiService.createBusinessOwner(data);

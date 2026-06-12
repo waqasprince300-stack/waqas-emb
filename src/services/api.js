@@ -1,7 +1,7 @@
 // API utility for Express.js Backend
 // CRA only loads env vars that start with REACT_APP_ from .env in the project root (not src/).
 const API_BASE_URL = String(
-  process.env.REACT_APP_API_BASE_URL ||
+  // process.env.REACT_APP_API_BASE_URL ||
     (process.env.NODE_ENV === "development"
       ? "http://localhost:3001/api"
       : ""),
@@ -167,6 +167,47 @@ class ApiService {
     });
   }
 
+  /** Verify the new-device login code. Returns { token, user } on success. */
+  async verifyLoginOtp(data) {
+    return this.request('/login/verify-otp', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  /** Resend the new-device login code (optionally on a different channel). */
+  async resendLoginOtp(data) {
+    return this.request('/login/resend-otp', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  /** OTP password reset — step 1: request a code via email or phone. */
+  async requestPasswordResetOtp(data) {
+    return this.request('/password-reset/request', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  /** OTP password reset — step 2: verify the code and set a new password. */
+  async verifyPasswordResetOtp(data) {
+    return this.request('/password-reset/verify', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  /** Upgrade a Personal Khata account to a business admin / party account. */
+  async upgradeAccount(data) {
+    return this.request('/account/upgrade', {
+      method: 'POST',
+      body: JSON.stringify(data ?? {}),
+    });
+  }
+
+  // Legacy email-link password reset (kept for any links already sent).
   async forgotPassword(data) {
     return this.request('/forgot-password', {
       method: 'POST',
