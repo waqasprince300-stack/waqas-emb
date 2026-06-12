@@ -205,7 +205,7 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen }) {
       {/* Logo */}
       <div style={{ padding: '24px 20px 20px', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
         <div style={{ fontFamily: "'Playfair Display', serif", fontSize: 20, fontWeight: 600, color: '#fff', lineHeight: 1.2 }}>
-          Seam & Grance
+          Seam & Grace
         </div>
         <div style={{ fontSize: 11, color: '#64748b', marginTop: 3, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
           Grace in every stitch
@@ -335,7 +335,7 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen }) {
             </button>
           </div>
         )}
-        © 2026 Seam & Grance
+        © 2026 Seam & Grace
       </div>
     </aside>
 

@@ -8,8 +8,18 @@ import LoaderDashboard from '../components/LoaderDashboard';
 import { DateRangeSelect, isWithinDateRange, latestDateFrom, compareRowsByUpdatedNewestFirst } from '../utils/dateFilters';
 import { workspaceDisplayTitleForLot } from '../utils/businessWorkspace';
 import { getAdminLedgerOrBusinessBill, getBusinessBillAmount } from '../utils/partyBillPrivacy';
+import { generateSerialLotNumbers, previewSerialLotNumbers } from '../utils/lotSerial';
+import {
+  getRecentPartyIds,
+  getRememberedItemTypes,
+  getMachineHeadConfig,
+  getAllMachineHeads,
+  addCustomMachineHead,
+  setDefaultMachineHead,
+  rememberLotFormSave,
+} from '../utils/lotFieldMemory';
 
-const FABRICS = ['Lawn', 'Velvet', 'Cambric'];
+const BASE_FABRICS = ['Lawn', 'Velvet', 'Cambric'];
 const COLOR_OPTIONS = Array.from({ length: 13 }, (_, i) => i);
 const STATUS_OPTIONS = ['pending', 'dispatched', 'received back', 'pending approval', 'rejected', 'completed'];
 
@@ -54,7 +64,27 @@ function hasPositiveBillAmount(lot) {
 
 const newDate = new Date().toISOString().split('T')[0];
 
-function LotForm({ initial, onSave, onClose, parties, saving, pickWorkspaceForNewLot, workspaceOwnerOptions, defaultNewLotOwnerId }) {
+function resolveItemTypeFields(raw) {
+  const t = String(raw?.itemType || raw?.fabric || '').trim();
+  if (!t || BASE_FABRICS.includes(t)) {
+    return { itemType: t || 'Lawn', customFabric: '' };
+  }
+  const remembered = getRememberedItemTypes();
+  const hit = remembered.find((x) => x.toLowerCase() === t.toLowerCase());
+  if (hit) return { itemType: hit, customFabric: '' };
+  return { itemType: '__custom', customFabric: t };
+}
+
+function LotForm({
+  initial,
+  onSave,
+  onClose,
+  parties,
+  saving,
+  pickWorkspaceForNewLot,
+  workspaceOwnerOptions,
+  defaultNewLotOwnerId,
+}) {
   const blank = {
     lotNumber: '', lotNo: '', designNo: '', description: '', itemType: 'Lawn', fabric: 'Lawn', customFabric: '',
     colors: 0, quantity: '', pieces: '', unit: 'pieces', rate: '', billAmount: '',
@@ -64,26 +94,101 @@ function LotForm({ initial, onSave, onClose, parties, saving, pickWorkspaceForNe
     status: 'pending', dispatchDate: newDate, receivedBackDate: '',
     saveBusinessOwnerId: defaultNewLotOwnerId || '',
   };
-  const [form, setForm] = useState(initial ? {
-    ...blank,
-    ...initial,
-    lotNumber: initial.lotNumber || initial.lotNo || '',
-    lotNo: initial.lotNo || initial.lotNumber || '',
-    itemType: FABRICS.includes(initial.itemType || initial.fabric) ? (initial.itemType || initial.fabric) : '__custom',
-    fabric: FABRICS.includes(initial.itemType || initial.fabric) ? (initial.itemType || initial.fabric) : '__custom',
-    customFabric: FABRICS.includes(initial.itemType || initial.fabric) ? '' : (initial.customFabric || initial.itemType || initial.fabric || ''),
-    // quantity: initial.quantity ?? initial.pieces ?? '',
-    pieces: initial.pieces ?? '',
-    partyId: initial.partyId || (parties.find(p => p.name === (initial.partyName || initial.party))?.id) || '',
-    partyName: (parties.find(p => p.id === initial.partyId)?.name) || initial.partyName || '',
-    saveBusinessOwnerId:
-      initial.businessOwnerId != null && initial.businessOwnerId !== ''
-        ? String(initial.businessOwnerId)
-        : (defaultNewLotOwnerId || ''),
-  } : blank);
-  const [errors, setErrors] = useState({});
+  const itemTypeOptions = useMemo(
+    () => [...BASE_FABRICS, ...getRememberedItemTypes().filter((t) => !BASE_FABRICS.includes(t))],
+    [],
+  );
 
-  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  const [headConfig, setHeadConfig] = useState(() => getMachineHeadConfig());
+  const [headList, setHeadList] = useState(() => getAllMachineHeads());
+  const [selectedHead, setSelectedHead] = useState(() => {
+    const cfg = getMachineHeadConfig();
+    if (initial?.colors > 0 && initial?.pieces > 0) {
+      const inferred = Math.round(Number(initial.pieces) / Number(initial.colors));
+      if (inferred > 0) return inferred;
+    }
+    return cfg.defaultHead;
+  });
+  const [customHeadInput, setCustomHeadInput] = useState('');
+  const [showHeadAdd, setShowHeadAdd] = useState(false);
+
+  const [form, setForm] = useState(() => {
+    if (!initial) return blank;
+    const typeFields = resolveItemTypeFields(initial);
+    return {
+      ...blank,
+      ...initial,
+      lotNumber: initial.lotNumber || initial.lotNo || '',
+      lotNo: initial.lotNo || initial.lotNumber || '',
+      ...typeFields,
+      fabric: typeFields.itemType === '__custom' ? typeFields.customFabric : typeFields.itemType,
+      pieces: initial.pieces ?? '',
+      partyId: initial.partyId || (parties.find(p => p.name === (initial.partyName || initial.party))?.id) || '',
+      partyName: (parties.find(p => p.id === initial.partyId)?.name) || initial.partyName || '',
+      saveBusinessOwnerId:
+        initial.businessOwnerId != null && initial.businessOwnerId !== ''
+          ? String(initial.businessOwnerId)
+          : (defaultNewLotOwnerId || ''),
+    };
+  });
+  const [errors, setErrors] = useState({});
+  const isNewLot = !initial;
+  const [bulkMode, setBulkMode] = useState(false);
+  const [bulkCount, setBulkCount] = useState(5);
+
+  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+
+  const selectHead = (headCount) => {
+    const h = Math.round(Number(headCount));
+    if (!h || h < 1) return;
+    setSelectedHead(h);
+    setForm((f) => ({
+      ...f,
+      pieces: f.colors > 0 ? String(Number(f.colors) * h) : f.pieces,
+    }));
+  };
+
+  const setColorsAndPieces = (colorsVal) => {
+    const c = Number(colorsVal);
+    setForm((f) => ({
+      ...f,
+      colors: c,
+      pieces: c > 0 ? String(c * selectedHead) : '',
+    }));
+  };
+
+  const addCustomHead = () => {
+    const n = Math.round(Number(customHeadInput));
+    if (!n || n < 1) return;
+    const cfg = addCustomMachineHead(n);
+    setHeadConfig(cfg);
+    setHeadList(getAllMachineHeads());
+    selectHead(n);
+    setCustomHeadInput('');
+  };
+
+  const makeDefaultHead = (headCount) => {
+    const cfg = setDefaultMachineHead(headCount);
+    setHeadConfig(cfg);
+    selectHead(headCount);
+  };
+
+  const bulkLotNumbers = useMemo(() => {
+    if (!isNewLot || !bulkMode) return null;
+    return generateSerialLotNumbers(form.lotNumber, bulkCount);
+  }, [isNewLot, bulkMode, form.lotNumber, bulkCount]);
+
+  const { recentParties, otherParties } = useMemo(() => {
+    const recentIds = getRecentPartyIds();
+    const recent = [];
+    const others = [];
+    for (const p of parties) {
+      if (recentIds.includes(String(p.id))) recent.push(p);
+      else others.push(p);
+    }
+    recent.sort((a, b) => recentIds.indexOf(String(a.id)) - recentIds.indexOf(String(b.id)));
+    return { recentParties: recent, otherParties: others };
+  }, [parties]);
 
   const validate = () => {
     const newErrors = {};
@@ -91,6 +196,14 @@ function LotForm({ initial, onSave, onClose, parties, saving, pickWorkspaceForNe
     if (!form.designNo.trim()) newErrors.designNo = 'Design Number is required';
     if (pickWorkspaceForNewLot && !String(form.saveBusinessOwnerId || '').trim()) {
       newErrors.saveBusinessOwnerId = 'Select a business collection for this lot';
+    }
+    if (isNewLot && bulkMode) {
+      const count = Number(bulkCount);
+      if (!Number.isFinite(count) || count < 2 || count > 100) {
+        newErrors.bulkCount = 'Enter 2–100 lots';
+      } else if (!bulkLotNumbers) {
+        newErrors.lotNumber = 'Use a starting lot ending in digits (e.g. L-10)';
+      }
     }
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -110,23 +223,179 @@ function LotForm({ initial, onSave, onClose, parties, saving, pickWorkspaceForNe
     const partyName = selectedParty?.name || form.partyName || '';
     const partyId = form.partyId || '';
 
-    await onSave({
+    const basePayload = {
       ...form,
       saveBusinessOwnerId: saveOwnerForPayload,
       fabric: finalType,
       itemType: finalType,
-      lotNumber,
-      lotNo: lotNumber,
       quantity: quantityValue,
       pieces: quantityValue,
       rate: Number(form.rate || 0),
       billAmount: Number(form.billAmount || 0),
-      // totalAmount: Number(form.totalAmount || form.billAmount || 0),
       unit: form.unit || 'pieces',
       partyId,
       partyName,
+      machineHead: selectedHead,
+    };
+
+    if (isNewLot && bulkMode && bulkLotNumbers && bulkLotNumbers.length > 1) {
+      await onSave({
+        ...basePayload,
+        status: 'pending',
+        bulkLotNumbers,
+      });
+      return;
+    }
+
+    await onSave({
+      ...basePayload,
+      lotNumber,
+      lotNo: lotNumber,
     });
   };
+
+  const saveButtonLabel = (() => {
+    if (saving) return 'Saving…';
+    if (isNewLot && bulkMode && bulkLotNumbers && bulkLotNumbers.length > 1) {
+      return `Save ${bulkLotNumbers.length} lots`;
+    }
+    return 'Save Lot';
+  })();
+
+  const compactToolbar = (
+    <div
+      style={{
+        marginBottom: 10,
+        paddingBottom: 8,
+        borderBottom: '1px solid #f1f5f9',
+        display: 'flex',
+        flexWrap: 'wrap',
+        gap: '6px 10px',
+        alignItems: 'center',
+        fontSize: 12,
+      }}
+    >
+      <span style={{ fontWeight: 700, color: '#94a3b8' }}>Head</span>
+      {headList.map((h) => {
+        const active = selectedHead === h;
+        const isDefault = headConfig.defaultHead === h;
+        return (
+          <button
+            key={h}
+            type="button"
+            title={isDefault ? 'Default head' : `Use ${h} heads per color`}
+            onClick={() => selectHead(h)}
+            style={{
+              padding: '3px 9px',
+              borderRadius: 6,
+              border: active ? '1px solid #4f46e5' : '1px solid #e2e8f0',
+              background: active ? '#eef2ff' : '#fff',
+              color: active ? '#3730a3' : '#475569',
+              fontWeight: active ? 800 : 600,
+              fontSize: 12,
+              cursor: 'pointer',
+              lineHeight: 1.3,
+            }}
+          >
+            {h}{isDefault ? '·' : ''}
+          </button>
+        );
+      })}
+      <button
+        type="button"
+        title="Add custom head"
+        onClick={() => setShowHeadAdd((v) => !v)}
+        style={{
+          padding: '3px 8px',
+          borderRadius: 6,
+          border: '1px dashed #cbd5e1',
+          background: '#fff',
+          color: '#64748b',
+          fontSize: 12,
+          fontWeight: 700,
+          cursor: 'pointer',
+        }}
+      >
+        +
+      </button>
+      {showHeadAdd ? (
+        <>
+          <input
+            type="number"
+            min={1}
+            value={customHeadInput}
+            onChange={(e) => setCustomHeadInput(e.target.value)}
+            placeholder="#"
+            style={{
+              width: 48,
+              padding: '3px 6px',
+              fontSize: 12,
+              borderRadius: 6,
+              border: '1px solid #e2e8f0',
+            }}
+          />
+          <button type="button" className="btn btn-ghost btn-sm" style={{ padding: '2px 8px', fontSize: 11 }} onClick={addCustomHead}>
+            Add
+          </button>
+          {selectedHead !== headConfig.defaultHead ? (
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              style={{ padding: '2px 8px', fontSize: 11 }}
+              title={`Set ${selectedHead} as default`}
+              onClick={() => makeDefaultHead(selectedHead)}
+            >
+              Default {selectedHead}
+            </button>
+          ) : null}
+        </>
+      ) : null}
+
+      {isNewLot ? (
+        <>
+          <span style={{ color: '#e2e8f0', userSelect: 'none' }}>|</span>
+          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 5, cursor: 'pointer', color: '#475569', fontWeight: 600 }}>
+            <input
+              type="checkbox"
+              checked={bulkMode}
+              onChange={(e) => setBulkMode(e.target.checked)}
+            />
+            Serial lots
+          </label>
+          {bulkMode ? (
+            <>
+              <input
+                type="number"
+                min={2}
+                max={100}
+                value={bulkCount}
+                onChange={(e) => setBulkCount(e.target.value)}
+                title="How many lots"
+                style={{
+                  width: 52,
+                  padding: '3px 6px',
+                  fontSize: 12,
+                  borderRadius: 6,
+                  border: errors.bulkCount ? '1px solid #dc2626' : '1px solid #e2e8f0',
+                }}
+              />
+              {bulkLotNumbers && bulkLotNumbers.length > 1 ? (
+                <span style={{ color: '#94a3b8', fontSize: 11, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {previewSerialLotNumbers(bulkLotNumbers, 3)}
+                </span>
+              ) : null}
+            </>
+          ) : null}
+          {errors.bulkCount ? (
+            <span style={{ color: '#dc2626', fontSize: 11 }}>{errors.bulkCount}</span>
+          ) : null}
+          {bulkMode && !bulkLotNumbers && form.lotNumber.trim() ? (
+            <span style={{ color: '#b45309', fontSize: 11 }}>Lot needs digits</span>
+          ) : null}
+        </>
+      ) : null}
+    </div>
+  );
 
   return (
     <form
@@ -135,6 +404,7 @@ function LotForm({ initial, onSave, onClose, parties, saving, pickWorkspaceForNe
         void handleSave();
       }}
     >
+      {compactToolbar}
       <div className="grid-2">
         {pickWorkspaceForNewLot && (
           <FormGroup label="Business collection *">
@@ -157,12 +427,13 @@ function LotForm({ initial, onSave, onClose, parties, saving, pickWorkspaceForNe
             )}
           </FormGroup>
         )}
-        <FormGroup label="Lot Number *">
+        <FormGroup label={isNewLot && bulkMode ? 'Starting lot number *' : 'Lot Number *'}>
           <input
             className={`form-input${errors.lotNumber ? ' input-error' : ''}`}
             value={form.lotNumber}
-            onChange={e => { const v = e.target.value; set('lotNumber', v); set('lotNo', v); }}
-            placeholder="e.g. L-10"
+            onChange={(e) => { const v = e.target.value; set('lotNumber', v); set('lotNo', v); }}
+            placeholder={isNewLot && bulkMode ? 'e.g. L-10 (serials from here)' : 'e.g. L-10'}
+            autoComplete="off"
           />
           {errors.lotNumber && <span style={{ color: '#dc2626', fontSize: 11, marginTop: 3, display: 'block' }}>{errors.lotNumber}</span>}
         </FormGroup>
@@ -170,30 +441,60 @@ function LotForm({ initial, onSave, onClose, parties, saving, pickWorkspaceForNe
           <input
             className={`form-input${errors.designNo ? ' input-error' : ''}`}
             value={form.designNo}
-            onChange={e => set('designNo', e.target.value)}
+            onChange={(e) => set('designNo', e.target.value)}
             placeholder="e.g. D-101"
+            autoComplete="off"
+            spellCheck={false}
           />
           {errors.designNo && <span style={{ color: '#dc2626', fontSize: 11, marginTop: 3, display: 'block' }}>{errors.designNo}</span>}
         </FormGroup>
         <FormGroup label="Description">
-          <input className="form-input" value={form.description} onChange={e => set('description', e.target.value)} placeholder="e.g. Floral Print" />
+          <input
+            className="form-input"
+            value={form.description}
+            onChange={(e) => set('description', e.target.value)}
+            placeholder="e.g. Floral Print"
+          />
         </FormGroup>
         <FormGroup label="Item Type">
-          <select className="form-select" value={form.itemType} onChange={e => set('itemType', e.target.value)}>
-            {FABRICS.map(f => <option key={f}>{f}</option>)}
-            <option value="__custom">+ Custom Item Type</option>
+          <select className="form-select" value={form.itemType} onChange={(e) => set('itemType', e.target.value)}>
+            {itemTypeOptions.map((f) => (
+              <option key={f} value={f}>{f}</option>
+            ))}
+            <option value="__custom">+ New item type…</option>
           </select>
           {form.itemType === '__custom' && (
-            <input className="form-input" style={{ marginTop: 6 }} value={form.customFabric} onChange={e => set('customFabric', e.target.value)} placeholder="Enter item type" />
+            <input
+              className="form-input"
+              style={{ marginTop: 6 }}
+              value={form.customFabric}
+              onChange={(e) => set('customFabric', e.target.value)}
+              placeholder="Enter new item type"
+            />
           )}
         </FormGroup>
         <FormGroup label="Colors (0–12)">
-          <select className="form-select" value={form.colors} onChange={e => set('colors', +e.target.value)}>
-            {COLOR_OPTIONS.map(n => <option key={n} value={n}>{n} color{n !== 1 ? 's' : ''}</option>)}
+          <select
+            className="form-select"
+            value={form.colors}
+            onChange={(e) => setColorsAndPieces(e.target.value)}
+          >
+            {COLOR_OPTIONS.map((n) => (
+              <option key={n} value={n}>
+                {n} color{n !== 1 ? 's' : ''}
+              </option>
+            ))}
           </select>
         </FormGroup>
         <FormGroup label="Pieces">
-          <input className="form-input" type="number" min="0" value={form.pieces} onChange={e => set('pieces', e.target.value)} placeholder="0" />
+          <input
+            className="form-input"
+            type="number"
+            min="0"
+            value={form.pieces}
+            onChange={(e) => set('pieces', e.target.value)}
+            placeholder="0"
+          />
         </FormGroup>
         <FormGroup label="Allot Date">
           <input className="form-input" type="date" value={form.allotDate} onChange={e => set('allotDate', e.target.value)} />
@@ -210,16 +511,36 @@ function LotForm({ initial, onSave, onClose, parties, saving, pickWorkspaceForNe
             }}
           >
             <option value="">— Select Party —</option>
-            {parties.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            {recentParties.length > 0 && (
+              <optgroup label="Recent">
+                {recentParties.map((p) => (
+                  <option key={`recent-${p.id}`} value={p.id}>{p.name}</option>
+                ))}
+              </optgroup>
+            )}
+            <optgroup label={recentParties.length > 0 ? 'All parties' : 'Parties'}>
+              {(recentParties.length > 0 ? otherParties : parties).map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </optgroup>
           </select>
         </FormGroup>
-        <FormGroup label="Status">
-          <select className="form-select" value={form.status} onChange={e => set('status', e.target.value)}>
-            {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}</option>)}
-          </select>
-        </FormGroup>
+        {!(isNewLot && bulkMode) && (
+          <FormGroup label="Status">
+            <select className="form-select" value={form.status} onChange={e => set('status', e.target.value)}>
+              {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}</option>)}
+            </select>
+          </FormGroup>
+        )}
         <FormGroup label="Bill Amount (₨)">
-          <input className="form-input" type="number" min="0" value={form.billAmount} onChange={e => set('billAmount', e.target.value)} placeholder="45000" />
+          <input
+            className="form-input"
+            type="number"
+            min="0"
+            value={form.billAmount}
+            onChange={(e) => set('billAmount', e.target.value)}
+            placeholder="45000"
+          />
         </FormGroup>
         {/* <FormGroup label="Notes">
           <input className="form-input" value={form.notes} onChange={e => set('notes', e.target.value)} placeholder="Optional notes" />
@@ -238,7 +559,7 @@ function LotForm({ initial, onSave, onClose, parties, saving, pickWorkspaceForNe
       <div className="modal-footer" style={{ padding: '16px 0 0', borderTop: '1px solid var(--border)', marginTop: 8 }}>
         <button type="button" className="btn btn-ghost" onClick={onClose} disabled={saving}>Cancel</button>
         <button type="submit" className="btn btn-primary" disabled={saving} style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-          {saving ? <><Loader /> Saving…</> : 'Save Lot'}
+          {saving ? <><Loader /> Saving…</> : saveButtonLabel}
         </button>
       </div>
     </form>
@@ -484,7 +805,7 @@ export default function GhausiaCollection() {
     const list = collectionLots.filter((l) => {
       const q = search.toLowerCase();
       const lotLabel = (l.lotNumber || l.lotNo || '').toLowerCase();
-      const matchQ = !q || lotLabel.includes(q) || l.designNo.toLowerCase().includes(q) || l.description.toLowerCase().includes(q);
+      const matchQ = !q || lotLabel.includes(q) || String(l.designNo || "").toLowerCase().includes(q) || String(l.description || "").toLowerCase().includes(q);
       if (!matchQ) return false;
       if (partyFilter !== 'All' && String(l.partyId || '') !== String(partyFilter)) return false;
       if (!isWithinDateRange(latestDateFrom(l, ['updatedAt', 'createdAt', 'receivedBackDate', 'dispatchDate', 'allotDate', 'receivedDate']), dateRange)) return false;
@@ -555,12 +876,96 @@ export default function GhausiaCollection() {
   const openAdd = () => { setEditing(null); setModal('form'); };
 
   const handleSave = async (form) => {
+    const bulkLotNumbers = Array.isArray(form.bulkLotNumbers) ? form.bulkLotNumbers : null;
+
     const prev = editing;
     const wasCompleted = prev?.status === 'completed';
     const nowCompleted = form.status === 'completed';
     const becomingCompleted = nowCompleted && !wasCompleted;
     let saveForm = { ...form };
     let recordOwnerPaymentAfterSave = false;
+
+    if (bulkLotNumbers && bulkLotNumbers.length > 1 && !prev) {
+      const targetBiz = String(form.saveBusinessOwnerId || activeBusinessOwnerId || '').trim();
+      if (!targetBiz.trim()) {
+        lotSaveErrorToast('Select a business collection before saving lots.');
+        return;
+      }
+
+      const { saveBusinessOwnerId: _ignoreSaveOwner, bulkLotNumbers: _bulk, ...basePayload } = saveForm;
+      const existingKeys = new Set(
+        collectionLots
+          .filter((l) => String(l.businessOwnerId ?? '') === targetBiz)
+          .map((l) => normalizeLotNumberKey(l.lotNumber ?? l.lotNo)),
+      );
+
+      setLotSaving(true);
+      let created = 0;
+      let skipped = 0;
+      const failed = [];
+
+      try {
+        for (const lotNumber of bulkLotNumbers) {
+          const lotKey = normalizeLotNumberKey(lotNumber);
+          if (!lotKey) continue;
+          if (existingKeys.has(lotKey)) {
+            skipped += 1;
+            continue;
+          }
+          try {
+            await addLot(
+              {
+                ...basePayload,
+                lotNumber,
+                lotNo: lotNumber,
+                status: 'pending',
+              },
+              { businessOwnerId: targetBiz },
+            );
+            existingKeys.add(lotKey);
+            created += 1;
+          } catch (e) {
+            failed.push({ lotNumber, message: messageFromLotSaveError(e) });
+          }
+        }
+
+        if (created === 0 && failed.length === 0) {
+          lotSaveErrorToast(
+            skipped > 0
+              ? 'All lot numbers in this range already exist in this collection.'
+              : 'No lots were saved. Check your lot numbers.',
+          );
+          return;
+        }
+
+        const parts = [`${created} lot${created === 1 ? '' : 's'} saved`];
+        if (skipped > 0) parts.push(`${skipped} skipped (already exist)`);
+        if (failed.length > 0) parts.push(`${failed.length} failed`);
+
+        await Swal.fire({
+          icon: failed.length > 0 ? 'warning' : 'success',
+          title: 'Bulk save done',
+          html: `<p style="margin:0 0 8px">${parts.join(' · ')}</p>${
+            failed.length > 0
+              ? `<p style="margin:0;font-size:13px;color:#64748b">${failed
+                  .slice(0, 5)
+                  .map((f) => `${f.lotNumber}: ${f.message}`)
+                  .join('<br/>')}${failed.length > 5 ? '<br/>…' : ''}</p>`
+              : ''
+          }`,
+        });
+
+        if (created > 0) {
+          rememberLotFormSave(saveForm, { collectionId: targetBiz, bulkLotNumbers });
+        }
+
+        setModal(null);
+        setEditing(null);
+      } finally {
+        setLotSaving(false);
+      }
+      return;
+    }
 
     if (becomingCompleted && !hasPositiveBillAmount(saveForm)) {
       const lotForPrompt = prev ? { ...prev, ...saveForm } : saveForm;
@@ -635,6 +1040,7 @@ export default function GhausiaCollection() {
           }
         }
       }
+      rememberLotFormSave(saveForm, { collectionId: targetBiz });
       setModal(null); setEditing(null);
     } catch (e) {
       lotSaveErrorToast(messageFromLotSaveError(e));

@@ -97,10 +97,20 @@ const normalizeParty = (p) => {
   return { ...p, id };
 };
 
+const normalizeOwners = (owners) =>
+  (Array.isArray(owners) ? owners : []).map((o) => {
+    const id = normalizedBusinessOwnerId(o?.id ?? o?._id);
+    return { ...o, id, _id: id };
+  });
+
+const FULL_REFRESH_INTERVAL_MS = 45_000;
+
 const partyEditsArrayToMap = (remotePartyEdits) => {
   if (!Array.isArray(remotePartyEdits)) return INITIAL_PARTY_EDITS;
   return remotePartyEdits.reduce((acc, item) => {
-    acc[item.lotId] = {
+    const lotId = item.lotId != null ? String(item.lotId) : '';
+    if (!lotId) return acc;
+    acc[lotId] = {
       ...item,
       completeDate: item.completeDate ? normalizeDateString(item.completeDate) : '',
       allotDate: item.allotDate ? normalizeDateString(item.allotDate) : '',
@@ -155,79 +165,181 @@ export function AppProvider({ children }) {
   const [scopedDataLoading, setScopedDataLoading] = useState(true);
   /** True only during a background (post-navigation) refresh — does NOT block the UI. */
   const [backgroundRefreshing, setBackgroundRefreshing] = useState(false);
-  /** Receipt images are excluded from the fast bootstrap and streamed in afterwards. */
-  const [receiptsLoading, setReceiptsLoading] = useState(false);
+  const [bootstrapLoadError, setBootstrapLoadError] = useState(null);
   const queryClient = useQueryClient();
   const hasLoadedOnceRef = useRef(false);
   /** Bumped to re-run the loader for a background refresh (e.g. on page navigation). */
   const [refreshTick, setRefreshTick] = useState(0);
   const lastRefreshRef = useRef(0);
+  const lastFullBootstrapRef = useRef(0);
+  const loadGenerationRef = useRef(0);
   /** True for the next loader run only when it was triggered as a non-blocking background refresh. */
   const isBackgroundRefreshRef = useRef(false);
-  const hydrateReceiptsTimerRef = useRef(null);
   const initialDataLoading = initialDataPhase === 'idle';
+
+  const applyReporting = useCallback((reporting) => {
+    if (!reporting) return;
+    if (Array.isArray(reporting.lots)) setAdminReportingLots(reporting.lots.map(normalizeLotData));
+    if (Array.isArray(reporting.payments)) setAdminReportingPayments(reporting.payments);
+    if (Array.isArray(reporting.partyEdits)) {
+      setAdminReportingPartyEdits((prev) => mergePartyEditsFromRemote(reporting.partyEdits, prev));
+    }
+  }, []);
+
+  const applyPartyCross = useCallback((cross) => {
+    if (!cross) return;
+    if (Array.isArray(cross.lots)) setPartyCrossLots(cross.lots.map(normalizeLotData));
+    if (Array.isArray(cross.payments)) setPartyCrossPayments(cross.payments);
+    if (Array.isArray(cross.partyEdits)) {
+      setPartyCrossPartyEdits((prev) => mergePartyEditsFromRemote(cross.partyEdits, prev));
+    }
+  }, []);
+
+  const applyScoped = useCallback((data) => {
+    if (Array.isArray(data.ghausiaLots)) setGhausiaLots(data.ghausiaLots.map(normalizeLotData));
+    if (Array.isArray(data.payments)) setPayments(data.payments);
+    if (Array.isArray(data.partyEdits)) {
+      setPartyEdits((prev) => mergePartyEditsFromRemote(data.partyEdits, prev));
+    }
+  }, []);
+
+  const ledgerReceiptsLoadRef = useRef(null);
+  /** Bumped after each successful ledger receipt pull — lets thumbnails retry. */
+  const [ledgerReceiptsVersion, setLedgerReceiptsVersion] = useState(0);
 
   const mergeReceiptRows = useCallback((setter, rows) => {
     if (!Array.isArray(rows) || rows.length === 0) return;
     setter((prev) => {
       const next = { ...prev };
       rows.forEach((row) => {
-        const lotId = row?.lotId;
-        if (lotId == null) return;
+        const lotId = row?.lotId != null ? String(row.lotId) : '';
+        if (!lotId) return;
         const incomingReceipt = row.receipt ?? '';
+        if (!incomingReceipt) return;
         const existing = next[lotId];
-        if (!existing) {
-          if (incomingReceipt) {
-            next[lotId] = { lotId, receipt: incomingReceipt };
-          }
-          return;
-        }
-        if (existing.receipt === incomingReceipt) return;
-        next[lotId] = { ...existing, receipt: incomingReceipt };
+        next[lotId] = existing
+          ? { ...existing, receipt: incomingReceipt }
+          : { lotId, receipt: incomingReceipt };
       });
       return next;
     });
   }, []);
 
   /**
-   * Bill photos load after the page is interactive (never block bootstrap).
-   * Runs after every data refresh and when the tab becomes visible again.
+   * Load bill images for Party Ledger / Review Lots.
+   * Uses the existing bulk partyEdits API (works on production). Per-lot lazy fetch
+   * is preferred when the server supports GET /partyEdits/lot/:id.
    */
-  const hydrateReceipts = useCallback(async () => {
-    setReceiptsLoading(true);
-    try {
-      if (user?.role === 'admin') {
-        const [scoped, reporting] = await Promise.all([
-          apiService.getPartyEdits({ includeReceipts: true }),
-          apiService.getPartyEdits({ scope: 'all', includeReceipts: true }),
-        ]);
-        mergeReceiptRows(setPartyEdits, scoped);
-        mergeReceiptRows(setAdminReportingPartyEdits, reporting);
-      } else if (user?.role === 'party') {
-        const [scoped, cross] = await Promise.all([
-          apiService.getPartyEdits({ skipTenantHeader: true, includeReceipts: true }),
-          apiService.getPartyEdits({ skipTenantHeader: true, partyScope: 'all', includeReceipts: true }),
-        ]);
-        mergeReceiptRows(setPartyEdits, scoped);
-        mergeReceiptRows(setPartyCrossPartyEdits, cross);
-      }
-    } catch (error) {
-      console.warn('Receipt hydration failed', error);
-    } finally {
-      setReceiptsLoading(false);
-    }
-  }, [mergeReceiptRows, user?.role]);
+  const loadLedgerReceipts = useCallback(async (opts = {}) => {
+    if (!isAuthenticated) return;
+    if (user?.role !== 'admin' && user?.role !== 'party') return;
 
-  /** Debounce rapid navigations so we don't spam receipt API calls. */
-  const scheduleHydrateReceipts = useCallback(() => {
-    if (hydrateReceiptsTimerRef.current) {
-      clearTimeout(hydrateReceiptsTimerRef.current);
+    if (opts.force) {
+      ledgerReceiptsLoadRef.current = null;
+    } else if (ledgerReceiptsLoadRef.current) {
+      return ledgerReceiptsLoadRef.current;
     }
-    hydrateReceiptsTimerRef.current = setTimeout(() => {
-      hydrateReceiptsTimerRef.current = null;
-      hydrateReceipts();
-    }, 250);
-  }, [hydrateReceipts]);
+
+    const task = (async () => {
+      try {
+        if (user?.role === 'admin') {
+          const reporting = await apiService.getPartyEdits({
+            scope: 'all',
+            includeReceipts: true,
+          });
+          mergeReceiptRows(setAdminReportingPartyEdits, reporting);
+        } else {
+          const cross = await apiService.getPartyEdits({
+            skipTenantHeader: true,
+            partyScope: 'all',
+            includeReceipts: true,
+          });
+          mergeReceiptRows(setPartyCrossPartyEdits, cross);
+        }
+        setLedgerReceiptsVersion((v) => v + 1);
+      } catch (error) {
+        console.warn('Ledger receipt load failed', error);
+        ledgerReceiptsLoadRef.current = null;
+        throw error;
+      }
+    })();
+
+    ledgerReceiptsLoadRef.current = task;
+    return task;
+  }, [isAuthenticated, mergeReceiptRows, user?.role]);
+
+  /** Cache a single lot receipt after lazy fetch (avoids bulk hydration). */
+  const patchLotReceipt = useCallback((lotId, receipt) => {
+    if (!lotId || !receipt) return;
+    const merge = (prev) => {
+      const existing = prev[lotId];
+      if (existing?.receipt === receipt) return prev;
+      return { ...prev, [lotId]: { ...(existing || { lotId }), receipt } };
+    };
+    setPartyEdits(merge);
+    if (user?.role === 'admin') setAdminReportingPartyEdits(merge);
+    if (user?.role === 'party') setPartyCrossPartyEdits(merge);
+  }, [user?.role]);
+
+  const runLightBootstrapRefresh = useCallback(async () => {
+    if (!isAuthenticated || user?.role === 'super_admin' || user?.role === 'personal_khata') return;
+
+    const gen = ++loadGenerationRef.current;
+    const isAdminUser = user?.role === 'admin';
+    const partyOpts = isAdminUser ? {} : { skipTenantHeader: true };
+
+    setBackgroundRefreshing(true);
+    try {
+      const minimal = await queryClient.fetchQuery({
+        queryKey: ['bootstrap', user?._id, user?.role, 'minimal'],
+        queryFn: () => apiService.getBootstrap({ minimal: true, ...partyOpts }),
+        staleTime: 0,
+      });
+      if (gen !== loadGenerationRef.current) return;
+
+      if (Array.isArray(minimal?.parties)) setParties(minimal.parties.map(normalizeParty));
+      if (isAdminUser) {
+        applyReporting(minimal?.reporting);
+      } else {
+        setBusinessOwners(normalizeOwners(minimal?.businessOwners));
+        applyPartyCross(minimal?.partyCross);
+      }
+
+      const full = await queryClient.fetchQuery({
+        queryKey: ['bootstrap', user?._id, user?.role, isAdminUser ? String(activeBusinessOwnerId || '') : 'party', 'full'],
+        queryFn: () => apiService.getBootstrap({ ...partyOpts }),
+        staleTime: 0,
+      });
+      if (gen !== loadGenerationRef.current) return;
+
+      if (Array.isArray(full?.parties)) setParties(full.parties.map(normalizeParty));
+      applyScoped(full || {});
+      if (isAdminUser) {
+        applyReporting(full?.reporting);
+      } else {
+        setBusinessOwners(normalizeOwners(full?.businessOwners));
+        applyPartyCross(full?.partyCross);
+      }
+      setBootstrapLoadError(null);
+    } catch (error) {
+      if (gen === loadGenerationRef.current) {
+        console.warn('Background refresh failed', error);
+      }
+    } finally {
+      if (gen === loadGenerationRef.current) {
+        setBackgroundRefreshing(false);
+      }
+    }
+  }, [
+    activeBusinessOwnerId,
+    applyPartyCross,
+    applyReporting,
+    applyScoped,
+    isAuthenticated,
+    queryClient,
+    user?._id,
+    user?.role,
+  ]);
 
   const readViewAllWorkspaces = () => {
     try {
@@ -248,16 +360,31 @@ export function AppProvider({ children }) {
    * Background refresh of all app data (no full-screen loader). Used on page navigation so each
    * page shows the latest server state without a manual browser reload. Throttled to avoid spam.
    */
-  const refreshData = useCallback(() => {
+  const refreshData = useCallback((opts = {}) => {
     if (!isAuthenticated) return;
     if (user?.role === 'super_admin' || user?.role === 'personal_khata') return;
     const now = Date.now();
-    if (now - lastRefreshRef.current < 800) return;
+    if (now - lastRefreshRef.current < 800 && !opts.force) return;
     lastRefreshRef.current = now;
+
+    if (opts.force) {
+      lastFullBootstrapRef.current = 0;
+    }
+
+    if (
+      hasLoadedOnceRef.current
+      && !opts.force
+      && now - lastFullBootstrapRef.current < FULL_REFRESH_INTERVAL_MS
+    ) {
+      void runLightBootstrapRefresh();
+      return;
+    }
+
+    lastFullBootstrapRef.current = now;
     isBackgroundRefreshRef.current = true;
     queryClient.invalidateQueries({ queryKey: ['bootstrap'] });
     setRefreshTick((t) => t + 1);
-  }, [isAuthenticated, user?.role, queryClient]);
+  }, [isAuthenticated, user?.role, queryClient, runLightBootstrapRefresh]);
 
   const selectBusinessOwner = (id) => {
     const nextId = String(id || '');
@@ -295,11 +422,14 @@ export function AppProvider({ children }) {
       setBusinessOwners([]);
     };
 
-    const markLoaded = () => {
+    const markLoaded = (didFullBootstrap = false) => {
       setInitialDataPhase('full');
       setScopedDataLoading(false);
       setBackgroundRefreshing(false);
       hasLoadedOnceRef.current = true;
+      if (didFullBootstrap) {
+        lastFullBootstrapRef.current = Date.now();
+      }
     };
 
     // Roles without business data: clear and finish immediately.
@@ -313,43 +443,12 @@ export function AppProvider({ children }) {
       return;
     }
 
-    const normalizeOwners = (owners) =>
-      (Array.isArray(owners) ? owners : []).map((o) => {
-        const id = normalizedBusinessOwnerId(o?.id ?? o?._id);
-        return { ...o, id, _id: id };
-      });
-
-    const applyReporting = (reporting) => {
-      if (!reporting) return;
-      if (Array.isArray(reporting.lots)) setAdminReportingLots(reporting.lots.map(normalizeLotData));
-      if (Array.isArray(reporting.payments)) setAdminReportingPayments(reporting.payments);
-      if (Array.isArray(reporting.partyEdits)) {
-        setAdminReportingPartyEdits((prev) => mergePartyEditsFromRemote(reporting.partyEdits, prev));
-      }
-    };
-
-    const applyPartyCross = (cross) => {
-      if (!cross) return;
-      if (Array.isArray(cross.lots)) setPartyCrossLots(cross.lots.map(normalizeLotData));
-      if (Array.isArray(cross.payments)) setPartyCrossPayments(cross.payments);
-      if (Array.isArray(cross.partyEdits)) {
-        setPartyCrossPartyEdits((prev) => mergePartyEditsFromRemote(cross.partyEdits, prev));
-      }
-    };
-
-    const applyScoped = (data) => {
-      if (Array.isArray(data.ghausiaLots)) setGhausiaLots(data.ghausiaLots.map(normalizeLotData));
-      if (Array.isArray(data.payments)) setPayments(data.payments);
-      if (Array.isArray(data.partyEdits)) {
-        setPartyEdits((prev) => mergePartyEditsFromRemote(data.partyEdits, prev));
-      }
-    };
-
     const isAdminUser = user?.role === 'admin';
     /** Party JWT is cross-workspace — never reuse admin cached `x-business-owner-id` from localStorage. */
     const partyOpts = isAdminUser ? {} : { skipTenantHeader: true };
 
     async function loadAppData() {
+      const gen = ++loadGenerationRef.current;
       const isFirst = !hasLoadedOnceRef.current;
       // Background nav refresh: don't block the UI. Workspace switch / first load keep the loader.
       const isBg = !isFirst && isBackgroundRefreshRef.current;
@@ -357,6 +456,7 @@ export function AppProvider({ children }) {
       if (isFirst) {
         setInitialDataPhase('idle');
         setScopedDataLoading(true);
+        setBootstrapLoadError(null);
       } else if (isBg) {
         setBackgroundRefreshing(true);
       } else {
@@ -370,6 +470,7 @@ export function AppProvider({ children }) {
           queryKey: ['bootstrap', user?._id, user?.role, 'minimal'],
           queryFn: () => apiService.getBootstrap({ minimal: true, ...partyOpts }),
         });
+        if (gen !== loadGenerationRef.current) return;
 
         if (Array.isArray(minimal?.parties)) setParties(minimal.parties.map(normalizeParty));
 
@@ -384,7 +485,7 @@ export function AppProvider({ children }) {
             setViewAllWorkspaces(false);
             setActiveBusinessOwnerId('');
             clearAllData();
-            markLoaded();
+            markLoaded(true);
             return;
           }
           const selectedExists = remoteOwners.some((owner) => String(owner.id || owner._id) === String(activeBusinessOwnerId));
@@ -402,6 +503,7 @@ export function AppProvider({ children }) {
           applyPartyCross(minimal?.partyCross);
         }
 
+        if (gen !== loadGenerationRef.current) return;
         setInitialDataPhase('minimal');
 
         // Phase B — full payload: workspace-scoped lots/payments/partyEdits for Ghausia / Payments.
@@ -409,6 +511,7 @@ export function AppProvider({ children }) {
           queryKey: ['bootstrap', user?._id, user?.role, isAdminUser ? String(activeBusinessOwnerId || '') : 'party', 'full'],
           queryFn: () => apiService.getBootstrap({ ...partyOpts }),
         });
+        if (gen !== loadGenerationRef.current) return;
 
         if (Array.isArray(full?.parties)) setParties(full.parties.map(normalizeParty));
         applyScoped(full || {});
@@ -418,38 +521,56 @@ export function AppProvider({ children }) {
           setBusinessOwners(normalizeOwners(full?.businessOwners));
           applyPartyCross(full?.partyCross);
         }
-        markLoaded();
-        // Receipts are heavy — page data shows first; bill photos stream in after (non-blocking).
-        scheduleHydrateReceipts();
+        setBootstrapLoadError(null);
+        markLoaded(true);
       } catch (error) {
         console.error('Unable to load bootstrap data', error);
-        markLoaded();
+        if (gen === loadGenerationRef.current && isFirst) {
+          setBootstrapLoadError(error?.message || 'Unable to load data');
+        }
+        if (gen === loadGenerationRef.current) {
+          markLoaded(false);
+        }
       }
     }
 
     loadAppData();
-  }, [activeBusinessOwnerId, isAuthenticated, user?._id, user?.role, queryClient, refreshTick, scheduleHydrateReceipts]);
+  }, [
+    activeBusinessOwnerId,
+    applyPartyCross,
+    applyReporting,
+    applyScoped,
+    isAuthenticated,
+    user?._id,
+    user?.role,
+    queryClient,
+    refreshTick,
+  ]);
 
-  // When the user returns to this tab, pull in any bill photos added on another device.
+  // When the user returns to this tab, refresh metadata + bill thumbnails (party may have uploaded).
   useEffect(() => {
     if (!isAuthenticated) return undefined;
     if (user?.role === 'super_admin' || user?.role === 'personal_khata') return undefined;
 
+    let timer = null;
     const onVisible = () => {
       if (document.visibilityState === 'visible' && hasLoadedOnceRef.current) {
-        scheduleHydrateReceipts();
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(() => {
+          void runLightBootstrapRefresh();
+          if (user?.role === 'admin' || user?.role === 'party') {
+            void loadLedgerReceipts({ force: true });
+          }
+        }, 300);
       }
     };
 
     document.addEventListener('visibilitychange', onVisible);
     return () => {
       document.removeEventListener('visibilitychange', onVisible);
-      if (hydrateReceiptsTimerRef.current) {
-        clearTimeout(hydrateReceiptsTimerRef.current);
-        hydrateReceiptsTimerRef.current = null;
-      }
+      if (timer) clearTimeout(timer);
     };
-  }, [isAuthenticated, user?.role, scheduleHydrateReceipts]);
+  }, [isAuthenticated, user?.role, runLightBootstrapRefresh, loadLedgerReceipts]);
 
   const createBusinessOwner = async (data) => {
     const created = await apiService.createBusinessOwner(data);
@@ -723,30 +844,50 @@ export function AppProvider({ children }) {
   const reportingPayments = user?.role === 'admin' ? adminReportingPayments : payments;
   const reportingPartyEdits = user?.role === 'admin' ? adminReportingPartyEdits : partyEdits;
 
+  const contextValue = useMemo(() => ({
+    parties, addParty, updateParty, deleteParty,
+    ghausiaLots, addLot, updateLot, deleteLot,
+    approveLotCompletion, rejectLotCompletion,
+    partyEdits, updatePartyEdit, patchLotReceipt, loadLedgerReceipts, ledgerReceiptsVersion,
+    payments, addPayment, deletePayment,
+    reportingLots, reportingPayments, reportingPartyEdits,
+    partyCrossLots, partyCrossPartyEdits, partyCrossPayments,
+    businessOwners,
+    activeBusinessOwnerId,
+    selectBusinessOwner,
+    selectAllWorkspacesView,
+    viewAllWorkspaces,
+    createBusinessOwner,
+    deleteBusinessOwner,
+    getPartyById, getPartyName,
+    initialDataLoading,
+    initialDataPhase,
+    scopedDataLoading,
+    backgroundRefreshing,
+    bootstrapLoadError,
+    refreshData,
+  }), [
+    parties, addParty, updateParty, deleteParty,
+    ghausiaLots, addLot, updateLot, deleteLot,
+    approveLotCompletion, rejectLotCompletion,
+    partyEdits, updatePartyEdit, patchLotReceipt, loadLedgerReceipts, ledgerReceiptsVersion,
+    payments, addPayment, deletePayment,
+    reportingLots, reportingPayments, reportingPartyEdits,
+    partyCrossLots, partyCrossPartyEdits, partyCrossPayments,
+    businessOwners,
+    activeBusinessOwnerId,
+    viewAllWorkspaces,
+    initialDataLoading,
+    initialDataPhase,
+    scopedDataLoading,
+    backgroundRefreshing,
+    bootstrapLoadError,
+    refreshData,
+    getPartyById, getPartyName,
+  ]);
+
   return (
-    <AppContext.Provider value={{
-      parties, addParty, updateParty, deleteParty,
-      ghausiaLots, addLot, updateLot, deleteLot,
-      approveLotCompletion, rejectLotCompletion,
-      partyEdits, updatePartyEdit,
-      payments, addPayment, deletePayment,
-      reportingLots, reportingPayments, reportingPartyEdits,
-      partyCrossLots, partyCrossPartyEdits, partyCrossPayments,
-      businessOwners,
-      activeBusinessOwnerId,
-      selectBusinessOwner,
-      selectAllWorkspacesView,
-      viewAllWorkspaces,
-      createBusinessOwner,
-      deleteBusinessOwner,
-      getPartyById, getPartyName,
-      initialDataLoading,
-      initialDataPhase,
-      scopedDataLoading,
-      backgroundRefreshing,
-      receiptsLoading,
-      refreshData,
-    }}>
+    <AppContext.Provider value={contextValue}>
       {children}
     </AppContext.Provider>
   );

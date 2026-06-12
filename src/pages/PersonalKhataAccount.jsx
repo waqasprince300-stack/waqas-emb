@@ -168,13 +168,13 @@ export default function PersonalKhataAccount() {
     <AuthCard
       brandLogoSrc={brandLogoSrc}
       brandKicker="Personal Khata"
-      sideTitle="Apna khata email ya mobile se save karein."
-      sideText="Yeh alag hai business workspace login se — yahan sirf aapka personal ledger hai. Account banane ke baad yeh data aap ke naam par save hota hai."
+      sideTitle="Save your ledger with email or mobile."
+      sideText="Separate from business workspace login — this is your personal ledger only. Data is saved to your account after registration."
       title={mode === 'signin' ? 'Personal Khata — sign in' : 'Personal Khata — register'}
       subtitle={
         mode === 'signin'
-          ? 'Email ya phone number aur password se apna khata kholen.'
-          : 'Naam, email ya phone, aur password — phir apna khata kisi bhi browser me sign in kar ke manage karen.'
+          ? 'Sign in with email or phone and password.'
+          : 'Name, email or phone, and password — then sign in on any browser to manage your ledger.'
       }
       footer={(
         <>
@@ -188,7 +188,7 @@ export default function PersonalKhataAccount() {
               setMessage('');
             }}
           >
-            {mode === 'signin' ? 'Naya account banayen' : 'Pehle se account hai? Sign in'}
+            {mode === 'signin' ? 'Create account' : 'Already have an account? Sign in'}
           </button>
           <span style={{ margin: '0 6px', color: 'var(--text-muted)' }}>·</span>
           <Link className="auth-inline-link" to="/login">
@@ -251,7 +251,7 @@ export default function PersonalKhataAccount() {
               className="form-input"
               value={form.name}
               onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-              placeholder="Aap ka naam"
+              placeholder="Your name"
               autoComplete="name"
             />
           </label>

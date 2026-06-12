@@ -1,4 +1,6 @@
 import React, { useMemo, useState } from "react";
+import LazyReceiptThumb from "../components/receipt/LazyReceiptThumb";
+import { useLedgerReceiptSync, REVIEW_LOTS_POLL_MS } from "../hooks/useLedgerReceiptSync";
 import Swal from "sweetalert2";
 import { useApp } from "../context/AppContext";
 import { Modal, FormGroup, EmptyState, SearchBar } from "../components/UI";
@@ -42,100 +44,6 @@ function partyRevisionPositiveDelta(pe) {
   return Math.max(0, Number(pr.toAmount) - Number(pr.fromAmount));
 }
 
-function receiptPreviewKind(receipt) {
-  const s = String(receipt || "").trim();
-  if (!s) return "none";
-  if (/^data:image\//i.test(s)) return "image";
-  if (/^data:application\/pdf/i.test(s)) return "pdf";
-  if (/^https?:\/\//i.test(s)) return "url";
-  return "filename";
-}
-
-function ReceiptThumbButton({ receipt, lotLabel, onOpen }) {
-  const kind = receiptPreviewKind(receipt);
-  if (kind === "none") return null;
-
-  const baseBtn = {
-    padding: 0,
-    border: "none",
-    background: "transparent",
-    cursor: "pointer",
-    borderRadius: 8,
-    lineHeight: 0,
-    display: "inline-block",
-    verticalAlign: "middle",
-  };
-
-  if (kind === "image") {
-    return (
-      <button
-        type="button"
-        aria-label="View receipt"
-        title="View receipt"
-        style={baseBtn}
-        onClick={() => onOpen({ kind: "image", src: receipt, title: lotLabel })}
-      >
-        <img
-          src={receipt}
-          alt=""
-          style={{
-            width: 44,
-            height: 44,
-            objectFit: "cover",
-            borderRadius: 8,
-            border: "1px solid var(--border)",
-            display: "block",
-          }}
-        />
-      </button>
-    );
-  }
-  if (kind === "pdf") {
-    return (
-      <button
-        type="button"
-        className="btn btn-ghost btn-sm"
-        style={{ padding: 6 }}
-        onClick={() => onOpen({ kind: "pdf", src: receipt, title: lotLabel })}
-      >
-        PDF
-      </button>
-    );
-  }
-  if (kind === "url") {
-    return (
-      <button
-        type="button"
-        style={baseBtn}
-        onClick={() => onOpen({ kind: "url", src: receipt, title: lotLabel })}
-      >
-        <img
-          src={receipt}
-          alt=""
-          style={{
-            width: 44,
-            height: 44,
-            objectFit: "cover",
-            borderRadius: 8,
-            border: "1px solid var(--border)",
-            display: "block",
-            background: "#f3f4f6",
-          }}
-        />
-      </button>
-    );
-  }
-  return (
-    <button
-      type="button"
-      className="btn btn-ghost btn-sm"
-      onClick={() => onOpen({ kind: "filename", name: receipt, title: lotLabel })}
-    >
-      File
-    </button>
-  );
-}
-
 export default function ReviewLots() {
   const {
     reportingLots,
@@ -146,8 +54,9 @@ export default function ReviewLots() {
     approveLotCompletion,
     rejectLotCompletion,
     initialDataLoading,
-    receiptsLoading,
   } = useApp();
+
+  useLedgerReceiptSync({ pollMs: REVIEW_LOTS_POLL_MS });
   const [search, setSearch] = useState("");
   const [busyId, setBusyId] = useState(null);
   const [rejectModal, setRejectModal] = useState(null);
@@ -435,26 +344,14 @@ export default function ReviewLots() {
                         ₨{peBill(l.id, l).toLocaleString()}
                       </td>
                       <td>
-                        {pe.receipt &&
-                        receiptPreviewKind(pe.receipt) !== "none" ? (
-                          <ReceiptThumbButton
-                            receipt={pe.receipt}
-                            lotLabel={l.lotNo || l.lotNumber}
-                            onOpen={setReceiptPreview}
-                          />
-                        ) : receiptsLoading ? (
-                          <span
-                            className="skeleton-box"
-                            aria-label="Loading receipt"
-                            style={{ width: 36, height: 36 }}
-                          />
-                        ) : (
-                          <span
-                            style={{ color: "var(--text-muted)", fontSize: 12 }}
-                          >
-                            —
-                          </span>
-                        )}
+                        <LazyReceiptThumb
+                          lotId={l.id}
+                          receipt={pe.receipt}
+                          businessOwnerId={l.businessOwnerId}
+                          lotLabel={l.lotNo || l.lotNumber}
+                          onOpen={setReceiptPreview}
+                          emptyLabel="—"
+                        />
                       </td>
                       <td style={{ fontSize: 12, maxWidth: 220 }}>
                         <div>{pe.notes || "—"}</div>

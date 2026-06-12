@@ -158,6 +158,9 @@ export default function PersonalKhata({ standalone = false } = {}) {
   const [businesses, setBusinesses] = useState([]);
   const [activeBusinessId, setActiveBusinessId] = useState('');
   const [khataHydrated, setKhataHydrated] = useState(false);
+  const khataHydrateGenRef = useRef(0);
+  const khataScopeRef = useRef(khataStorageScope);
+  khataScopeRef.current = khataStorageScope;
   const [bizModalOpen, setBizModalOpen] = useState(false);
   const [formBizName, setFormBizName] = useState('');
   const [search, setSearch] = useState('');
@@ -188,7 +191,7 @@ export default function PersonalKhata({ standalone = false } = {}) {
     setPdfPreviewTitle('PDF');
   }, []);
 
-  const openPdfPreview = useCallback((doc, title = 'PDF dekhein') => {
+  const openPdfPreview = useCallback((doc, title = 'View PDF') => {
     try {
       const blob = doc.output('blob');
       const url = URL.createObjectURL(blob);
@@ -197,7 +200,7 @@ export default function PersonalKhata({ standalone = false } = {}) {
       setPdfPreviewTitle(title);
       setPdfPreviewUrl(url);
     } catch (e) {
-      Swal.fire({ icon: 'error', title: 'PDF masla', text: String(e?.message || e) });
+      Swal.fire({ icon: 'error', title: 'PDF error', text: String(e?.message || e) });
     }
   }, []);
 
@@ -231,9 +234,10 @@ export default function PersonalKhata({ standalone = false } = {}) {
 
   useEffect(() => {
     let cancelled = false;
+    const gen = ++khataHydrateGenRef.current;
 
     const applyState = (data) => {
-      if (cancelled) return;
+      if (cancelled || gen !== khataHydrateGenRef.current) return;
       setBusinesses(data.businesses);
       setActiveBusinessId(data.activeBusinessId);
       setContacts(data.contacts);
@@ -297,15 +301,17 @@ export default function PersonalKhata({ standalone = false } = {}) {
 
   useEffect(() => {
     if (!khataHydrated) return undefined;
+    const scopeForRun = khataStorageScope;
     const payload = { businesses, activeBusinessId, contacts, entries };
 
     // Always keep a local cache (offline + fast reloads).
-    saveKhataState(payload, khataStorageScope || undefined);
+    saveKhataState(payload, scopeForRun || undefined);
 
-    if (!khataStorageScope) return undefined;
+    if (!scopeForRun) return undefined;
 
     // Debounce server writes so rapid edits don't spam the API.
     const t = setTimeout(() => {
+      if (scopeForRun !== khataScopeRef.current) return;
       apiService.savePersonalKhata(payload).catch(() => {
         /* local cache already saved; will retry on next change */
       });
@@ -328,8 +334,8 @@ export default function PersonalKhata({ standalone = false } = {}) {
     if (!scopedContacts.length) {
       Swal.fire({
         icon: 'info',
-        title: 'Khata khaali',
-        text: 'Is business me abhi koi shakhs nahi — pehle shamil karein.',
+        title: 'Empty ledger',
+        text: 'No contacts in this business. Add one first.',
       });
       return;
     }
@@ -338,13 +344,13 @@ export default function PersonalKhata({ standalone = false } = {}) {
       Swal.fire({
         toast: true,
         icon: 'success',
-        title: 'PDF download ho gayi',
+        title: 'PDF downloaded',
         position: 'top-end',
         timer: 2000,
         showConfirmButton: false,
       });
     } catch (e) {
-      Swal.fire({ icon: 'error', title: 'PDF masla', text: String(e?.message || e) });
+      Swal.fire({ icon: 'error', title: 'PDF error', text: String(e?.message || e) });
     }
   }, [scopedContacts, scopedEntries]);
 
@@ -352,8 +358,8 @@ export default function PersonalKhata({ standalone = false } = {}) {
     if (!scopedContacts.length) {
       Swal.fire({
         icon: 'info',
-        title: 'Khata khaali',
-        text: 'Is business ke liye waqai koi maaloomat nahi.',
+        title: 'Empty ledger',
+        text: 'No data for this business.',
       });
       return;
     }
@@ -361,7 +367,7 @@ export default function PersonalKhata({ standalone = false } = {}) {
       const doc = buildPersonalKhataSummaryPdf(scopedContacts, scopedEntries);
       openPdfPreview(doc, 'Personal Khata — summary');
     } catch (e) {
-      Swal.fire({ icon: 'error', title: 'Preview masla', text: String(e?.message || e) });
+      Swal.fire({ icon: 'error', title: 'Preview error', text: String(e?.message || e) });
     }
   }, [scopedContacts, scopedEntries, openPdfPreview]);
 
@@ -421,7 +427,7 @@ export default function PersonalKhata({ standalone = false } = {}) {
   const saveContact = () => {
     const name = formName.trim();
     if (!name) {
-      Swal.fire({ icon: 'warning', title: 'Naam zaroori hai', text: 'Shakhs ka naam likhein.' });
+      Swal.fire({ icon: 'warning', title: 'Name required', text: 'Enter contact name.' });
       return;
     }
     const row = {
@@ -451,12 +457,12 @@ export default function PersonalKhata({ standalone = false } = {}) {
     if (!type) return;
     const cid = formContactId;
     if (!cid || !contacts.some((c) => c.id === cid)) {
-      Swal.fire({ icon: 'warning', title: 'Shakhs chunein', text: 'Pehle khata / shakhs muntakhib karein.' });
+      Swal.fire({ icon: 'warning', title: 'Select contact', text: 'Choose a contact first.' });
       return;
     }
     const amount = Number(String(formAmount).replace(/,/g, ''));
     if (!amount || amount <= 0) {
-      Swal.fire({ icon: 'warning', title: 'Raqam', text: 'Sahi raqam darj karein.' });
+      Swal.fire({ icon: 'warning', title: 'Amount', text: 'Enter a valid amount.' });
       return;
     }
     const description = [
@@ -469,8 +475,8 @@ export default function PersonalKhata({ standalone = false } = {}) {
     if (!description) {
       Swal.fire({
         icon: 'warning',
-        title: 'Wazahat',
-        text: 'Batayein ke yeh adaigi kis wajah se hai (detail).',
+        title: 'Note required',
+        text: 'Add a short note explaining this payment.',
       });
       return;
     }
@@ -498,10 +504,10 @@ export default function PersonalKhata({ standalone = false } = {}) {
   const deleteEntry = async (eid) => {
     const ok = await Swal.fire({
       icon: 'question',
-      title: 'Mahzv karein?',
+      title: 'Delete entry?',
       showCancelButton: true,
       confirmButtonText: 'Haan',
-      cancelButtonText: 'Nahi',
+      cancelButtonText: 'No',
     });
     if (!ok.isConfirmed) return;
     setEntries(entries.filter((e) => e.id !== eid));
@@ -510,10 +516,10 @@ export default function PersonalKhata({ standalone = false } = {}) {
   const deleteContact = async (cid) => {
     const ok = await Swal.fire({
       icon: 'warning',
-      title: 'Shakhs hata dein?',
-      text: 'Saari entries bhi mita di jayengi.',
+      title: 'Delete contact?',
+      text: 'All entries for this contact will be removed.',
       showCancelButton: true,
-      confirmButtonText: 'Hata dein',
+      confirmButtonText: 'Delete',
       cancelButtonText: 'Cancel',
     });
     if (!ok.isConfirmed) return;
@@ -527,8 +533,8 @@ export default function PersonalKhata({ standalone = false } = {}) {
     if (!name) {
       Swal.fire({
         icon: 'warning',
-        title: 'Naam zaroori',
-        text: 'Karobar ya dukaan ka naam likhein.',
+        title: 'Name required',
+        text: 'Enter business or shop name.',
       });
       return;
     }
@@ -678,7 +684,7 @@ export default function PersonalKhata({ standalone = false } = {}) {
                   gap: 6,
                 }}
               >
-                <X size={18} aria-hidden /> Band karein
+                <X size={18} aria-hidden /> Close
               </button>
             </div>
           </div>
@@ -929,7 +935,7 @@ export default function PersonalKhata({ standalone = false } = {}) {
 
         <div className="pk-hero">
           <Link to="/personal-khata" className="pk-back">
-            <ChevronLeft size={18} /> Wapas
+            <ChevronLeft size={18} /> Back
           </Link>
           <div className="pk-headrow">
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -1086,13 +1092,13 @@ export default function PersonalKhata({ standalone = false } = {}) {
 
         <div className="pk-tx-card">
           <div className="pk-tx-head">
-            <span>Waqt & wazahat</span>
-            <span className="pk-tx-head-out">Dena (diye)</span>
-            <span className="pk-tx-head-in">Lena (liye)</span>
+            <span>Time & note</span>
+            <span className="pk-tx-head-out">Paid out</span>
+            <span className="pk-tx-head-in">Received in</span>
           </div>
           {chronological.length === 0 ? (
             <div style={{ padding: 40, textAlign: 'center', color: '#94a3b8', fontWeight: 600 }}>
-              Abhi koi entry nahi — neeche se shamil karein
+              No entries yet — add below
             </div>
           ) : (
             chronological.map((e) => (
@@ -1105,12 +1111,12 @@ export default function PersonalKhata({ standalone = false } = {}) {
                     {e.description}
                   </div>
                   <div className="pk-tx-row-actions">
-                    <span className="pk-pill">Baqi {fmtMoney(runMap.get(e.id) ?? 0)}</span>
+                    <span className="pk-pill">Bal. {fmtMoney(runMap.get(e.id) ?? 0)}</span>
                     {e.billImage && /^data:image\//i.test(String(e.billImage)) ? (
                       <button
                         type="button"
                         onClick={() => setBillLightboxSrc(e.billImage)}
-                        title="Bill / receipt dekhein"
+                        title="View bill"
                         style={{
                           display: 'inline-flex',
                           alignItems: 'center',
@@ -1130,7 +1136,7 @@ export default function PersonalKhata({ standalone = false } = {}) {
                     ) : null}
                     <button
                       type="button"
-                      aria-label="Entry hata dein"
+                      aria-label="Delete entry"
                       onClick={() => deleteEntry(e.id)}
                       style={{
                         marginLeft: 'auto',
@@ -1178,14 +1184,14 @@ export default function PersonalKhata({ standalone = false } = {}) {
               className="pk-btn-give"
               onClick={() => openEntry('given', active.id)}
             >
-              <ArrowUpRight size={18} aria-hidden /> Dene
+              <ArrowUpRight size={18} aria-hidden /> Pay out
             </button>
             <button
               type="button"
               className="pk-btn-get"
               onClick={() => openEntry('received', active.id)}
             >
-              <ArrowDownLeft size={18} aria-hidden /> Lena
+              <ArrowDownLeft size={18} aria-hidden /> Receive
             </button>
           </div>
         </div>
@@ -1228,7 +1234,7 @@ export default function PersonalKhata({ standalone = false } = {}) {
           >
             <button
               type="button"
-              aria-label="Band karein"
+              aria-label="Close"
               onClick={() => setBillLightboxSrc(null)}
               style={{
                 position: 'absolute',
@@ -1275,8 +1281,8 @@ export default function PersonalKhata({ standalone = false } = {}) {
   if (contactId && !active) {
     return (
       <div style={{ padding: 24 }}>
-        <p>Shakhs nahi mila.</p>
-        <Link to="/personal-khata">Khata list</Link>
+        <p>Contact not found.</p>
+        <Link to="/personal-khata">Ledger list</Link>
       </div>
     );
   }
@@ -1589,22 +1595,22 @@ export default function PersonalKhata({ standalone = false } = {}) {
           <div>
             <h1 className="pk-home-title">Personal Khata</h1>
             <p className="pk-home-sub">
-              Dena (red) aur lena (green) alag — har entry wazahat ke sath likhein.
+              Paid out (red) and received in (green) — add a note with each entry.
             </p>
             {(!user || user.role !== 'personal_khata') && (
               <p style={{ margin: '10px 0 0', fontSize: 13, lineHeight: 1.45 }}>
                 <Link to="/personal-khata/account" style={{ color: '#93c5fd', fontWeight: 700 }}>
-                  Account banayen ya sign in karein (email ya mobile)
+                  Create account or sign in (email or mobile)
                 </Link>
-                <span style={{ color: '#cbd5e1', fontWeight: 500 }}> — apna khata har device par</span>
+                <span style={{ color: '#cbd5e1', fontWeight: 500 }}> — sync on every device</span>
               </p>
             )}
             {user?.role === 'personal_khata' && (
               <p style={{ margin: '10px 0 0', fontSize: 12.5, color: '#cbd5e1', fontWeight: 600 }}>
-                Signed in — yeh khata aapke account se juda hai, har device aur browser par same data dikhega.
+                Signed in — this ledger is linked to your account and syncs across devices.
                 <br />
                 <Link to="/personal-khata/upgrade" style={{ color: '#93c5fd', fontWeight: 700 }}>
-                  Business account banayen (admin ya party) — khata data linked rahega
+                  Upgrade to business account (admin or party) — ledger stays linked
                 </Link>
               </p>
             )}
@@ -1658,19 +1664,19 @@ export default function PersonalKhata({ standalone = false } = {}) {
                 boxShadow: '0 4px 14px rgba(15,23,42,0.12)',
               }}
             >
-              + Naya business
+              + New business
             </button>
           </div>
         </div>
         <div className="pk-sumgrid">
           <div className="pk-sum pk-sum-receive">
-            <span className="pk-sum-ribbon pk-sum-ribbon-in">LENA</span>
-            <span className="pk-sum-note">Jo aap ko milna hai</span>
+            <span className="pk-sum-ribbon pk-sum-ribbon-in">IN</span>
+            <span className="pk-sum-note">You should receive</span>
             <span style={{ fontSize: 26, fontWeight: 900, lineHeight: 1.1 }}>{fmtMoney(totals.receivable)}</span>
           </div>
           <div className="pk-sum pk-sum-pay">
-            <span className="pk-sum-ribbon pk-sum-ribbon-out">DENA</span>
-            <span className="pk-sum-note">Jo aap ne dena hai</span>
+            <span className="pk-sum-ribbon pk-sum-ribbon-out">OUT</span>
+            <span className="pk-sum-note">You owe</span>
             <span style={{ fontSize: 26, fontWeight: 900, lineHeight: 1.1 }}>{fmtMoney(totals.payable)}</span>
           </div>
         </div>
@@ -1679,14 +1685,14 @@ export default function PersonalKhata({ standalone = false } = {}) {
       <div className="pk-search">
         <Search size={20} color="#94a3b8" />
         <input
-          placeholder="Shakhs dhoondhein — naam ya phone"
+          placeholder="Search contacts — name or phone"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
       </div>
 
       <div className="pk-quick-card">
-        <p className="pk-quick-title">Paisay</p>
+        <p className="pk-quick-title">Money</p>
         <div className="pk-money-row">
           <button
             type="button"
@@ -1694,8 +1700,8 @@ export default function PersonalKhata({ standalone = false } = {}) {
             onClick={() => (scopedContacts.length ? openEntry('given') : openAddContact())}
           >
             <ArrowUpRight size={26} strokeWidth={2.25} aria-hidden />
-            <span className="pk-money-tile-label">Dene (diye)</span>
-            <span className="pk-money-tile-hint">Jo aap ne kisi ko diye</span>
+            <span className="pk-money-tile-label">Paid out</span>
+            <span className="pk-money-tile-hint">Money you paid</span>
           </button>
           <button
             type="button"
@@ -1703,15 +1709,15 @@ export default function PersonalKhata({ standalone = false } = {}) {
             onClick={() => (scopedContacts.length ? openEntry('received') : openAddContact())}
           >
             <ArrowDownLeft size={26} strokeWidth={2.25} aria-hidden />
-            <span className="pk-money-tile-label">Lene (liye)</span>
-            <span className="pk-money-tile-hint">Jo aap ne kisi se liye</span>
+            <span className="pk-money-tile-label">Received in</span>
+            <span className="pk-money-tile-hint">Money you received</span>
           </button>
         </div>
 
-        <p className="pk-quick-title">Shakhs</p>
+        <p className="pk-quick-title">Contacts</p>
         <button type="button" className="pk-person-tile" onClick={openAddContact}>
           <UserPlus size={22} strokeWidth={2.25} aria-hidden />
-          <span>Naya shakhs joden</span>
+          <span>Add contact</span>
         </button>
 
         <p className="pk-quick-title">PDF report</p>
@@ -1735,13 +1741,13 @@ export default function PersonalKhata({ standalone = false } = {}) {
             <div style={{ minWidth: 0 }}>
               <div style={{ fontWeight: 900, fontSize: 16, color: '#0f172a' }}>Summary PDF</div>
               <div style={{ fontSize: 12.5, fontWeight: 600, color: '#64748b', marginTop: 4, lineHeight: 1.45 }}>
-                Poora hisaab — pehle dekhein ya seedha save
+                Full summary — preview or download
               </div>
             </div>
           </div>
           <div className="pk-pdf-panel-actions">
             <button type="button" className="pk-pdf-btn pk-pdf-preview" onClick={previewSummaryPdf}>
-              <Eye size={16} strokeWidth={2.5} aria-hidden /> Dekhein
+              <Eye size={16} strokeWidth={2.5} aria-hidden /> Preview
             </button>
             <button type="button" className="pk-pdf-btn pk-pdf-save" onClick={exportSummaryPdf}>
               <FileDown size={16} strokeWidth={2.5} aria-hidden /> Save
@@ -1765,7 +1771,7 @@ export default function PersonalKhata({ standalone = false } = {}) {
               border: '1px dashed #cbd5e1',
             }}
           >
-            Khata khaali — &quot;Naya shakhs&quot; ya neeche + se shuru karein
+            Empty ledger — use &quot;Add contact&quot; or the + button below
           </div>
         ) : (
           sortedContactList.map((c, i) => {
@@ -1810,7 +1816,7 @@ export default function PersonalKhata({ standalone = false } = {}) {
                     ev.stopPropagation();
                     deleteContact(c.id);
                   }}
-                  title="Hata dein"
+                  title="Delete"
                 >
                   <Trash2 size={18} />
                 </button>
@@ -1833,7 +1839,7 @@ export default function PersonalKhata({ standalone = false } = {}) {
                 setBizModalOpen(true);
               }}
             >
-              <Briefcase size={18} /> Naya business
+              <Briefcase size={18} /> New business
             </button>
             <button
               type="button"
@@ -1841,7 +1847,7 @@ export default function PersonalKhata({ standalone = false } = {}) {
               style={{ background: '#fff', color: '#5b21b6' }}
               onClick={openAddContact}
             >
-              <UserPlus size={18} /> Naya shakhs
+              <UserPlus size={18} /> New contact
             </button>
             <button
               type="button"
@@ -1849,7 +1855,7 @@ export default function PersonalKhata({ standalone = false } = {}) {
               style={{ background: '#fff1f2', color: '#be123c' }}
               onClick={() => openEntry('given')}
             >
-              <ArrowUpRight size={18} /> Maine diye (entry)
+              <ArrowUpRight size={18} /> Paid out (entry)
             </button>
             <button
               type="button"
@@ -1857,7 +1863,7 @@ export default function PersonalKhata({ standalone = false } = {}) {
               style={{ background: '#ecfdf5', color: '#047857' }}
               onClick={() => openEntry('received')}
             >
-              <ArrowDownLeft size={18} /> Maine liye (entry)
+              <ArrowDownLeft size={18} /> Received in (entry)
             </button>
             <button
               type="button"
@@ -1868,7 +1874,7 @@ export default function PersonalKhata({ standalone = false } = {}) {
                 previewSummaryPdf();
               }}
             >
-              <Eye size={18} /> PDF dekhein
+              <Eye size={18} /> View PDF
             </button>
             <button
               type="button"
@@ -1886,7 +1892,7 @@ export default function PersonalKhata({ standalone = false } = {}) {
         <button
           type="button"
           className="pk-fab-main"
-          aria-label="Mazeed actions"
+          aria-label="More actions"
           onClick={() => setFabOpen((o) => !o)}
         >
           {fabOpen ? <span style={{ fontSize: 28, lineHeight: 1 }}>×</span> : <Plus size={28} />}
@@ -1926,17 +1932,17 @@ export default function PersonalKhata({ standalone = false } = {}) {
               margin: 'auto',
             }}
           >
-            <h2 style={{ margin: '0 0 6px', fontSize: 20, fontWeight: 900 }}>Naya shakhs</h2>
-            <p style={{ margin: '0 0 18px', color: '#64748b', fontSize: 13 }}>Naam zaroori — phone ikhtiyari</p>
+            <h2 style={{ margin: '0 0 6px', fontSize: 20, fontWeight: 900 }}>New contact</h2>
+            <p style={{ margin: '0 0 18px', color: '#64748b', fontSize: 13 }}>Name required — phone optional</p>
             <label style={{ display: 'block', fontSize: 12, fontWeight: 700, marginBottom: 6, color: '#475569' }}>
-              Naam
+              Name
             </label>
             <input
               className="form-input"
               style={{ width: '100%', marginBottom: 14, padding: 12, borderRadius: 12, border: '1px solid #e2e8f0' }}
               value={formName}
               onChange={(e) => setFormName(e.target.value)}
-              placeholder="Jaise: Zeeshan, C Shafiq"
+              placeholder="e.g. Zeeshan, C Shafiq"
             />
             <label style={{ display: 'block', fontSize: 12, fontWeight: 700, marginBottom: 6, color: '#475569' }}>
               Phone
@@ -1998,19 +2004,19 @@ export default function PersonalKhata({ standalone = false } = {}) {
               margin: 'auto',
             }}
           >
-            <h2 style={{ margin: '0 0 6px', fontSize: 20, fontWeight: 900 }}>Naya business</h2>
+            <h2 style={{ margin: '0 0 6px', fontSize: 20, fontWeight: 900 }}>New business</h2>
             <p style={{ margin: '0 0 18px', color: '#64748b', fontSize: 13 }}>
-              Alag dukaan / unit ka naam — khata shamil shamil rahay ga.
+              Name for a separate shop or unit — entries stay in this ledger.
             </p>
             <label style={{ display: 'block', fontSize: 12, fontWeight: 700, marginBottom: 6, color: '#475569' }}>
-              Naam
+              Name
             </label>
             <input
               className="form-input"
               style={{ width: '100%', marginBottom: 18, padding: 12, borderRadius: 12, border: '1px solid #e2e8f0' }}
               value={formBizName}
               onChange={(e) => setFormBizName(e.target.value)}
-              placeholder="Misaal: Cloth House Anarkali"
+              placeholder="e.g. Cloth House Anarkali"
             />
             <div style={{ display: 'flex', gap: 10 }}>
               <button
@@ -2053,7 +2059,7 @@ export default function PersonalKhata({ standalone = false } = {}) {
   );
 }
 
-const CAT_OPTIONS = ['Cash', 'Bank', 'JazzCash', 'EasyPaisa', 'Salary', 'Rent', 'Karobar', 'Personal', 'Other'];
+const CAT_OPTIONS = ['Cash', 'Bank', 'JazzCash', 'EasyPaisa', 'Salary', 'Rent', 'Business', 'Personal', 'Other'];
 
 function EntryOverlay({
   type,
@@ -2071,7 +2077,7 @@ function EntryOverlay({
   onClose,
   onSave,
 }) {
-  const title = type === 'given' ? 'Maine diye — raqam & wazahat' : 'Maine liye — raqam & wazahat';
+  const title = type === 'given' ? 'Paid out — amount & note' : 'Received in — amount & note';
   const accent = type === 'given' ? '#e11d48' : '#059669';
 
   const handleImagePick = (e) => {
@@ -2088,11 +2094,11 @@ function EntryOverlay({
         }
         setFormBillImage(s);
       } catch {
-        Swal.fire({ icon: 'error', title: 'Tasveer fit nahi hui', text: 'Dobara koshish karein.' });
+        Swal.fire({ icon: 'error', title: 'Image error', text: 'Please try again.' });
       }
     };
     reader.onerror = () => {
-      Swal.fire({ icon: 'error', title: 'Read nahi ho saki', text: 'Dobara koshish karein.' });
+      Swal.fire({ icon: 'error', title: 'Could not read file', text: 'Please try again.' });
     };
     reader.readAsDataURL(file);
   };
@@ -2148,12 +2154,12 @@ function EntryOverlay({
       />
         <h2 style={{ margin: '0 0 4px', fontSize: 19, fontWeight: 900, color: '#0f172a' }}>{title}</h2>
         <p style={{ margin: '0 0 16px', fontSize: 12.5, color: '#64748b' }}>
-          Zaban mein likhein ke paisay kis bunyad par {type === 'given' ? 'diye' : 'liye'} — yeh baad mein bhi yaad
+          In words, why this money was {type === 'given' ? 'paid out' : 'received'} — helps you remember later
           rahega.
         </p>
 
         <label style={{ display: 'block', fontSize: 11, fontWeight: 800, color: '#475569', marginBottom: 6 }}>
-          Shakhs
+          Contact
         </label>
         <select
           className="form-select"
@@ -2168,7 +2174,7 @@ function EntryOverlay({
           value={formContactId}
           onChange={(e) => setFormContactId(e.target.value)}
         >
-          <option value="">— Chunein —</option>
+          <option value="">— Select —</option>
           {contacts.map((c) => (
             <option key={c.id} value={c.id}>
               {c.name}
@@ -2192,7 +2198,7 @@ function EntryOverlay({
           value={formCategory}
           onChange={(e) => setFormCategory(e.target.value)}
         >
-          <option value="">Ikhtiyari</option>
+          <option value="">Optional</option>
           {CAT_OPTIONS.map((x) => (
             <option key={x} value={x}>
               {x}
@@ -2201,7 +2207,7 @@ function EntryOverlay({
         </select>
 
         <label style={{ display: 'block', fontSize: 11, fontWeight: 800, color: '#475569', marginBottom: 6 }}>
-          Raqam (PKR)
+          Amount (PKR)
         </label>
         <input
           type="number"
@@ -2222,7 +2228,7 @@ function EntryOverlay({
         />
 
         <label style={{ display: 'block', fontSize: 11, fontWeight: 800, color: '#475569', marginBottom: 6 }}>
-          Tafseel / wajah
+          Note / reason
         </label>
         <textarea
           style={{
@@ -2238,11 +2244,11 @@ function EntryOverlay({
           }}
           value={formDesc}
           onChange={(e) => setFormDesc(e.target.value)}
-          placeholder="Maslan: internet bill, jazz cash, commission, udhari wapis..."
+          placeholder="e.g. internet bill, JazzCash, commission, loan repayment..."
         />
 
         <label style={{ display: 'block', fontSize: 11, fontWeight: 800, color: '#475569', marginBottom: 6 }}>
-          Bill / receipt (ikhtiyari)
+          Bill / receipt (optional)
         </label>
         <div style={{ display: 'flex', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
           <label
@@ -2324,20 +2330,20 @@ function EntryOverlay({
                 alignItems: 'center',
                 justifyContent: 'center',
               }}
-              aria-label="Tasveer hata dein"
+              aria-label="Remove image"
             >
               <X size={18} />
             </button>
           </div>
         ) : (
           <p style={{ margin: '0 0 16px', fontSize: 11.5, color: '#94a3b8', lineHeight: 1.4 }}>
-            Bill ki tasveer laga sakte hain — maslan JazzCash screenshot ya paper slip.
+            Attach a bill image, e.g. JazzCash screenshot or paper receipt.
           </p>
         )}
 
         <div style={{ display: 'flex', gap: 10 }}>
           <button type="button" className="btn btn-ghost" style={{ flex: 1 }} onClick={onClose}>
-            Band karein
+            Close
           </button>
           <button
             type="submit"

@@ -1,8 +1,8 @@
 // API utility for Express.js Backend
 // CRA only loads env vars that start with REACT_APP_ from .env in the project root (not src/).
 const API_BASE_URL = String(
-  // process.env.REACT_APP_API_BASE_URL ||
-    (process.env.NODE_ENV === "development"
+  process.env.REACT_APP_API_BASE_URL
+    || (process.env.NODE_ENV === "development"
       ? "http://localhost:3001/api"
       : ""),
 ).replace(/\/$/, "");
@@ -465,6 +465,19 @@ class ApiService {
     if (opts.includeReceipts) qs.set('includeReceipts', '1');
     const q = qs.toString();
     return this.request(`/partyEdits${q ? `?${q}` : ''}`, {}, metaPartySkipTenant(opts));
+  }
+
+  async getPartyEditByLotId(lotId, opts = {}) {
+    const qs = new URLSearchParams();
+    if (opts.includeReceipts) qs.set('includeReceipts', '1');
+    const biz = opts.businessOwnerId != null ? String(opts.businessOwnerId).trim() : '';
+    if (biz) qs.set('businessOwnerId', biz);
+    const q = qs.toString();
+    return this.request(
+      `/partyEdits/lot/${lotId}${q ? `?${q}` : ''}`,
+      {},
+      { businessOwnerId: biz || undefined, ...metaPartySkipTenant(opts) },
+    );
   }
 
   async createPartyEdit(data) {

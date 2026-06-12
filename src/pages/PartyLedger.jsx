@@ -11,6 +11,9 @@ import {
 } from "../components/UI";
 import Loader from "../components/Loader";
 import LoaderDashboard from "../components/LoaderDashboard";
+import LazyReceiptThumb from "../components/receipt/LazyReceiptThumb";
+import { useLedgerReceiptSync } from "../hooks/useLedgerReceiptSync";
+import { receiptPreviewKind } from "../components/receipt/ReceiptThumb";
 import {
   DateRangeSelect,
   isWithinDateRange,
@@ -152,145 +155,6 @@ async function finalizeLedgerReceiptStoredValue(stored) {
   if (/^data:image\//i.test(String(stored))) return compressPartyLedgerBillImage(stored);
   return stored;
 }
-/** @returns {'image'|'pdf'|'url'|'filename'|'none'} */
-function receiptPreviewKind(receipt) {
-  const s = String(receipt || "").trim();
-  if (!s) return "none";
-  if (/^data:image\//i.test(s)) return "image";
-  if (/^data:application\/pdf/i.test(s)) return "pdf";
-  if (/^https?:\/\//i.test(s)) return "url";
-  return "filename";
-}
-
-function ReceiptThumbButton({ receipt, lotLabel, onOpen }) {
-  const kind = receiptPreviewKind(receipt);
-  if (kind === "none") return null;
-
-  const baseBtn = {
-    padding: 0,
-    border: "none",
-    background: "transparent",
-    cursor: "pointer",
-    borderRadius: 8,
-    lineHeight: 0,
-    display: "inline-block",
-    verticalAlign: "middle",
-  };
-
-  if (kind === "image") {
-    return (
-      <button
-        type="button"
-        aria-label="View receipt image"
-        title="View receipt"
-        style={baseBtn}
-        onClick={() => onOpen({ kind: "image", src: receipt, title: lotLabel })}
-      >
-        <img
-          src={receipt}
-          alt=""
-          style={{
-            width: 44,
-            height: 44,
-            objectFit: "cover",
-            borderRadius: 8,
-            border: "1px solid var(--border)",
-            display: "block",
-          }}
-        />
-      </button>
-    );
-  }
-
-  if (kind === "pdf") {
-    return (
-      <button
-        type="button"
-        aria-label="View receipt PDF"
-        title="View receipt PDF"
-        style={{
-          ...baseBtn,
-          padding: 6,
-          background: "#FEF2F2",
-          border: "1px solid #FECACA",
-        }}
-        onClick={() => onOpen({ kind: "pdf", src: receipt, title: lotLabel })}
-      >
-        <svg
-          width="32"
-          height="32"
-          viewBox="0 0 24 24"
-          fill="none"
-          aria-hidden="true"
-        >
-          <path
-            d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"
-            stroke="#b91c1c"
-            strokeWidth="1.5"
-          />
-          <polyline
-            points="14 2 14 8 20 8"
-            stroke="#b91c1c"
-            strokeWidth="1.5"
-          />
-          <path
-            d="M9 13h6M9 17h4"
-            stroke="#b91c1c"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-          />
-        </svg>
-      </button>
-    );
-  }
-
-  if (kind === "url") {
-    return (
-      <button
-        type="button"
-        aria-label="View receipt"
-        title="View receipt"
-        style={baseBtn}
-        onClick={() => onOpen({ kind: "url", src: receipt, title: lotLabel })}
-      >
-        <img
-          src={receipt}
-          alt=""
-          style={{
-            width: 44,
-            height: 44,
-            objectFit: "cover",
-            borderRadius: 8,
-            border: "1px solid var(--border)",
-            display: "block",
-            background: "#f3f4f6",
-          }}
-        />
-      </button>
-    );
-  }
-
-  return (
-    <button
-      type="button"
-      aria-label="Receipt file (no preview)"
-      title={receipt}
-      style={{
-        ...baseBtn,
-        padding: "8px 10px",
-        background: "#F0FDF4",
-        border: "1px solid #BBF7D0",
-        borderRadius: 8,
-      }}
-      onClick={() =>
-        onOpen({ kind: "filename", name: receipt, title: lotLabel })
-      }
-    >
-      <span style={{ fontSize: 20 }}>📄</span>
-    </button>
-  );
-}
-
 /** Admin/workspace lot still awaiting dispatch — party must not self-set "In Progress". */
 function adminLotNotDispatched(lot) {
   return String(lot?.status || "").toLowerCase().trim() === "pending";
@@ -310,8 +174,9 @@ export default function PartyLedger() {
     parties,
     businessOwners,
     initialDataLoading,
-    receiptsLoading,
   } = useApp();
+
+  useLedgerReceiptSync();
   const { isAdmin, isParty, user } = useAuth();
 
   /** Admin: merged lots/edits/payments across all workspaces; party login: scoped cross-collection rows */
@@ -437,8 +302,8 @@ export default function PartyLedger() {
       const matchQ =
         !q ||
         lotLabel.includes(q) ||
-        l.designNo.toLowerCase().includes(q) ||
-        l.description.toLowerCase().includes(q);
+        String(l.designNo || "").toLowerCase().includes(q) ||
+        String(l.description || "").toLowerCase().includes(q);
       const matchP =
         partyFilter === "All" || samePartyId(l.partyId, partyFilter);
       const displayStatus = getDisplayStatus(l);
@@ -473,8 +338,8 @@ export default function PartyLedger() {
       const matchQ =
         !q ||
         lotLabel.includes(q) ||
-        l.designNo.toLowerCase().includes(q) ||
-        l.description.toLowerCase().includes(q);
+        String(l.designNo || "").toLowerCase().includes(q) ||
+        String(l.description || "").toLowerCase().includes(q);
       const matchP =
         partyFilter === "All" || samePartyId(l.partyId, partyFilter);
       const displayStatus = getDisplayStatus(l);
@@ -572,15 +437,15 @@ export default function PartyLedger() {
     const next = Number(revisionRequest.newAmount);
     const reason = String(revisionRequest.reason || "").trim();
     if (!Number.isFinite(next) || next < 0) {
-      await Swal.fire({ icon: "error", title: "Sahi amount likhein" });
+      await Swal.fire({ icon: "error", title: "Enter a valid amount" });
       return;
     }
     if (next === current) {
-      await Swal.fire({ icon: "info", title: "Amount wahi hai", text: "Nayi amount mojooda se alag honi chahiye." });
+      await Swal.fire({ icon: "info", title: "Same amount", text: "New amount must differ from the current amount." });
       return;
     }
     if (!reason) {
-      await Swal.fire({ icon: "error", title: "Wajah likhein", text: "Bill change ki wajah zaroori hai." });
+      await Swal.fire({ icon: "error", title: "Reason required", text: "Please enter a reason for the bill change." });
       return;
     }
     setRevisionSaving(true);
@@ -601,13 +466,13 @@ export default function PartyLedger() {
       setRevisionRequest(null);
       await Swal.fire({
         icon: "success",
-        title: "Request bhej di gayi",
-        text: "Admin ko aapki bill change request bhej di gayi hai. Approve hone par amount update ho jayega.",
+        title: "Request sent",
+        text: "Your bill change request was sent to the admin. The amount updates when approved.",
         timer: 2200,
         showConfirmButton: false,
       });
     } catch (e) {
-      await Swal.fire({ icon: "error", title: "Request fail", text: e?.message || "Dobara koshish karein." });
+      await Swal.fire({ icon: "error", title: "Request fail", text: e?.message || "Please try again." });
     } finally {
       setRevisionSaving(false);
     }
@@ -700,17 +565,17 @@ export default function PartyLedger() {
       setRevisionReview(null);
       await Swal.fire({
         icon: "success",
-        title: "Approve ho gaya",
+        title: "Approved",
         text: ownerChanged && settlements.length > 0
-          ? "Party ledger update, owner bill update, aur settlement ke liye adjustment payment record ho gayi."
+          ? "Party ledger and owner bill updated; adjustment payment recorded for settlement."
           : ownerChanged
-            ? "Party ledger aur owner bill dono update ho gaye."
-            : "Party ledger amount update ho gaya (owner bill waisa hi rakha gaya).",
+            ? "Party ledger and owner bill were updated."
+            : "Party ledger amount updated (owner bill unchanged).",
         timer: 2600,
         showConfirmButton: false,
       });
     } catch (e) {
-      await Swal.fire({ icon: "error", title: "Approve fail", text: e?.message || "Dobara koshish karein." });
+      await Swal.fire({ icon: "error", title: "Approve fail", text: e?.message || "Please try again." });
     } finally {
       setRevisionReviewSaving(false);
     }
@@ -724,7 +589,7 @@ export default function PartyLedger() {
     const req = pe.billRevisionRequest || {};
     const note = String(revisionReview.rejectionNote || "").trim();
     if (!note) {
-      await Swal.fire({ icon: "error", title: "Wajah likhein", text: "Reject karne ki wajah zaroori hai." });
+      await Swal.fire({ icon: "error", title: "Reason required", text: "Please enter a reason for rejection." });
       return;
     }
     setRevisionReviewSaving(true);
@@ -742,9 +607,9 @@ export default function PartyLedger() {
         lotWorkspaceOpts(lot),
       );
       setRevisionReview(null);
-      await Swal.fire({ icon: "success", title: "Request reject ho gayi", timer: 1800, showConfirmButton: false });
+      await Swal.fire({ icon: "success", title: "Request rejected", timer: 1800, showConfirmButton: false });
     } catch (e) {
-      await Swal.fire({ icon: "error", title: "Reject fail", text: e?.message || "Dobara koshish karein." });
+      await Swal.fire({ icon: "error", title: "Reject fail", text: e?.message || "Please try again." });
     } finally {
       setRevisionReviewSaving(false);
     }
@@ -1327,7 +1192,7 @@ export default function PartyLedger() {
         >
           <div style={{ fontSize: 13, color: "#92400e", fontWeight: 600 }}>
             {pendingRevisionRequests.length} bill change request
-            {pendingRevisionRequests.length === 1 ? "" : "s"} party ki taraf se review ke liye pending hain.
+            {pendingRevisionRequests.length === 1 ? "" : "s"} pending party bill-change review.
           </div>
           <button
             type="button"
@@ -1335,7 +1200,7 @@ export default function PartyLedger() {
             style={{ background: "#f59e0b", color: "#fff", border: "none" }}
             onClick={() => setLedgerLotsTab("completed")}
           >
-            Completed lots dekhein
+            View completed lots
           </button>
         </div>
       )}
@@ -1746,40 +1611,27 @@ export default function PartyLedger() {
                             maxWidth: 220,
                           }}
                         >
-                          {pe.receipt ? (
-                            <>
-                              <ReceiptThumbButton
-                                receipt={pe.receipt}
-                                lotLabel={l.lotNo || l.lotNumber}
-                                onOpen={setReceiptPreview}
-                              />
-                              {receiptPreviewKind(pe.receipt) === "filename" && (
-                                <span
-                                  style={{
-                                    fontSize: 11,
-                                    color: "var(--text-secondary)",
-                                    maxWidth: 120,
-                                    overflow: "hidden",
-                                    textOverflow: "ellipsis",
-                                    whiteSpace: "nowrap",
-                                  }}
-                                  title={pe.receipt}
-                                >
-                                  {pe.receipt}
-                                </span>
-                              )}
-                            </>
-                          ) : receiptsLoading ? (
+                          <LazyReceiptThumb
+                            lotId={l.id}
+                            receipt={pe.receipt}
+                            businessOwnerId={l.businessOwnerId}
+                            lotLabel={l.lotNo || l.lotNumber}
+                            onOpen={setReceiptPreview}
+                            emptyLabel="No bill"
+                          />
+                          {pe.receipt && receiptPreviewKind(pe.receipt) === "filename" && (
                             <span
-                              className="skeleton-box"
-                              aria-label="Loading receipt"
-                              style={{ width: 40, height: 40 }}
-                            />
-                          ) : (
-                            <span
-                              style={{ color: "var(--text-muted)", fontSize: 12 }}
+                              style={{
+                                fontSize: 11,
+                                color: "var(--text-secondary)",
+                                maxWidth: 120,
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                              }}
+                              title={pe.receipt}
                             >
-                              No bill
+                              {pe.receipt}
                             </span>
                           )}
                           {(isAdmin || (isParty && displayStatus !== "Completed")) ? (
@@ -2574,7 +2426,7 @@ export default function PartyLedger() {
               >
                 {revisionSaving ? (
                   <>
-                    <Loader /> Bhej rahe…
+                    <Loader /> Sending…
                   </>
                 ) : (
                   "Send request"
@@ -2584,10 +2436,10 @@ export default function PartyLedger() {
           }
         >
           <div className="alert alert-warning" style={{ marginBottom: 16 }}>
-            Yeh lot complete ho chuki hai. Aap admin ko nayi bill amount ki request bhej rahe hain —
-            <strong> approve hone par hi</strong> amount update hoga.
+            This lot is complete. You are requesting a new bill amount from the admin —
+            the amount updates <strong>only when approved</strong>.
           </div>
-          <FormGroup label="Mojooda ledger amount (₨)">
+          <FormGroup label="Current ledger amount (₨)">
             <input
               className="form-input"
               value={`₨${Number(
@@ -2596,7 +2448,7 @@ export default function PartyLedger() {
               disabled
             />
           </FormGroup>
-          <FormGroup label="Nayi amount (₨) *">
+          <FormGroup label="New amount (₨) *">
             <input
               className="form-input"
               type="number"
@@ -2607,7 +2459,7 @@ export default function PartyLedger() {
               placeholder="0"
             />
           </FormGroup>
-          <FormGroup label="Wajah / Reason *">
+          <FormGroup label="Reason *">
             <textarea
               className="form-textarea"
               rows={3}
@@ -2615,7 +2467,7 @@ export default function PartyLedger() {
               onChange={(e) =>
                 setRevisionRequest((r) => ({ ...r, reason: e.target.value }))
               }
-              placeholder="Bill change ki wajah likhein..."
+              placeholder="Reason for bill change..."
               style={{ resize: "vertical" }}
             />
           </FormGroup>
@@ -2708,10 +2560,10 @@ export default function PartyLedger() {
                 <span style={{ color: "var(--text-muted)" }}>Settlement: </span>
                 {settled ? (
                   <span style={{ color: "#92400e", fontWeight: 600 }}>
-                    Is lot ki payment ho chuki hai (settled)
+                    Payment settled for this lot
                   </span>
                 ) : (
-                  <span style={{ color: "#64748b" }}>Koi settlement payment nahi</span>
+                  <span style={{ color: "#64748b" }}>No settlement payment</span>
                 )}
               </div>
             </div>
@@ -2725,7 +2577,7 @@ export default function PartyLedger() {
                     setRevisionReview((r) => ({ ...r, updateOwnerBill: e.target.checked }))
                   }
                 />
-                Owner ka bill bhi update karein
+                Also update owner bill
               </label>
               {revisionReview.updateOwnerBill && (
                 <>
@@ -2737,7 +2589,7 @@ export default function PartyLedger() {
                         setRevisionReview((r) => ({ ...r, useCustomOwner: e.target.checked }))
                       }
                     />
-                    Custom owner amount use karein (warna nayi party amount lagegi)
+                    Use custom owner amount (otherwise party amount applies)
                   </label>
                   {revisionReview.useCustomOwner && (
                     <input
@@ -2766,26 +2618,26 @@ export default function PartyLedger() {
               }}
             >
               <div>
-                Naya owner bill:{" "}
+                New owner bill:{" "}
                 <strong>₨{Number(newOwner).toLocaleString()}</strong>
                 {revisionReview.updateOwnerBill ? (
                   <span style={{ color: delta === 0 ? "#64748b" : delta > 0 ? "#0f766e" : "#dc2626" }}>
                     {" "}({delta >= 0 ? "+" : "−"}₨{Math.abs(delta).toLocaleString()})
                   </span>
                 ) : (
-                  <span style={{ color: "#64748b" }}> (waisa hi rahega)</span>
+                  <span style={{ color: "#64748b" }}> (unchanged)</span>
                 )}
               </div>
               {revisionReview.updateOwnerBill && settled && delta !== 0 && (
                 <div style={{ marginTop: 6, color: "#92400e", fontWeight: 600 }}>
                   {delta > 0
-                    ? `Adjustment: ₨${delta.toLocaleString()} ki extra "Paid → Owner" payment record hogi.`
-                    : `Adjustment: ₨${Math.abs(delta).toLocaleString()} ki "Received ← Owner" reversing payment record hogi.`}
+                    ? `Adjustment: extra Paid → Owner payment of ₨${delta.toLocaleString()} will be recorded.`
+                    : `Adjustment: reversing Received ← Owner payment of ₨${Math.abs(delta).toLocaleString()} will be recorded.`}
                 </div>
               )}
             </div>
 
-            <FormGroup label="Reject karne ki wajah (sirf Reject ke liye)">
+            <FormGroup label="Rejection reason (Reject only)">
               <textarea
                 className="form-textarea"
                 rows={2}
@@ -2793,7 +2645,7 @@ export default function PartyLedger() {
                 onChange={(e) =>
                   setRevisionReview((r) => ({ ...r, rejectionNote: e.target.value }))
                 }
-                placeholder="Agar reject kar rahe hain to wajah likhein..."
+                placeholder="Enter reason if rejecting..."
                 style={{ resize: "vertical" }}
               />
             </FormGroup>

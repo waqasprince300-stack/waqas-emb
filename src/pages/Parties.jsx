@@ -582,11 +582,11 @@ export default function Parties() {
                   }}>
                     <div>Date</div>
                     <div style={{ color: '#b91c1c', textAlign: 'center' }}>
-                      Maine diye
+                      Paid out
                       <div style={{ fontWeight: 500, opacity: 0.85 }}>(Paid out)</div>
                     </div>
                     <div style={{ color: '#047857', textAlign: 'center' }}>
-                      Maine liye
+                      Received in
                       <div style={{ fontWeight: 500, opacity: 0.85 }}>(Work billed)</div>
                     </div>
                   </div>

@@ -246,7 +246,7 @@ export function previewPdfDocument(doc) {
   const win = window.open(url, '_blank', 'noopener,noreferrer');
   if (!win) {
     URL.revokeObjectURL(url);
-    throw new Error('Nayi tab band ho gayi — yahin page par PDF viewer use karein (Dekhein).');
+    throw new Error('Popup blocked — use Preview on this page.');
   }
   setTimeout(() => URL.revokeObjectURL(url), 120000);
 }

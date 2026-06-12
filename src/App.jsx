@@ -175,7 +175,7 @@ function SuperAdminShell({ children }) {
  *  bootstrap already loads the data). refreshData is throttled + role-guarded internally. */
 function RouteChangeRefresher() {
   const { pathname } = useLocation();
-  const { refreshData } = useApp();
+  const { refreshData, loadLedgerReceipts } = useApp();
   const firstRef = useRef(true);
 
   useEffect(() => {
@@ -184,12 +184,58 @@ function RouteChangeRefresher() {
       return;
     }
     refreshData();
-  }, [pathname]);
+    if (pathname === '/party-ledger' || pathname === '/review-lots') {
+      void loadLedgerReceipts({ force: true });
+    }
+  }, [pathname, refreshData, loadLedgerReceipts]);
 
   return null;
 }
 
 /** Subtle, non-blocking indicator shown while a background data refresh is in flight. */
+function BootstrapErrorBanner() {
+  const { bootstrapLoadError, refreshData, initialDataLoading } = useApp();
+  if (!bootstrapLoadError || initialDataLoading) return null;
+  return (
+    <div
+      role="alert"
+      style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        zIndex: 500,
+        background: '#7f1d1d',
+        color: '#fff',
+        padding: '10px 16px',
+        fontSize: 13,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 12,
+        flexWrap: 'wrap',
+      }}
+    >
+      <span>Could not load app data. Check your connection.</span>
+      <button
+        type="button"
+        onClick={() => refreshData({ force: true })}
+        style={{
+          background: '#fff',
+          color: '#7f1d1d',
+          border: 'none',
+          borderRadius: 6,
+          padding: '4px 12px',
+          fontWeight: 700,
+          cursor: 'pointer',
+        }}
+      >
+        Retry
+      </button>
+    </div>
+  );
+}
+
 function BackgroundRefreshIndicator() {
   const { backgroundRefreshing } = useApp();
   if (!backgroundRefreshing) return null;
@@ -226,6 +272,7 @@ function AppRoutes() {
   return (
     <SuperAdminShell>
     <RouteChangeRefresher />
+    <BootstrapErrorBanner />
     <BackgroundRefreshIndicator />
     <Suspense
       fallback={(
