@@ -673,6 +673,37 @@
   color: #fff;
 }
 
+@media (max-width: 480px) {
+  .pk-app,
+  .pk-wrap {
+    max-width: 100%;
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  .pk-header {
+    border-radius: 16px;
+    padding: 14px;
+  }
+
+  .pk-header-title {
+    font-size: 1.2rem;
+  }
+
+  .pk-biz-pill {
+    max-width: 58%;
+  }
+
+  .pk-panel {
+    border-radius: 14px;
+  }
+
+  .pk-home-bar-inner,
+  .pk-bottom-inner {
+    width: 100%;
+  }
+}
+
 @media (max-width: 620px) {
   .pk-tx-head {
     grid-template-columns: 1fr 1fr;

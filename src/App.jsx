@@ -31,82 +31,69 @@ function PersonalKhataAccessibleRoute({ sidebarOpen, setSidebarOpen }) {
       {body}
     </Layout>
   ) : (
-    <div style={{ minHeight: '100vh', background: '#F0F2F5' }}>{body}</div>
+    <div className="pk-standalone-shell">{body}</div>
   );
 }
 
 function Layout({ children, sidebarOpen, setSidebarOpen }) {
+  const location = useLocation();
+
+  useEffect(() => {
+    if (window.matchMedia('(max-width: 768px)').matches) {
+      setSidebarOpen(false);
+    }
+  }, [location.pathname, setSidebarOpen]);
+
+  useEffect(() => {
+    document.body.style.overflow = sidebarOpen && window.matchMedia('(max-width: 768px)').matches
+      ? 'hidden'
+      : '';
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [sidebarOpen]);
+
   return (
-    <div style={{ display: 'flex', minHeight: '100vh' }}>
+    <div className={`app-shell${sidebarOpen ? ' sidebar-open' : ''}`}>
       <Sidebar sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
-      
-      {/* Mobile overlay */}
-      {sidebarOpen && (
-        <div 
-          style={{
-            position: 'fixed',
-            inset: 0,
-            background: 'rgba(15, 23, 42, 0.55)',
-            backdropFilter: 'blur(3px)',
-            zIndex: 150,
-            display: window.innerWidth <= 768 ? 'block' : 'none'
-          }}
-          onClick={() => setSidebarOpen(false)}
-        />
-      )}
-      
-      {/* Mobile menu button */}
+
+      <div
+        className="app-sidebar-overlay"
+        aria-hidden="true"
+        onClick={() => setSidebarOpen(false)}
+      />
+
       <button
+        type="button"
+        className="app-menu-btn"
+        aria-label={sidebarOpen ? 'Close menu' : 'Open menu'}
         onClick={() => setSidebarOpen(!sidebarOpen)}
-        style={{
-          position: 'fixed',
-          top: 16,
-          left: 16,
-          zIndex: 300,
-          background: '#fff',
-          border: '1px solid #e5e7eb',
-          borderRadius: 8,
-          padding: 8,
-          cursor: 'pointer',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-          display: window.innerWidth <= 768 ? 'flex' : 'none',
-          alignItems: 'center',
-          justifyContent: 'center',
-          width: 40,
-          height: 40
-        }}
       >
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
           {sidebarOpen ? (
-            <path d="M6 18L18 6M6 6l12 12"/>
+            <path d="M6 18L18 6M6 6l12 12" />
           ) : (
             <>
-              <line x1="3" y1="12" x2="21" y2="12"/>
-              <line x1="3" y1="6" x2="21" y2="6"/>
-              <line x1="3" y1="18" x2="21" y2="18"/>
+              <line x1="3" y1="12" x2="21" y2="12" />
+              <line x1="3" y1="6" x2="21" y2="6" />
+              <line x1="3" y1="18" x2="21" y2="18" />
             </>
           )}
         </svg>
       </button>
-      
-      <main style={{ 
-        marginLeft: window.innerWidth > 768 ? 230 : 0, 
-        flex: 1, 
-        padding: window.innerWidth <= 480 ? '16px 16px 40px' : window.innerWidth <= 768 ? '20px 20px 40px' : '28px 28px 40px', 
-        minHeight: '100vh', 
-        background: '#F0F2F5',
-        paddingTop: window.innerWidth <= 768 ? 72 : undefined
-      }}>
-        {/* Keep the sidebar visible while a lazy page chunk loads — only the content area shows the loader. */}
-        <Suspense
-          fallback={(
-            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
-              <LoaderDashboard height={30} width={30} />
-            </div>
-          )}
-        >
-          {children}
-        </Suspense>
+
+      <main className="app-main">
+        <div className="app-main-inner">
+          <Suspense
+            fallback={(
+              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
+                <LoaderDashboard height={30} width={30} />
+              </div>
+            )}
+          >
+            {children}
+          </Suspense>
+        </div>
       </main>
     </div>
   );
@@ -199,6 +186,7 @@ function BootstrapErrorBanner() {
   return (
     <div
       role="alert"
+      className="bootstrap-error-banner"
       style={{
         position: 'fixed',
         top: 0,

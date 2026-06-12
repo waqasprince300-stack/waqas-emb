@@ -368,7 +368,27 @@
 /* Mobile (≤480px) */
 @media (max-width: 480px) {
   .container {
+    padding: 0;
+  }
+
+  .row.header.calc-row {
+    display: none;
+  }
+
+  .calc-row.box {
     padding: 12px;
+    border: 1px solid #e5e7eb;
+    background: #fff;
+  }
+
+  .quick-parts {
+    gap: 5px;
+  }
+
+  .quick-part-btn {
+    padding: 6px 10px;
+    font-size: 12px;
+    min-height: 34px;
   }
   
   .card-calculator {

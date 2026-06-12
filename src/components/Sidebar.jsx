@@ -162,41 +162,12 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen }) {
 
   return (
     <>
-      <aside
-        style={{
-          width: 230,
-          minHeight: '100vh',
-          background: '#1e1e2e',
-          display: 'flex',
-          flexDirection: 'column',
-          position: 'fixed',
-          left: 0,
-          top: 0,
-          bottom: 0,
-          zIndex: 200,
-          boxShadow: '2px 0 12px rgba(0,0,0,0.15)',
-          transform: window.innerWidth <= 768 ? (sidebarOpen ? 'translateX(0)' : 'translateX(-100%)') : 'translateX(0)',
-          transition: 'transform 0.3s ease',
-        }}
-      >
-      {/* Mobile close button */}
-      <div style={{ 
-        display: window.innerWidth <= 768 ? 'flex' : 'none',
-        justifyContent: 'flex-end',
-        padding: '12px 16px',
-        borderBottom: '1px solid rgba(255,255,255,0.07)'
-      }}>
+      <aside className="app-sidebar">
+      <div className="app-sidebar-close">
         <button
+          type="button"
+          aria-label="Close menu"
           onClick={() => setSidebarOpen(false)}
-          style={{
-            background: 'none',
-            border: 'none',
-            color: '#94a3b8',
-            fontSize: 20,
-            cursor: 'pointer',
-            padding: 4,
-            borderRadius: 4
-          }}
         >
           ×
         </button>

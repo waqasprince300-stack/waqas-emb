@@ -6,11 +6,24 @@
   padding: 0;
 }
 
+html {
+  -webkit-text-size-adjust: 100%;
+  scroll-behavior: smooth;
+  -webkit-tap-highlight-color: transparent;
+}
+
 body {
   font-family: 'Inter', sans-serif;
   background: #F0F2F5;
   color: #1a1a2e;
   min-height: 100vh;
+  min-height: 100dvh;
+  overflow-x: hidden;
+}
+
+#root {
+  min-height: 100vh;
+  min-height: 100dvh;
 }
 
 :root {
@@ -1556,11 +1569,27 @@ tbody tr:last-child td {
 
 /* =============================  start Table adjustments =============================================== */
 .table-wrapper {
-  width: calc(100vw - 290px);
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
+
 @media screen and (max-width: 768px) {
   .table-wrapper {
-    width: calc(100vw - 40px);
+    width: 100%;
+    margin-left: 0;
+    margin-right: 0;
+  }
+
+  .page-header .btn,
+  .toolbar .btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .bootstrap-error-banner {
+    top: 56px;
   }
 }
 
