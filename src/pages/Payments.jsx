@@ -917,18 +917,9 @@ export default function Payments() {
       )} */}
 
       {/* Filter */}
-      <div
-        className="toolbar"
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 12,
-          flexWrap: "wrap",
-        }}
-      >
+      <div className={`toolbar pl-toolbar${isParty ? " pl-toolbar--party-user" : ""}`}>
         <select
-          className="form-select"
-          style={{ width: 160 }}
+          className="form-select pl-toolbar-filter pl-toolbar-filter--type"
           value={typeFilter}
           onChange={(e) => setTypeFilter(e.target.value)}
         >
@@ -939,8 +930,7 @@ export default function Payments() {
         </select>
         {isAdmin && businessOwners.length > 0 && (
           <select
-            className="form-select"
-            style={{ minWidth: 200, maxWidth: 280 }}
+            className="form-select pl-toolbar-filter pl-toolbar-filter--owner"
             value={ownerNameFilter}
             onChange={(e) => setOwnerNameFilter(e.target.value)}
             aria-label="Filter by owner name"
@@ -956,7 +946,7 @@ export default function Payments() {
             })}
           </select>
         )}
-        <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>
+        <span className="pl-toolbar-meta" style={{ fontSize: 13, color: "var(--text-secondary)" }}>
           {filtered.length} records
         </span>
       </div>

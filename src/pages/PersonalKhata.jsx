@@ -155,10 +155,14 @@ async function compressImageDataUrl(dataUrl, maxBytes = PK_IMAGE_TARGET_BYTES) {
 }
 
 export default function PersonalKhata({ standalone = false } = {}) {
-  const { user } = useAuth();
+  const { user, isAuthenticated } = useAuth();
   // Every logged-in account (admin / party / personal_khata) gets its own server-synced
   // khata, keyed by user id, so it shows the same data on any device. Anonymous = local only.
-  const khataStorageScope = user ? String(user.id || user._id || '').trim() : '';
+  const khataStorageScope =
+    isAuthenticated && user?.status === 'approved'
+      ? String(user.id || user._id || '').trim()
+      : '';
+  const khataEmbedded = isAuthenticated && !standalone;
   const { contactId } = useParams();
   const navigate = useNavigate();
   const [contacts, setContacts] = useState([]);
@@ -702,7 +706,7 @@ export default function PersonalKhata({ standalone = false } = {}) {
     const runMap = runningBalances(entries, active.id);
 
     return (
-      <div className={standalone ? 'pk-wrap pk-standalone-view' : 'pk-wrap'}>
+      <div className={`pk-wrap${standalone ? ' pk-standalone-view' : ' pk-wrap-embedded'}`}>
         <div className="pk-hero">
           <Link to="/personal-khata" className="pk-back">
             <ChevronLeft size={18} /> Back
@@ -901,7 +905,7 @@ export default function PersonalKhata({ standalone = false } = {}) {
           )}
         </div>
 
-        <div className={`pk-bottom${standalone ? '' : ' pk-offset-sidebar'}`}>
+        <div className={`pk-bottom${khataEmbedded ? ' pk-offset-sidebar' : ''}`}>
           <div className="pk-bottom-inner">
             <button
               type="button"
@@ -1012,22 +1016,23 @@ export default function PersonalKhata({ standalone = false } = {}) {
   }
 
   return (
-    <div className="pk-app">
-
-
+    <div className={`pk-app${khataEmbedded ? ' pk-app-embedded' : ''}`}>
       <header className="pk-header">
         <div className="pk-header-row">
           <div>
             <h1 className="pk-header-title">Personal Khata</h1>
-            {(!user || user.role !== 'personal_khata') && (
+            {!khataStorageScope && (
               <p className="pk-header-sub">
                 <Link to="/personal-khata/account">Sign in</Link> to sync on every device
               </p>
             )}
-            {user?.role === 'personal_khata' && (
+            {khataStorageScope && user?.role === 'personal_khata' && (
               <p className="pk-header-sub">
-                Synced · <Link to="/personal-khata/upgrade">Upgrade</Link>
+                Synced on every device · <Link to="/personal-khata/upgrade">Upgrade</Link>
               </p>
+            )}
+            {khataStorageScope && user?.role !== 'personal_khata' && (
+              <p className="pk-header-sub">Synced on every device</p>
             )}
           </div>
           <div className="pk-biz-pill">
@@ -1129,7 +1134,7 @@ export default function PersonalKhata({ standalone = false } = {}) {
         )}
       </section>
 
-      <div className={`pk-home-bar ${standalone ? '' : 'pk-home-bar-sidebar'}`}>
+      <div className={`pk-home-bar${khataEmbedded ? ' pk-home-bar-sidebar' : ''}`}>
         <div className="pk-home-bar-inner">
           <button
             type="button"

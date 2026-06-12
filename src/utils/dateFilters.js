@@ -99,13 +99,14 @@ export function compareRowsByUpdatedNewestFirst(a, b, kind) {
   return fallbackIdCompare(a, b);
 }
 
-export function DateRangeSelect({ value, onChange, style }) {
+export function DateRangeSelect({ value, onChange, style, className = '' }) {
+  const inToolbar = String(className).includes('pl-toolbar-filter');
   return (
     <select
-      className="form-select"
+      className={['form-select', className].filter(Boolean).join(' ')}
       value={value}
       onChange={(event) => onChange(event.target.value)}
-      style={{ width: 150, ...style }}
+      style={inToolbar ? style : { width: 150, ...style }}
     >
       {DATE_RANGE_OPTIONS.map((option) => (
         <option key={option.value} value={option.value}>{option.label}</option>

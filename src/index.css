@@ -987,8 +987,8 @@ tbody tr:last-child td {
     width: 100%;
   }
 
-  /* Toolbar becomes vertical */
-  .toolbar {
+  /* Toolbar becomes vertical (pl-toolbar uses its own grid layout) */
+  .toolbar:not(.pl-toolbar) {
     flex-direction: column;
     align-items: stretch;
     gap: 12px;
@@ -1562,6 +1562,77 @@ tbody tr:last-child td {
     gap: 12px;
     margin-bottom: 22px;
   
+  }
+}
+
+/* Responsive filter toolbars (Party Ledger, Workspaces, Payments, etc.) */
+.pl-toolbar .pl-toolbar-filter--workspace {
+  width: 200px;
+}
+
+.pl-toolbar .pl-toolbar-filter--party {
+  width: 190px;
+}
+
+.pl-toolbar .pl-toolbar-filter--date {
+  width: 150px;
+}
+
+.pl-toolbar .pl-toolbar-filter--status {
+  width: 160px;
+}
+
+.pl-toolbar .pl-toolbar-filter--type {
+  width: 160px;
+}
+
+.pl-toolbar .pl-toolbar-filter--owner {
+  min-width: 200px;
+  max-width: 280px;
+}
+
+@media screen and (max-width: 600px) {
+  .toolbar.pl-toolbar {
+    display: grid !important;
+    flex-direction: unset;
+    flex-wrap: unset;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    align-items: stretch;
+  }
+
+  .toolbar.pl-toolbar > .search-input {
+    grid-column: 1 / -1;
+    min-width: 0;
+    max-width: none;
+    flex: unset;
+  }
+
+  .toolbar.pl-toolbar > .pl-toolbar-meta,
+  .toolbar.pl-toolbar > span:not(.search-icon) {
+    grid-column: 1 / -1;
+  }
+
+  .toolbar.pl-toolbar .pl-toolbar-filter {
+    width: 100% !important;
+    min-width: 0;
+    max-width: none;
+    min-height: 44px;
+    font-size: 14px;
+  }
+
+  /* Single dropdown after search (e.g. completed lots: search + date only) */
+  .toolbar.pl-toolbar > .pl-toolbar-filter:only-of-type {
+    grid-column: 1 / -1;
+  }
+
+  /* Party user with no search (Payments): lone filter full width */
+  .toolbar.pl-toolbar.pl-toolbar--party-user:not(:has(.search-input)) > .pl-toolbar-filter:only-of-type {
+    grid-column: 1 / -1;
+  }
+
+  .toolbar.pl-toolbar.pl-toolbar--party-user:not(:has(.search-input)) > .pl-toolbar-filter + .pl-toolbar-filter {
+    grid-column: auto;
   }
 }
 

@@ -53,6 +53,8 @@ function Layout({ children, sidebarOpen, setSidebarOpen }) {
     };
   }, [sidebarOpen]);
 
+  const isKhataRoute = location.pathname.startsWith('/personal-khata');
+
   return (
     <div className={`app-shell${sidebarOpen ? ' sidebar-open' : ''}`}>
       <Sidebar sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
@@ -82,7 +84,7 @@ function Layout({ children, sidebarOpen, setSidebarOpen }) {
         </svg>
       </button>
 
-      <main className="app-main">
+      <main className={`app-main${isKhataRoute ? ' app-main--khata' : ''}`}>
         <div className="app-main-inner">
           <Suspense
             fallback={(

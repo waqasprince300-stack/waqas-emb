@@ -25,10 +25,13 @@ export const normalizeAuthResponse = (response) => {
   const role = ['super_admin', 'admin', 'party', 'personal_khata'].includes(rawRole)
     ? rawRole
     : 'party';
+  const id = String(user?._id ?? user?.id ?? '').trim();
   return {
     token,
     user: {
       ...user,
+      id: id || user?.id,
+      _id: user?._id ?? id,
       role,
       status: user?.status ?? 'approved',
       email: normalizeEmail(user?.email),

@@ -1,8 +1,8 @@
 // API utility for Express.js Backend
 // CRA only loads env vars that start with REACT_APP_ from .env in the project root (not src/).
 const API_BASE_URL = String(
-  process.env.REACT_APP_API_BASE_URL
-    || (process.env.NODE_ENV === "development"
+  process.env.REACT_APP_API_BASE_URL || 
+  (process.env.NODE_ENV === "development"
       ? "http://localhost:3001/api"
       : ""),
 ).replace(/\/$/, "");
@@ -299,14 +299,14 @@ class ApiService {
 
   // Personal Khata — server-synced so the same account shows the same data on any device/browser.
   async getPersonalKhata() {
-    return this.request('/personal-khata');
+    return this.request('/personal-khata', {}, { skipBusinessOwnerHeader: true });
   }
 
   async savePersonalKhata(payload) {
     return this.request('/personal-khata', {
       method: 'PUT',
       body: JSON.stringify(payload ?? {}),
-    });
+    }, { skipBusinessOwnerHeader: true });
   }
 
   // Business Owners

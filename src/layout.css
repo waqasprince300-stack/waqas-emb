@@ -105,6 +105,15 @@
   padding: max(12px, env(safe-area-inset-top)) 12px 24px;
 }
 
+/* Personal Khata inside main app (admin / party logged-in) */
+.app-main.app-main--khata {
+  background: #f0f2f5;
+}
+
+.app-main.app-main--khata .app-main-inner {
+  max-width: 520px;
+}
+
 @media (max-width: 768px) {
   .app-sidebar {
     transform: translateX(-100%);
@@ -135,6 +144,12 @@
   .app-main {
     margin-left: 0;
     padding: 68px 14px calc(24px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .app-main.app-main--khata {
+    padding-left: 10px;
+    padding-right: 10px;
+    padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
   }
 }
 

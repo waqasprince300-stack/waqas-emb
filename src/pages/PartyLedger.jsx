@@ -1362,7 +1362,7 @@ export default function PartyLedger() {
       </div>
 
       {/* Toolbar */}
-      <div className="toolbar">
+      <div className={`toolbar pl-toolbar${isParty ? " pl-toolbar--party-user" : ""}`}>
         <SearchBar
           value={search}
           onChange={setSearch}
@@ -1370,8 +1370,7 @@ export default function PartyLedger() {
         />
         {isAdmin && (
           <select
-            className="form-select"
-            style={{ width: 200 }}
+            className="form-select pl-toolbar-filter pl-toolbar-filter--workspace"
             value={workspaceFilter}
             onChange={(e) => setWorkspaceFilter(e.target.value)}
             aria-label="Filter by workspace"
@@ -1385,27 +1384,28 @@ export default function PartyLedger() {
             ))}
           </select>
         )}
-        <select
-          className="form-select"
-          style={{ width: 190 }}
-          value={partyFilter}
-          onChange={(e) => setPartyFilter(e.target.value)}
-          disabled={isParty}
-        >
-          {!isParty && <option value="All">All parties</option>}
-          {isParty && <option value="All">All collections</option>}
-          {!isParty &&
-            parties.map((p) => (
+        {!isParty && (
+          <select
+            className="form-select pl-toolbar-filter pl-toolbar-filter--party"
+            value={partyFilter}
+            onChange={(e) => setPartyFilter(e.target.value)}
+          >
+            <option value="All">All parties</option>
+            {parties.map((p) => (
               <option key={p.id} value={String(p.id)}>
                 {p.name}
               </option>
             ))}
-        </select>
-        <DateRangeSelect value={dateRange} onChange={setDateRange} />
+          </select>
+        )}
+        <DateRangeSelect
+          value={dateRange}
+          onChange={setDateRange}
+          className="pl-toolbar-filter pl-toolbar-filter--date"
+        />
         {ledgerLotsTab === "other" && (
           <select
-            className="form-select"
-            style={{ width: 160 }}
+            className="form-select pl-toolbar-filter pl-toolbar-filter--status"
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
           >

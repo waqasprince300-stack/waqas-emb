@@ -1405,17 +1405,29 @@ export default function GhausiaCollection() {
       </div>
 
       {/* Toolbar */}
-      <div className="toolbar">
+      <div className="toolbar pl-toolbar">
         <SearchBar value={search} onChange={setSearch} placeholder="Search lot no., design, description..." />
-        <select className="form-select" style={{ width: 190 }} value={partyFilter} onChange={e => setPartyFilter(e.target.value)}>
+        <select
+          className="form-select pl-toolbar-filter pl-toolbar-filter--party"
+          value={partyFilter}
+          onChange={e => setPartyFilter(e.target.value)}
+        >
           <option value="All">All Parties</option>
           {parties.map(p => (
             <option key={p.id} value={String(p.id)}>{p.name}</option>
           ))}
         </select>
-        <DateRangeSelect value={dateRange} onChange={setDateRange} />
+        <DateRangeSelect
+          value={dateRange}
+          onChange={setDateRange}
+          className="pl-toolbar-filter pl-toolbar-filter--date"
+        />
         {lotTableTab === 'others' ? (
-          <select className="form-select" style={{ width: 160 }} value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
+          <select
+            className="form-select pl-toolbar-filter pl-toolbar-filter--status"
+            value={statusFilter}
+            onChange={e => setStatusFilter(e.target.value)}
+          >
             <option value="All">All Statuses</option>
             {STATUS_OPTIONS.filter((s) => s !== 'completed').map(s => (
               <option key={s} value={s}>{s.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}</option>

@@ -288,13 +288,13 @@ export default function ReviewLots() {
         </div>
       </div>
 
-      <div className="toolbar">
+      <div className="toolbar pl-toolbar">
         <SearchBar
           value={search}
           onChange={setSearch}
           placeholder="Search lot, design, party…"
         />
-        <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>
+        <span className="pl-toolbar-meta" style={{ fontSize: 13, color: "var(--text-secondary)" }}>
           {pendingLots.length} awaiting review
         </span>
       </div>

@@ -328,9 +328,13 @@ export default function Parties() {
       </div>
 
       {/* Search */}
-      <div className="toolbar">
+      <div className="toolbar pl-toolbar">
         <SearchBar value={search} onChange={setSearch} placeholder="Search party name, phone, address..." />
-        <DateRangeSelect value={dateRange} onChange={setDateRange} />
+        <DateRangeSelect
+          value={dateRange}
+          onChange={setDateRange}
+          className="pl-toolbar-filter pl-toolbar-filter--date"
+        />
       </div>
 
       {/* Cards Grid */}

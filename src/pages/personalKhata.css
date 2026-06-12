@@ -24,6 +24,11 @@
   padding-bottom: 96px;
 }
 
+.pk-app.pk-app-embedded,
+.pk-wrap.pk-wrap-embedded {
+  width: 100%;
+}
+
 .pk-wrap {
   max-width: 520px;
   padding-bottom: 100px;
