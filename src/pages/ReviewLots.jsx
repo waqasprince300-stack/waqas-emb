@@ -1,6 +1,5 @@
 import React, { useMemo, useState } from "react";
 import LazyReceiptThumb from "../components/receipt/LazyReceiptThumb";
-import { useLedgerReceiptSync, REVIEW_LOTS_POLL_MS } from "../hooks/useLedgerReceiptSync";
 import Swal from "sweetalert2";
 import { useApp } from "../context/AppContext";
 import { Modal, FormGroup, EmptyState, SearchBar } from "../components/UI";
@@ -56,7 +55,6 @@ export default function ReviewLots() {
     initialDataLoading,
   } = useApp();
 
-  useLedgerReceiptSync({ pollMs: REVIEW_LOTS_POLL_MS });
   const [search, setSearch] = useState("");
   const [busyId, setBusyId] = useState(null);
   const [rejectModal, setRejectModal] = useState(null);
@@ -347,6 +345,7 @@ export default function ReviewLots() {
                         <LazyReceiptThumb
                           lotId={l.id}
                           receipt={pe.receipt}
+                          hasReceipt={pe.hasReceipt}
                           businessOwnerId={l.businessOwnerId}
                           lotLabel={l.lotNo || l.lotNumber}
                           onOpen={setReceiptPreview}

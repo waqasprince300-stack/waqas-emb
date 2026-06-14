@@ -1,11 +1,17 @@
 // API utility for Express.js Backend
 // CRA only loads env vars that start with REACT_APP_ from .env in the project root (not src/).
+// In production set REACT_APP_API_BASE_URL (e.g. https://api.seamandgrace.com/api) so the
+// frontend always talks to one backend regardless of www / non-www host. Falls back to a
+// same-origin relative "/api" when unset.
 const API_BASE_URL = String(
-  process.env.REACT_APP_API_BASE_URL || 
-  (process.env.NODE_ENV === "development"
+  process.env.REACT_APP_API_BASE_URL ||
+    (process.env.NODE_ENV === "development"
       ? "http://localhost:3001/api"
       : ""),
 ).replace(/\/$/, "");
+
+/** Network-level request timeout (ms). Transient failures auto-retry once for safe GET reads. */
+const REQUEST_TIMEOUT_MS = Number(process.env.REACT_APP_API_TIMEOUT_MS) || 45_000;
 const AUTH_SESSION_KEY = 'waqas_emb_auth_session';
 const BUSINESS_OWNER_KEY = 'waqas_emb_business_owner_id';
 
@@ -70,72 +76,111 @@ class ApiService {
 
   async request(endpoint, options = {}, meta = {}) {
     const url = `${this.baseURL}${endpoint}`;
-    const token = readAuthToken();
-    /** When true: do not send `x-business-owner-id` even if one is cached in localStorage (party JWT cross-tenant reads). */
-    const headerBiz =
-      meta.skipBusinessOwnerHeader === true
-        ? ''
-        : meta.businessOwnerId != null && String(meta.businessOwnerId).trim() !== ''
-          ? String(meta.businessOwnerId).trim()
-          : readBusinessOwnerId() || '';
-    const mergedHeaders = {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(headerBiz ? { 'x-business-owner-id': headerBiz } : {}),
-      ...(options.headers || {}),
-    };
-    const config = {
-      ...options,
-      headers: mergedHeaders,
-    };
+    const method = String(options.method || 'GET').toUpperCase();
+    // Only safe, idempotent reads are auto-retried — never re-send POST/PUT/PATCH writes.
+    const isIdempotent = method === 'GET' || method === 'HEAD';
+    const maxAttempts = isIdempotent ? 2 : 1;
+    let lastError = null;
 
-    try {
-      const response = await fetch(url, config);
-      if (!response.ok) {
-        if (
-          response.status === 401 &&
-          token &&
-          !isPublicAuthEndpoint(endpoint)
-        ) {
-          notifySessionExpired();
-        }
-        let errBody = null;
-        let detail = '';
-        try {
-          errBody = await response.json();
-          detail = errBody.message || errBody.error || (typeof errBody === 'string' ? errBody : '');
-          if (errBody.error && errBody.error !== detail) detail = `${detail} ${errBody.error}`.trim();
-        } catch {
-          errBody = null;
-        }
-        if (response.status === 413) {
-          detail =
-            typeof detail === 'string' && detail.trim()
-              ? detail
-              : 'Request too large — try a smaller receipt image or PDF.';
-        }
-        if (typeof detail === 'object' && detail != null) {
-          detail = String(detail.message || JSON.stringify(detail));
-        }
-        const err = new Error(detail ? `HTTP ${response.status}: ${detail}` : `HTTP error! status: ${response.status}`);
-        err.status = response.status;
-        if (errBody && typeof errBody === 'object') err.body = errBody;
-        throw err;
-      }
-      if (response.status === 204 || response.status === 205) {
-        return null;
-      }
-      const text = await response.text();
-      if (!text.trim()) return null;
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      // Token/header are read fresh each attempt (session may refresh between retries).
+      const token = readAuthToken();
+      /** When true: do not send `x-business-owner-id` even if one is cached in localStorage (party JWT cross-tenant reads). */
+      const headerBiz =
+        meta.skipBusinessOwnerHeader === true
+          ? ''
+          : meta.businessOwnerId != null && String(meta.businessOwnerId).trim() !== ''
+            ? String(meta.businessOwnerId).trim()
+            : readBusinessOwnerId() || '';
+      const mergedHeaders = {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(headerBiz ? { 'x-business-owner-id': headerBiz } : {}),
+        ...(options.headers || {}),
+      };
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+      const config = {
+        ...options,
+        headers: mergedHeaders,
+        signal: controller.signal,
+      };
+
       try {
-        return JSON.parse(text);
-      } catch {
-        return null;
+        const response = await fetch(url, config);
+        clearTimeout(timeoutId);
+        if (!response.ok) {
+          if (
+            response.status === 401 &&
+            token &&
+            !isPublicAuthEndpoint(endpoint)
+          ) {
+            notifySessionExpired();
+          }
+          let errBody = null;
+          let detail = '';
+          try {
+            errBody = await response.json();
+            detail = errBody.message || errBody.error || (typeof errBody === 'string' ? errBody : '');
+            if (errBody.error && errBody.error !== detail) detail = `${detail} ${errBody.error}`.trim();
+          } catch {
+            errBody = null;
+          }
+          if (response.status === 413) {
+            detail =
+              typeof detail === 'string' && detail.trim()
+                ? detail
+                : 'Request too large — try a smaller receipt image or PDF.';
+          }
+          if (typeof detail === 'object' && detail != null) {
+            detail = String(detail.message || JSON.stringify(detail));
+          }
+          // Retry once on transient server errors for idempotent reads (Atlas/network hiccups).
+          if (isIdempotent && attempt < maxAttempts && (response.status === 502 || response.status === 503 || response.status === 504)) {
+            lastError = new Error(`HTTP ${response.status}`);
+            await new Promise((r) => setTimeout(r, 600 * attempt));
+            continue;
+          }
+          const err = new Error(detail ? `HTTP ${response.status}: ${detail}` : `HTTP error! status: ${response.status}`);
+          err.status = response.status;
+          if (errBody && typeof errBody === 'object') err.body = errBody;
+          throw err;
+        }
+        if (response.status === 204 || response.status === 205) {
+          return null;
+        }
+        const text = await response.text();
+        if (!text.trim()) return null;
+        try {
+          return JSON.parse(text);
+        } catch {
+          return null;
+        }
+      } catch (error) {
+        clearTimeout(timeoutId);
+        // Network failure / timeout ("Failed to fetch", "Load failed", AbortError) — retry safe reads.
+        const isNetworkLevel =
+          error?.name === 'AbortError' ||
+          error?.name === 'TypeError' ||
+          /failed to fetch|load failed|network/i.test(String(error?.message || ''));
+        if (isIdempotent && attempt < maxAttempts && isNetworkLevel) {
+          lastError = error;
+          await new Promise((r) => setTimeout(r, 600 * attempt));
+          continue;
+        }
+        if (error?.name === 'AbortError') {
+          const timeoutErr = new Error('Request timed out. Please check your connection and try again.');
+          timeoutErr.status = 0;
+          console.error('API request timed out:', url);
+          throw timeoutErr;
+        }
+        console.error('API request failed:', error);
+        throw error;
       }
-    } catch (error) {
-      console.error('API request failed:', error);
-      throw error;
     }
+
+    throw lastError || new Error('Request failed');
   }
 
   // Bootstrap — consolidated initial-load payload (one round-trip instead of 7+ calls)

@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { apiService } from '../services/api';
+import { connectRealtime, disconnectRealtime, onDataChanged } from '../services/realtime';
 import { useAuth } from './AuthContext';
 import {
   normalizedBusinessOwnerId,
@@ -104,6 +105,13 @@ const normalizeOwners = (owners) =>
   });
 
 const FULL_REFRESH_INTERVAL_MS = 45_000;
+/** Minimum gap between background refreshes triggered by page navigation (prevents API spam). */
+const NAV_REFRESH_MIN_INTERVAL_MS = 10_000;
+/** Realtime pushes mean data actually changed, so refresh quickly but still coalesce bursts. */
+const REALTIME_MIN_INTERVAL_MS = 2_500;
+/** After a local write, keep background/realtime refreshes paused this long so optimistic
+ *  state isn't overwritten by a slightly-stale refetch mid-operation (cause of double entries). */
+const WRITE_SETTLE_MS = 1_500;
 
 const partyEditsArrayToMap = (remotePartyEdits) => {
   if (!Array.isArray(remotePartyEdits)) return INITIAL_PARTY_EDITS;
@@ -172,6 +180,13 @@ export function AppProvider({ children }) {
   const [refreshTick, setRefreshTick] = useState(0);
   const lastRefreshRef = useRef(0);
   const lastFullBootstrapRef = useRef(0);
+  /** Last time ANY refresh (light or full) actually hit the network — used to skip rapid nav refetches. */
+  const lastAnyRefreshRef = useRef(0);
+  /** Number of in-flight write requests + timestamp of the last one — pauses refresh while saving. */
+  const pendingWritesRef = useRef(0);
+  const lastWriteAtRef = useRef(0);
+  /** True when selecting a different workspace (vs first load / nav refresh) — enables cache-first switch. */
+  const workspaceSwitchRef = useRef(false);
   const loadGenerationRef = useRef(0);
   /** True for the next loader run only when it was triggered as a non-blocking background refresh. */
   const isBackgroundRefreshRef = useRef(false);
@@ -268,6 +283,20 @@ export function AppProvider({ children }) {
     return task;
   }, [isAuthenticated, mergeReceiptRows, user?.role]);
 
+  /** Drop a single lot's cached bill image so the thumbnail re-fetches it (e.g. bill replaced). */
+  const invalidateLotReceipt = useCallback((lotId) => {
+    const id = lotId != null ? String(lotId) : '';
+    if (!id) return;
+    const clear = (prev) => {
+      const existing = prev[id];
+      if (!existing || !existing.receipt) return prev;
+      return { ...prev, [id]: { ...existing, receipt: '' } };
+    };
+    setPartyEdits(clear);
+    setAdminReportingPartyEdits(clear);
+    setPartyCrossPartyEdits(clear);
+  }, []);
+
   /** Cache a single lot receipt after lazy fetch (avoids bulk hydration). */
   const patchLotReceipt = useCallback((lotId, receipt) => {
     if (!lotId || !receipt) return;
@@ -281,8 +310,26 @@ export function AppProvider({ children }) {
     if (user?.role === 'party') setPartyCrossPartyEdits(merge);
   }, [user?.role]);
 
+  /** Track a write request so background/realtime refreshes pause until it settles. */
+  const trackWrite = useCallback((promise) => {
+    pendingWritesRef.current += 1;
+    return Promise.resolve(promise).finally(() => {
+      pendingWritesRef.current = Math.max(0, pendingWritesRef.current - 1);
+      lastWriteAtRef.current = Date.now();
+    });
+  }, []);
+
+  /** True while a write is in flight or just settled — used to skip refetches that could
+   *  overwrite correct optimistic state mid-save (prevents flicker + duplicate entries). */
+  const isRefreshSuppressed = useCallback(
+    () => pendingWritesRef.current > 0 || Date.now() - lastWriteAtRef.current < WRITE_SETTLE_MS,
+    [],
+  );
+
   const runLightBootstrapRefresh = useCallback(async () => {
     if (!isAuthenticated || user?.role === 'super_admin' || user?.role === 'personal_khata') return;
+    // A save is in progress (or just finished) — its optimistic update is already correct.
+    if (isRefreshSuppressed()) return;
 
     const gen = ++loadGenerationRef.current;
     const isAdminUser = user?.role === 'admin';
@@ -290,21 +337,8 @@ export function AppProvider({ children }) {
 
     setBackgroundRefreshing(true);
     try {
-      const minimal = await queryClient.fetchQuery({
-        queryKey: ['bootstrap', user?._id, user?.role, 'minimal'],
-        queryFn: () => apiService.getBootstrap({ minimal: true, ...partyOpts }),
-        staleTime: 0,
-      });
-      if (gen !== loadGenerationRef.current) return;
-
-      if (Array.isArray(minimal?.parties)) setParties(minimal.parties.map(normalizeParty));
-      if (isAdminUser) {
-        applyReporting(minimal?.reporting);
-      } else {
-        setBusinessOwners(normalizeOwners(minimal?.businessOwners));
-        applyPartyCross(minimal?.partyCross);
-      }
-
+      // A single full bootstrap already contains parties + reporting/partyCross + scoped rows.
+      // Avoid the extra "minimal" round-trip here so navigation refreshes hit the DB once, not twice.
       const full = await queryClient.fetchQuery({
         queryKey: ['bootstrap', user?._id, user?.role, isAdminUser ? String(activeBusinessOwnerId || '') : 'party', 'full'],
         queryFn: () => apiService.getBootstrap({ ...partyOpts }),
@@ -336,6 +370,7 @@ export function AppProvider({ children }) {
     applyReporting,
     applyScoped,
     isAuthenticated,
+    isRefreshSuppressed,
     queryClient,
     user?._id,
     user?.role,
@@ -363,6 +398,8 @@ export function AppProvider({ children }) {
   const refreshData = useCallback((opts = {}) => {
     if (!isAuthenticated) return;
     if (user?.role === 'super_admin' || user?.role === 'personal_khata') return;
+    // Don't refetch while a save is in flight/settling — would race optimistic state.
+    if (isRefreshSuppressed() && !opts.force) return;
     const now = Date.now();
     if (now - lastRefreshRef.current < 800 && !opts.force) return;
     lastRefreshRef.current = now;
@@ -371,20 +408,32 @@ export function AppProvider({ children }) {
       lastFullBootstrapRef.current = 0;
     }
 
+    // Skip rapid navigation refetches: if we refreshed in the last 10s, the data is fresh enough.
+    // This stops the "bar bar API call" churn when the user hops between pages quickly.
+    if (
+      hasLoadedOnceRef.current
+      && !opts.force
+      && now - lastAnyRefreshRef.current < NAV_REFRESH_MIN_INTERVAL_MS
+    ) {
+      return;
+    }
+
     if (
       hasLoadedOnceRef.current
       && !opts.force
       && now - lastFullBootstrapRef.current < FULL_REFRESH_INTERVAL_MS
     ) {
+      lastAnyRefreshRef.current = now;
       void runLightBootstrapRefresh();
       return;
     }
 
     lastFullBootstrapRef.current = now;
+    lastAnyRefreshRef.current = now;
     isBackgroundRefreshRef.current = true;
     queryClient.invalidateQueries({ queryKey: ['bootstrap'] });
     setRefreshTick((t) => t + 1);
-  }, [isAuthenticated, user?.role, queryClient, runLightBootstrapRefresh]);
+  }, [isAuthenticated, isRefreshSuppressed, user?.role, queryClient, runLightBootstrapRefresh]);
 
   const selectBusinessOwner = (id) => {
     const nextId = String(id || '');
@@ -394,7 +443,9 @@ export function AppProvider({ children }) {
     try {
       localStorage.removeItem(WORKSPACE_VIEW_ALL_KEY);
     } catch { /* ignore */ }
-    invalidateBootstrapCache();
+    // Keep React Query's per-workspace cache so revisiting a workspace is instant (cache-first);
+    // the loader below refreshes it in the background. Don't wipe the cache on a plain switch.
+    workspaceSwitchRef.current = true;
     setViewAllWorkspaces(false);
     localStorage.setItem(BUSINESS_OWNER_KEY, nextId);
     setActiveBusinessOwnerId(nextId);
@@ -447,16 +498,43 @@ export function AppProvider({ children }) {
     /** Party JWT is cross-workspace — never reuse admin cached `x-business-owner-id` from localStorage. */
     const partyOpts = isAdminUser ? {} : { skipTenantHeader: true };
 
+    const fullBootstrapKey = ['bootstrap', user?._id, user?.role, isAdminUser ? String(activeBusinessOwnerId || '') : 'party', 'full'];
+
+    const applyFullPayload = (full) => {
+      if (Array.isArray(full?.parties)) setParties(full.parties.map(normalizeParty));
+      applyScoped(full || {});
+      if (isAdminUser) {
+        applyReporting(full?.reporting);
+      } else {
+        setBusinessOwners(normalizeOwners(full?.businessOwners));
+        applyPartyCross(full?.partyCross);
+      }
+    };
+
     async function loadAppData() {
       const gen = ++loadGenerationRef.current;
       const isFirst = !hasLoadedOnceRef.current;
-      // Background nav refresh: don't block the UI. Workspace switch / first load keep the loader.
-      const isBg = !isFirst && isBackgroundRefreshRef.current;
+      // A plain workspace switch already knows a valid owner — skip the minimal round-trip and
+      // show cached workspace data instantly (cache-first), refreshing in the background.
+      const isWorkspaceSwitch = !isFirst && workspaceSwitchRef.current;
+      workspaceSwitchRef.current = false;
+      // Background nav refresh: don't block the UI. First load keeps the loader.
+      const isBg = !isFirst && !isWorkspaceSwitch && isBackgroundRefreshRef.current;
       isBackgroundRefreshRef.current = false;
+
       if (isFirst) {
         setInitialDataPhase('idle');
         setScopedDataLoading(true);
         setBootstrapLoadError(null);
+      } else if (isWorkspaceSwitch) {
+        const cached = queryClient.getQueryData(fullBootstrapKey);
+        if (cached) {
+          applyFullPayload(cached);
+          setScopedDataLoading(false);
+          setBackgroundRefreshing(true);
+        } else {
+          setScopedDataLoading(true);
+        }
       } else if (isBg) {
         setBackgroundRefreshing(true);
       } else {
@@ -464,51 +542,52 @@ export function AppProvider({ children }) {
       }
 
       try {
-        // Phase A — minimal payload: businessOwners + parties + reporting/partyCross.
-        // Unblocks Dashboard, Parties, PartyLedger, ReviewLots without waiting for scoped data.
-        const minimal = await queryClient.fetchQuery({
-          queryKey: ['bootstrap', user?._id, user?.role, 'minimal'],
-          queryFn: () => apiService.getBootstrap({ minimal: true, ...partyOpts }),
-        });
-        if (gen !== loadGenerationRef.current) return;
+        // Phase A — minimal payload (resolves owners / active workspace). Skipped on a plain switch.
+        if (!isWorkspaceSwitch) {
+          const minimal = await queryClient.fetchQuery({
+            queryKey: ['bootstrap', user?._id, user?.role, 'minimal'],
+            queryFn: () => apiService.getBootstrap({ minimal: true, ...partyOpts }),
+          });
+          if (gen !== loadGenerationRef.current) return;
 
-        if (Array.isArray(minimal?.parties)) setParties(minimal.parties.map(normalizeParty));
+          if (Array.isArray(minimal?.parties)) setParties(minimal.parties.map(normalizeParty));
 
-        if (isAdminUser) {
-          const remoteOwners = normalizeOwners(minimal?.businessOwners);
-          setBusinessOwners(remoteOwners);
-          if (remoteOwners.length === 0) {
-            try {
-              localStorage.removeItem(BUSINESS_OWNER_KEY);
-              localStorage.removeItem(WORKSPACE_VIEW_ALL_KEY);
-            } catch { /* ignore */ }
-            setViewAllWorkspaces(false);
-            setActiveBusinessOwnerId('');
-            clearAllData();
-            markLoaded(true);
-            return;
+          if (isAdminUser) {
+            const remoteOwners = normalizeOwners(minimal?.businessOwners);
+              setBusinessOwners(remoteOwners);
+              if (remoteOwners.length === 0) {
+                try {
+                  localStorage.removeItem(BUSINESS_OWNER_KEY);
+                  localStorage.removeItem(WORKSPACE_VIEW_ALL_KEY);
+                } catch { /* ignore */ }
+                setViewAllWorkspaces(false);
+                setActiveBusinessOwnerId('');
+              clearAllData();
+              markLoaded(true);
+                return;
+              }
+              const selectedExists = remoteOwners.some((owner) => String(owner.id || owner._id) === String(activeBusinessOwnerId));
+              const nextOwner = selectedExists
+                ? activeBusinessOwnerId
+                : String(remoteOwners[0]?.id || remoteOwners[0]?._id || '');
+              if (nextOwner && nextOwner !== activeBusinessOwnerId) {
+                localStorage.setItem(BUSINESS_OWNER_KEY, nextOwner);
+                setActiveBusinessOwnerId(nextOwner);
+              return; // effect re-runs with the resolved workspace; minimal comes from cache
+            }
+            applyReporting(minimal?.reporting);
+          } else {
+            setBusinessOwners(normalizeOwners(minimal?.businessOwners));
+            applyPartyCross(minimal?.partyCross);
           }
-          const selectedExists = remoteOwners.some((owner) => String(owner.id || owner._id) === String(activeBusinessOwnerId));
-          const nextOwner = selectedExists
-            ? activeBusinessOwnerId
-            : String(remoteOwners[0]?.id || remoteOwners[0]?._id || '');
-          if (nextOwner && nextOwner !== activeBusinessOwnerId) {
-            localStorage.setItem(BUSINESS_OWNER_KEY, nextOwner);
-            setActiveBusinessOwnerId(nextOwner);
-            return; // effect re-runs with the resolved workspace; minimal comes from cache
-          }
-          applyReporting(minimal?.reporting);
-        } else {
-          setBusinessOwners(normalizeOwners(minimal?.businessOwners));
-          applyPartyCross(minimal?.partyCross);
+
+          if (gen !== loadGenerationRef.current) return;
+          setInitialDataPhase('minimal');
         }
-
-        if (gen !== loadGenerationRef.current) return;
-        setInitialDataPhase('minimal');
 
         // Phase B — full payload: workspace-scoped lots/payments/partyEdits for Ghausia / Payments.
         const full = await queryClient.fetchQuery({
-          queryKey: ['bootstrap', user?._id, user?.role, isAdminUser ? String(activeBusinessOwnerId || '') : 'party', 'full'],
+          queryKey: fullBootstrapKey,
           queryFn: () => apiService.getBootstrap({ ...partyOpts }),
         });
         if (gen !== loadGenerationRef.current) return;
@@ -555,12 +634,13 @@ export function AppProvider({ children }) {
     let timer = null;
     const onVisible = () => {
       if (document.visibilityState === 'visible' && hasLoadedOnceRef.current) {
+        // Don't refetch if a refresh already ran very recently (e.g. navigation just triggered one).
+        if (Date.now() - lastAnyRefreshRef.current < NAV_REFRESH_MIN_INTERVAL_MS) return;
         if (timer) clearTimeout(timer);
         timer = setTimeout(() => {
+          lastAnyRefreshRef.current = Date.now();
+          // Refresh row data + bill presence flags only; images stay lazy per visible row.
           void runLightBootstrapRefresh();
-          if (user?.role === 'admin' || user?.role === 'party') {
-            void loadLedgerReceipts({ force: true });
-          }
         }, 300);
       }
     };
@@ -570,7 +650,58 @@ export function AppProvider({ children }) {
       document.removeEventListener('visibilitychange', onVisible);
       if (timer) clearTimeout(timer);
     };
-  }, [isAuthenticated, user?.role, runLightBootstrapRefresh, loadLedgerReceipts]);
+  }, [isAuthenticated, user?.role, runLightBootstrapRefresh]);
+
+  // Realtime: when anyone in the same org writes (e.g. a party uploads/saves a bill), the backend
+  // pushes a "data:changed" event so this client refreshes within ~1s — no aggressive polling.
+  useEffect(() => {
+    if (!isAuthenticated) return undefined;
+    if (user?.role !== 'admin' && user?.role !== 'party') return undefined;
+
+    connectRealtime();
+    let timer = null;
+    const pendingLotIds = new Set();
+    const handleChange = (payload) => {
+      if (!hasLoadedOnceRef.current) return;
+      // Remember which lots changed so we can drop just their cached bill image (cheap, no bulk).
+      const lotId = payload && payload.lotId != null ? String(payload.lotId) : '';
+      if (lotId) pendingLotIds.add(lotId);
+
+      if (Date.now() - lastAnyRefreshRef.current < REALTIME_MIN_INTERVAL_MS) {
+        // A refresh just ran; let it settle, then reconcile once more shortly.
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(() => handleChange(null), REALTIME_MIN_INTERVAL_MS);
+        return;
+      }
+      if (timer) clearTimeout(timer);
+      // Small debounce so a burst of events (multiple rows) collapses into one refresh.
+      timer = setTimeout(() => {
+        // A local save is in flight/settling — defer so we don't race optimistic state.
+        if (isRefreshSuppressed()) {
+          if (timer) clearTimeout(timer);
+          timer = setTimeout(() => handleChange(null), WRITE_SETTLE_MS);
+          return;
+        }
+        lastAnyRefreshRef.current = Date.now();
+        // Invalidate only the changed lots' cached images, then refresh row data + bill flags.
+        pendingLotIds.forEach((id) => invalidateLotReceipt(id));
+        pendingLotIds.clear();
+        setLedgerReceiptsVersion((v) => v + 1);
+        void runLightBootstrapRefresh();
+      }, 400);
+    };
+
+    const unsubscribe = onDataChanged(handleChange);
+    return () => {
+      unsubscribe();
+      if (timer) clearTimeout(timer);
+    };
+  }, [isAuthenticated, user?.role, runLightBootstrapRefresh, invalidateLotReceipt, isRefreshSuppressed]);
+
+  // Tear down the socket entirely when the user signs out.
+  useEffect(() => {
+    if (!isAuthenticated) disconnectRealtime();
+  }, [isAuthenticated]);
 
   const createBusinessOwner = async (data) => {
     const created = await apiService.createBusinessOwner(data);
@@ -657,7 +788,7 @@ export function AppProvider({ children }) {
 
   const addLot = async (lot, opts = {}) => {
     const { businessOwnerId } = opts;
-    const created = normalizeLotData(await apiService.createGhausiaLot(lot, businessOwnerId));
+    const created = normalizeLotData(await trackWrite(apiService.createGhausiaLot(lot, businessOwnerId)));
     setGhausiaLots((arr) => [...arr, created]);
     if (user?.role === 'admin') {
       setAdminReportingLots((arr) => [...arr, created]);
@@ -667,7 +798,7 @@ export function AppProvider({ children }) {
 
   const updateLot = async (id, patch, opts = {}) => {
     const { businessOwnerId } = opts;
-    const updated = normalizeLotData(await apiService.updateGhausiaLot(id, patch, businessOwnerId));
+    const updated = normalizeLotData(await trackWrite(apiService.updateGhausiaLot(id, patch, businessOwnerId)));
     const idStr = String(id);
     setGhausiaLots((arr) => {
       const has = arr.some((x) => String(x.id) === idStr);
@@ -685,7 +816,7 @@ export function AppProvider({ children }) {
 
   const deleteLot = async (id, opts = {}) => {
     const { businessOwnerId } = opts;
-    await apiService.deleteGhausiaLot(id, businessOwnerId);
+    await trackWrite(apiService.deleteGhausiaLot(id, businessOwnerId));
     const idStr = String(id);
     setGhausiaLots((arr) => arr.filter((x) => String(x.id) !== idStr));
     if (user?.role === 'admin') {
@@ -715,11 +846,11 @@ export function AppProvider({ children }) {
 
   const approveLotCompletion = async (lotId, opts = {}) => {
     const { businessOwnerId, ownerBillingChoice, ownerBillAmount, resolvedBusinessBill } = opts;
-    const raw = await apiService.approveLotCompletion(lotId, {
+    const raw = await trackWrite(apiService.approveLotCompletion(lotId, {
       businessOwnerId,
       ownerBillingChoice,
       ownerBillAmount,
-    });
+    }));
 
     const unwrapLot = (payload) => {
       if (!payload || typeof payload !== 'object') return payload;
@@ -763,7 +894,7 @@ export function AppProvider({ children }) {
 
   const rejectLotCompletion = async (lotId, rejectionNote, opts = {}) => {
     const { businessOwnerId } = opts;
-    const raw = await apiService.rejectLotCompletion(lotId, rejectionNote, businessOwnerId);
+    const raw = await trackWrite(apiService.rejectLotCompletion(lotId, rejectionNote, businessOwnerId));
     const normalized = mergeLotAcrossCollections(raw);
     const idStr = String(lotId);
     const mergePe = (prev) => ({
@@ -783,7 +914,7 @@ export function AppProvider({ children }) {
   const updatePartyEdit = async (lotId, data, opts = {}) => {
     const { businessOwnerId } = opts;
     try {
-      const result = await apiService.upsertPartyEditByLotId(lotId, data, businessOwnerId);
+      const result = await trackWrite(apiService.upsertPartyEditByLotId(lotId, data, businessOwnerId));
       const normalizedEdit = {
         ...result,
         completeDate: result.completeDate ? normalizeDateString(result.completeDate) : '',
@@ -805,7 +936,7 @@ export function AppProvider({ children }) {
 
   const addPayment = async (p, opts = {}) => {
     const { businessOwnerId } = opts;
-    const payment = await apiService.createPayment({ ...p, amount: Number(p.amount) }, businessOwnerId);
+    const payment = await trackWrite(apiService.createPayment({ ...p, amount: Number(p.amount) }, businessOwnerId));
     setPayments((arr) => [...arr, payment]);
     if (user?.role === 'admin') {
       setAdminReportingPayments((arr) => [...arr, payment]);
@@ -818,7 +949,7 @@ export function AppProvider({ children }) {
 
   const deletePayment = async (id, opts = {}) => {
     const { businessOwnerId } = opts;
-    await apiService.deletePayment(id, businessOwnerId);
+    await trackWrite(apiService.deletePayment(id, businessOwnerId));
     const idStr = String(id);
     setPayments((arr) => arr.filter((x) => String(x.id) !== idStr));
     if (user?.role === 'admin') {
@@ -845,22 +976,22 @@ export function AppProvider({ children }) {
   const reportingPartyEdits = user?.role === 'admin' ? adminReportingPartyEdits : partyEdits;
 
   const contextValue = useMemo(() => ({
-    parties, addParty, updateParty, deleteParty,
-    ghausiaLots, addLot, updateLot, deleteLot,
-    approveLotCompletion, rejectLotCompletion,
+      parties, addParty, updateParty, deleteParty,
+      ghausiaLots, addLot, updateLot, deleteLot,
+      approveLotCompletion, rejectLotCompletion,
     partyEdits, updatePartyEdit, patchLotReceipt, loadLedgerReceipts, ledgerReceiptsVersion,
-    payments, addPayment, deletePayment,
-    reportingLots, reportingPayments, reportingPartyEdits,
-    partyCrossLots, partyCrossPartyEdits, partyCrossPayments,
-    businessOwners,
-    activeBusinessOwnerId,
-    selectBusinessOwner,
-    selectAllWorkspacesView,
-    viewAllWorkspaces,
-    createBusinessOwner,
-    deleteBusinessOwner,
-    getPartyById, getPartyName,
-    initialDataLoading,
+      payments, addPayment, deletePayment,
+      reportingLots, reportingPayments, reportingPartyEdits,
+      partyCrossLots, partyCrossPartyEdits, partyCrossPayments,
+      businessOwners,
+      activeBusinessOwnerId,
+      selectBusinessOwner,
+      selectAllWorkspacesView,
+      viewAllWorkspaces,
+      createBusinessOwner,
+      deleteBusinessOwner,
+      getPartyById, getPartyName,
+      initialDataLoading,
     initialDataPhase,
     scopedDataLoading,
     backgroundRefreshing,

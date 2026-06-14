@@ -624,6 +624,8 @@ export default function GhausiaCollection() {
   const [completeBillError, setCompleteBillError] = useState('');
   const completeBillResolveRef = useRef(null);
   const [completionPersistingLotId, setCompletionPersistingLotId] = useState(null);
+  /** Lots currently being completed/settled — blocks a second concurrent trigger (no double entry). */
+  const completingLotsRef = useRef(new Set());
   const [inlineSummaryBusy, setInlineSummaryBusy] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
 
@@ -680,6 +682,11 @@ export default function GhausiaCollection() {
 
   const persistLotCompletedWithPayment = async (lot, billAmount, options = {}) => {
     const { fromBillable = false } = options;
+    const lotKey = String(lot.id);
+    // Guard against double submission (rapid clicks / a stale re-render re-triggering) which
+    // would create a duplicate Owner payment.
+    if (completingLotsRef.current.has(lotKey)) return;
+    completingLotsRef.current.add(lotKey);
     setCompletionPersistingLotId(lot.id);
     try {
       const today = new Date().toISOString().slice(0, 10);
@@ -722,6 +729,7 @@ export default function GhausiaCollection() {
         setStatusFilter('All');
       }
     } finally {
+      completingLotsRef.current.delete(lotKey);
       setCompletionPersistingLotId(null);
     }
   };
@@ -1543,6 +1551,7 @@ export default function GhausiaCollection() {
                           className="form-select"
                           style={{ width: 150, fontSize: 12, padding: '5px 8px' }}
                           value={l.status}
+                          disabled={completionPersistingLotId === l.id || inlineSummaryBusy}
                           onChange={(e) => setLotStatus(l, e.target.value)}
                         >
                           {STATUS_OPTIONS.map(s => (

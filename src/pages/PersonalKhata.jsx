@@ -267,6 +267,13 @@ export default function PersonalKhata({ standalone = false } = {}) {
       };
     }
 
+    // Logged-in: show the cached ledger instantly (no blocking spinner), then reconcile with the
+    // server in the background. Atlas latency no longer makes the page sit on "Loading…".
+    const cached = loadKhataState(khataStorageScope);
+    if (cached.contacts.length > 0 || cached.entries.length > 0) {
+      applyState(cached);
+    }
+
     // Logged-in Personal Khata: server is the source of truth so any device/browser sees the same data.
     (async () => {
       try {

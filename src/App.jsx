@@ -164,7 +164,7 @@ function SuperAdminShell({ children }) {
  *  bootstrap already loads the data). refreshData is throttled + role-guarded internally. */
 function RouteChangeRefresher() {
   const { pathname } = useLocation();
-  const { refreshData, loadLedgerReceipts } = useApp();
+  const { refreshData } = useApp();
   const firstRef = useRef(true);
 
   useEffect(() => {
@@ -172,11 +172,10 @@ function RouteChangeRefresher() {
       firstRef.current = false;
       return;
     }
+    // Refresh row data (text) in the background — bill images load lazily per visible row,
+    // so navigation stays instant and we never bulk-download receipts on page change.
     refreshData();
-    if (pathname === '/party-ledger' || pathname === '/review-lots') {
-      void loadLedgerReceipts({ force: true });
-    }
-  }, [pathname, refreshData, loadLedgerReceipts]);
+  }, [pathname, refreshData]);
 
   return null;
 }

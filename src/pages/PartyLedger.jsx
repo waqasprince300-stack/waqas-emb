@@ -12,7 +12,6 @@ import {
 import Loader from "../components/Loader";
 import LoaderDashboard from "../components/LoaderDashboard";
 import LazyReceiptThumb from "../components/receipt/LazyReceiptThumb";
-import { useLedgerReceiptSync } from "../hooks/useLedgerReceiptSync";
 import { receiptPreviewKind } from "../components/receipt/ReceiptThumb";
 import {
   DateRangeSelect,
@@ -176,7 +175,6 @@ export default function PartyLedger() {
     initialDataLoading,
   } = useApp();
 
-  useLedgerReceiptSync();
   const { isAdmin, isParty, user } = useAuth();
 
   /** Admin: merged lots/edits/payments across all workspaces; party login: scoped cross-collection rows */
@@ -1614,6 +1612,7 @@ export default function PartyLedger() {
                           <LazyReceiptThumb
                             lotId={l.id}
                             receipt={pe.receipt}
+                            hasReceipt={pe.hasReceipt}
                             businessOwnerId={l.businessOwnerId}
                             lotLabel={l.lotNo || l.lotNumber}
                             onOpen={setReceiptPreview}
