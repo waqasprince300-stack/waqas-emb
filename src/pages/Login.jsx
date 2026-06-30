@@ -96,6 +96,19 @@ export default function Login() {
     return payload;
   };
 
+  const focusPasswordField = () => {
+    const el = document.getElementById('login-password');
+    if (el) el.focus();
+  };
+
+  /** Email/phone field: Enter moves to the password box instead of submitting. */
+  const handleIdentifierKeyDown = (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      focusPasswordField();
+    }
+  };
+
   const brandLogoSrc = `${process.env.PUBLIC_URL || ''}/seam-grace-logo.png`;
 
   return (
@@ -170,6 +183,7 @@ export default function Login() {
                 placeholder="you@company.com"
                 value={form.email}
                 onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+                onKeyDown={handleIdentifierKeyDown}
                 required
                 autoFocus
               />
@@ -184,6 +198,7 @@ export default function Login() {
                 placeholder="e.g. 03001234567 or +923001234567"
                 value={form.phone}
                 onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
+                onKeyDown={handleIdentifierKeyDown}
                 required
                 autoFocus
                 autoComplete="tel"
@@ -194,9 +209,10 @@ export default function Login() {
           <label className="auth-label">
             <span className="auth-label-row">
               <span style={{ color: 'var(--text-secondary)' }}>Password</span>
-              <Link className="auth-inline-link" to="/forgot-password">Forgot password?</Link>
+              <Link className="auth-inline-link" to="/forgot-password" tabIndex={-1}>Forgot password?</Link>
             </span>
             <PasswordField
+              id="login-password"
               name="password"
               placeholder="Enter your password"
               value={form.password}

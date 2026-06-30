@@ -43,6 +43,25 @@ function partyRevisionPositiveDelta(pe) {
   return Math.max(0, Number(pr.toAmount) - Number(pr.fromAmount));
 }
 
+/**
+ * A 400 on approve almost always means our cached row is stale: the lot was already
+ * approved/rejected/changed on the server, so it is no longer "pending approval".
+ * We key off the 400 status (not the exact backend wording, which may change) and only
+ * treat clearly unrelated client errors as real failures.
+ */
+function isStaleLotApprovalError(e) {
+  const status = Number(e?.status);
+  if (status !== 400) return false;
+  const msg = String(e?.message || e || "").toLowerCase();
+  // Wording-tolerant: anything about the lot's approval/status counts as "already updated".
+  // Genuine input problems (amount/validation) keep the normal error message.
+  const looksLikeValidationError =
+    msg.includes("amount") ||
+    msg.includes("required") ||
+    msg.includes("invalid amount");
+  return !looksLikeValidationError;
+}
+
 export default function ReviewLots() {
   const {
     reportingLots,
@@ -52,6 +71,7 @@ export default function ReviewLots() {
     businessOwners,
     approveLotCompletion,
     rejectLotCompletion,
+    refreshData,
     initialDataLoading,
   } = useApp();
 
@@ -122,11 +142,20 @@ export default function ReviewLots() {
           timerProgressBar: true,
         });
       } catch (e) {
-        Swal.fire({
-          icon: "error",
-          title: "Could not approve",
-          text: String(e?.message || e || ""),
-        });
+        if (isStaleLotApprovalError(e)) {
+          refreshData?.({ force: true });
+          Swal.fire({
+            icon: "info",
+            title: "Lot already updated",
+            text: "This lot is no longer awaiting approval (it was already approved, rejected, or changed). The list has been refreshed.",
+          });
+        } else {
+          Swal.fire({
+            icon: "error",
+            title: "Could not approve",
+            text: String(e?.message || e || ""),
+          });
+        }
       } finally {
         setBusyId(null);
       }
@@ -209,11 +238,22 @@ export default function ReviewLots() {
         timerProgressBar: true,
       });
     } catch (e) {
-      Swal.fire({
-        icon: "error",
-        title: "Could not approve",
-        text: String(e?.message || e || ""),
-      });
+      if (isStaleLotApprovalError(e)) {
+        setApproveBillingModal(null);
+        setCustomOwnerBillInput("");
+        refreshData?.({ force: true });
+        Swal.fire({
+          icon: "info",
+          title: "Lot already updated",
+          text: "This lot is no longer awaiting approval (it was already approved, rejected, or changed). The list has been refreshed.",
+        });
+      } else {
+        Swal.fire({
+          icon: "error",
+          title: "Could not approve",
+          text: String(e?.message || e || ""),
+        });
+      }
     } finally {
       setBusyId(null);
     }

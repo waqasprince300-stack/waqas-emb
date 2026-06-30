@@ -725,9 +725,6 @@ export default function GhausiaCollection() {
             : 'The lot was marked completed with a bill amount, but saving the owner payment failed. Add it manually from Payment Management if needed.',
         });
       }
-      if (statusFilter !== 'All' && statusFilter !== 'completed') {
-        setStatusFilter('All');
-      }
     } finally {
       completingLotsRef.current.delete(lotKey);
       setCompletionPersistingLotId(null);
@@ -799,10 +796,6 @@ export default function GhausiaCollection() {
         }, { businessOwnerId: lotBizId(lot) });
       } catch (e) {
         console.error(e);
-      }
-
-      if (statusFilter !== 'All' && newStatus !== statusFilter) {
-        setStatusFilter('All');
       }
     } finally {
       setInlineSummaryBusy(false);

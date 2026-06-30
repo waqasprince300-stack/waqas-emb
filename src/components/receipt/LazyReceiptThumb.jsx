@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import apiService from '../../services/api';
 import { useApp } from '../../context/AppContext';
+import { useAuth } from '../../context/AuthContext';
 import { normalizedBusinessOwnerId } from '../../utils/businessWorkspace';
 import ReceiptThumb, { receiptPreviewKind } from './ReceiptThumb';
 
@@ -19,7 +20,8 @@ export default function LazyReceiptThumb({
   emptyLabel = 'No bill',
   size = 44,
 }) {
-  const { patchLotReceipt, loadLedgerReceipts, ledgerReceiptsVersion } = useApp();
+  const { patchLotReceipt, ledgerReceiptsVersion } = useApp();
+  const { isParty } = useAuth();
   const [localReceipt, setLocalReceipt] = useState('');
   const [loading, setLoading] = useState(false);
   const [checked, setChecked] = useState(false);
@@ -100,27 +102,27 @@ export default function LazyReceiptThumb({
     // Defer slightly so the page paints first, then the bill streams in.
     const startFetch = async () => {
       try {
+        // One efficient per-lot fetch for every role. The party route resolves the lot's own
+        // workspace server-side, so a party reads its bill here just like the admin does — we
+        // only skip sending the admin tenant header that a party JWT doesn't own.
         const row = await apiService.getPartyEditByLotId(id, {
           includeReceipts: true,
           businessOwnerId: biz || undefined,
+          skipTenantHeader: isParty,
         });
         if (cancelled) return;
         const r = row?.receipt ?? '';
+        fetchedForRef.current = fetchKey;
         if (r) {
-          fetchedForRef.current = fetchKey;
           setLocalReceipt(r);
           patchLotReceipt?.(id, r);
-        } else {
-          fetchedForRef.current = '';
         }
       } catch {
+        // No bill on this lot (404) or a transient error: show the empty label and stop.
+        // We deliberately do NOT trigger a bulk reload here — that bumps the receipts version,
+        // which re-runs every row's effect and turns one miss into an API-call loop.
         if (!cancelled) {
-          fetchedForRef.current = '';
-          try {
-            await loadLedgerReceipts?.({ force: true });
-          } catch {
-            /* bulk fallback also failed */
-          }
+          fetchedForRef.current = fetchKey;
         }
       } finally {
         if (!cancelled) {
@@ -150,7 +152,7 @@ export default function LazyReceiptThumb({
         clearTimeout(handle);
       }
     };
-  }, [lotId, receiptProp, businessOwnerId, billExists, inView, patchLotReceipt, loadLedgerReceipts, ledgerReceiptsVersion]);
+  }, [lotId, receiptProp, businessOwnerId, billExists, inView, isParty, patchLotReceipt, ledgerReceiptsVersion]);
 
   if (kind !== 'none') {
     return <ReceiptThumb receipt={receipt} lotLabel={lotLabel} onOpen={onOpen} size={size} />;

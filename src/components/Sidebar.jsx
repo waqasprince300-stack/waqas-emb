@@ -4,6 +4,7 @@ import { NavLink } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useApp } from '../context/AppContext';
 import { Modal } from './UI';
+import { countPendingBillRevisionRequests } from '../utils/partyLedgerNotifications';
 
 const navItems = [
   {
@@ -130,13 +131,8 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen }) {
 
   /** Party-initiated bill-change requests awaiting admin — shown as a badge on "Party Ledger". */
   const billRevisionCount = useMemo(
-    () =>
-      Object.values(reportingPartyEdits || {}).filter(
-        (pe) =>
-          pe?.billRevisionRequest &&
-          String(pe.billRevisionRequest.status || '').toLowerCase() === 'pending',
-      ).length,
-    [reportingPartyEdits],
+    () => countPendingBillRevisionRequests(reportingLots, reportingPartyEdits),
+    [reportingLots, reportingPartyEdits],
   );
   const handleNavClick = () => {
     if (window.innerWidth <= 768) {

@@ -26,6 +26,9 @@ import {
 import {
   workspaceDisplayTitleForLot,
 } from "../utils/businessWorkspace";
+import {
+  countPendingBillRevisionRequests,
+} from "../utils/partyLedgerNotifications";
 
 // From the party's perspective: dispatched = In Progress, received back = Completed
 // If party name is unknown, status should be Pending
@@ -218,13 +221,6 @@ export default function PartyLedger() {
   const normalizeLotKey = (v) => String(v ?? "").trim().toLowerCase();
   const lotNumberOf = (lot) => lot?.lotNo || lot?.lotNumber || "";
 
-  /** Pending party request to change the agreed bill on an already-completed lot. */
-  const pendingRevisionRequest = (lot) => {
-    const req = (ledgerPartyEdits[lot.id] || {}).billRevisionRequest;
-    if (req && String(req.status || "").toLowerCase() === "pending") return req;
-    return null;
-  };
-
   /** Owner settlement payments linked to this lot (admin already "made payment & settled"). */
   const ownerSettlementForLot = (lot) => {
     const key = normalizeLotKey(lotNumberOf(lot));
@@ -369,9 +365,13 @@ export default function PartyLedger() {
       ),
     [assignedLots, ledgerPartyEdits],
   );
-  const pendingRevisionRequests = useMemo(
-    () => assignedLots.filter((l) => pendingRevisionRequest(l)),
-    [assignedLots, ledgerPartyEdits],
+  /**
+   * Total pending bill-change requests across all ledger lots (ignores the active
+   * party/workspace/date filters) so this banner matches the sidebar badge exactly.
+   */
+  const pendingRevisionRequestCount = useMemo(
+    () => countPendingBillRevisionRequests(ledgerLots, ledgerPartyEdits),
+    [ledgerLots, ledgerPartyEdits],
   );
 
   const showPartyNameCol = !isParty;
@@ -1173,7 +1173,7 @@ export default function PartyLedger() {
           </div>
         </div>
       </div>
-      {isAdmin && pendingRevisionRequests.length > 0 && (
+      {isAdmin && pendingRevisionRequestCount > 0 && (
         <div
           style={{
             display: "flex",
@@ -1189,8 +1189,8 @@ export default function PartyLedger() {
           }}
         >
           <div style={{ fontSize: 13, color: "#92400e", fontWeight: 600 }}>
-            {pendingRevisionRequests.length} bill change request
-            {pendingRevisionRequests.length === 1 ? "" : "s"} pending party bill-change review.
+            {pendingRevisionRequestCount} bill change request
+            {pendingRevisionRequestCount === 1 ? "" : "s"} pending party bill-change review.
           </div>
           <button
             type="button"
