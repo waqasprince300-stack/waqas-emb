@@ -573,6 +573,12 @@ class ApiService {
     return this.request(`/payments?partyId=${partyId}`);
   }
 
+  /** Fetch a single payment incl. its slip image (list payloads omit the base64 blob for size). */
+  async getPayment(id, opts = {}) {
+    const safe = encodeURIComponent(String(id ?? '').trim());
+    return this.request(`/payments/${safe}`, {}, metaPartySkipTenant(opts));
+  }
+
   async createPayment(data, businessOwnerId) {
     return this.request('/payments', {
       method: 'POST',

@@ -13,6 +13,8 @@ import Loader from "../components/Loader";
 import LoaderDashboard from "../components/LoaderDashboard";
 import LazyReceiptThumb from "../components/receipt/LazyReceiptThumb";
 import { receiptPreviewKind } from "../components/receipt/ReceiptThumb";
+import ImageUploader from "../components/ImageUploader";
+import apiService from "../services/api";
 import {
   DateRangeSelect,
   isWithinDateRange,
@@ -199,6 +201,11 @@ export default function PartyLedger() {
   const [receiptPreview, setReceiptPreview] = useState(null);
   /** Party quick-upload bill snapshot to API row */
   const [billPicSavingLotId, setBillPicSavingLotId] = useState(null);
+  /** Lot pictures modal (both admin & party): { lot } while open */
+  const [picsLot, setPicsLot] = useState(null);
+  const [picsImages, setPicsImages] = useState([]);
+  const [picsLoading, setPicsLoading] = useState(false);
+  const [picsSaving, setPicsSaving] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   /** Split view: non-completed vs completed (same for admin & party) */
   const [ledgerLotsTab, setLedgerLotsTab] = useState("other");
@@ -423,6 +430,58 @@ export default function PartyLedger() {
       });
     } finally {
       setBillPicSavingLotId(null);
+    }
+  };
+
+  /** Open the lot-pictures modal (both admin & party) and hydrate the latest pictures. */
+  const openLotPictures = async (lot) => {
+    setPicsLot(lot);
+    const cached = ledgerPartyEdits[lot.id]?.lotImages;
+    setPicsImages(Array.isArray(cached) ? cached : []);
+    setPicsLoading(true);
+    try {
+      const row = await apiService.getPartyEditByLotId(lot.id, {
+        includeReceipts: true,
+        businessOwnerId: lot.businessOwnerId || undefined,
+        skipTenantHeader: isParty,
+      });
+      const imgs = Array.isArray(row?.lotImages) ? row.lotImages : [];
+      setPicsImages(imgs);
+    } catch {
+      // No party edit yet (404) or transient error — start from whatever was cached.
+    } finally {
+      setPicsLoading(false);
+    }
+  };
+
+  const saveLotPictures = async () => {
+    if (!picsLot) return;
+    setPicsSaving(true);
+    try {
+      await updatePartyEdit(
+        picsLot.id,
+        { lotImages: picsImages },
+        lotWorkspaceOpts(picsLot),
+      );
+      setPicsLot(null);
+      setPicsImages([]);
+      Swal.fire({
+        toast: true,
+        position: "top-end",
+        icon: "success",
+        title: "Pictures saved",
+        showConfirmButton: false,
+        timer: 2200,
+        timerProgressBar: true,
+      });
+    } catch (e) {
+      await Swal.fire({
+        icon: "error",
+        title: "Could not save pictures",
+        text: e?.message || "Please try again with smaller images.",
+      });
+    } finally {
+      setPicsSaving(false);
     }
   };
 
@@ -1686,6 +1745,48 @@ export default function PartyLedger() {
                               ) : null}
                             </>
                           ) : null}
+                          <button
+                            type="button"
+                            onClick={() => void openLotPictures(l)}
+                            title="Lot pictures"
+                            style={{
+                              fontSize: 11,
+                              fontWeight: 700,
+                              border: "1px solid #BFDBFE",
+                              background: "#EFF6FF",
+                              color: "#1e40af",
+                              cursor: "pointer",
+                              padding: "3px 8px",
+                              borderRadius: 6,
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: 4,
+                            }}
+                          >
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                              <circle cx="8.5" cy="8.5" r="1.5" />
+                              <path d="M21 15l-5-5L5 21" />
+                            </svg>
+                            Pictures
+                            {(Array.isArray(pe.lotImages) ? pe.lotImages.length : 0) > 0 ||
+                            pe.hasLotImages ? (
+                              <span
+                                style={{
+                                  background: "#1e40af",
+                                  color: "#fff",
+                                  borderRadius: 999,
+                                  padding: "0 6px",
+                                  fontSize: 10,
+                                  fontWeight: 700,
+                                }}
+                              >
+                                {Array.isArray(pe.lotImages) && pe.lotImages.length
+                                  ? pe.lotImages.length
+                                  : "•"}
+                              </span>
+                            ) : null}
+                          </button>
                         </div>
                       </td>
                       <td>
@@ -2312,6 +2413,66 @@ export default function PartyLedger() {
             <div className="alert alert-warning">
             <strong>Note:</strong> Submitting completes the ledger entry and sends this lot to the admin for approval. Once approved it becomes billable to the owner (<strong>Received back</strong>). If rejected, you will see the admin&apos;s feedback on this row.
           </div>
+          )}
+        </Modal>
+      )}
+
+      {picsLot && (
+        <Modal
+          title={`Pictures — ${picsLot.lotNo || picsLot.lotNumber}${picsLot.designNo ? ` / ${picsLot.designNo}` : ""}`}
+          onClose={() => {
+            if (!picsSaving) {
+              setPicsLot(null);
+              setPicsImages([]);
+            }
+          }}
+          footer={
+            <>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={() => {
+                  setPicsLot(null);
+                  setPicsImages([]);
+                }}
+                disabled={picsSaving}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => void saveLotPictures()}
+                disabled={picsSaving || picsLoading}
+                style={{ display: "inline-flex", alignItems: "center", gap: 8 }}
+              >
+                {picsSaving ? (
+                  <>
+                    <Loader /> Saving…
+                  </>
+                ) : (
+                  "Save Pictures"
+                )}
+              </button>
+            </>
+          }
+        >
+          <p style={{ fontSize: 13, color: "var(--text-secondary)", marginTop: 0 }}>
+            Add reference pictures for this lot. Both the party and the admin can add or remove
+            pictures here.
+          </p>
+          {picsLoading ? (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 0" }}>
+              <Loader /> Loading pictures…
+            </div>
+          ) : (
+            <ImageUploader
+              value={picsImages}
+              onChange={setPicsImages}
+              max={6}
+              disabled={picsSaving}
+              addLabel="Add picture"
+            />
           )}
         </Modal>
       )}

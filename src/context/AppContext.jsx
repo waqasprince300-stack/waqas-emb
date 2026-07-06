@@ -127,7 +127,7 @@ const partyEditsArrayToMap = (remotePartyEdits) => {
   }, {});
 };
 
-/** Merge bootstrap party edits without wiping already-hydrated receipt images. */
+/** Merge bootstrap party edits without wiping already-hydrated receipt images / lot pictures. */
 const mergePartyEditsFromRemote = (remotePartyEdits, prev = {}) => {
   if (!Array.isArray(remotePartyEdits)) return prev;
   const incoming = partyEditsArrayToMap(remotePartyEdits);
@@ -136,12 +136,18 @@ const mergePartyEditsFromRemote = (remotePartyEdits, prev = {}) => {
     const remote = incoming[lotId];
     const existing = prev[lotId];
     const remoteReceipt = remote.receipt;
+    // Lot pictures are excluded from list payloads; keep the hydrated copy when the remote omits them.
+    const remoteLotImages = Array.isArray(remote.lotImages) ? remote.lotImages : undefined;
     next[lotId] = {
       ...remote,
       receipt:
         remoteReceipt != null && remoteReceipt !== ''
           ? remoteReceipt
           : (existing?.receipt ?? ''),
+      lotImages:
+        remoteLotImages !== undefined
+          ? remoteLotImages
+          : (existing?.lotImages ?? []),
     };
   });
   return next;
@@ -230,11 +236,14 @@ export function AppProvider({ children }) {
         const lotId = row?.lotId != null ? String(row.lotId) : '';
         if (!lotId) return;
         const incomingReceipt = row.receipt ?? '';
-        if (!incomingReceipt) return;
-        const existing = next[lotId];
-        next[lotId] = existing
-          ? { ...existing, receipt: incomingReceipt }
-          : { lotId, receipt: incomingReceipt };
+        const incomingLotImages = Array.isArray(row.lotImages) ? row.lotImages : undefined;
+        if (!incomingReceipt && incomingLotImages === undefined) return;
+        const existing = next[lotId] || { lotId };
+        next[lotId] = {
+          ...existing,
+          ...(incomingReceipt ? { receipt: incomingReceipt } : {}),
+          ...(incomingLotImages !== undefined ? { lotImages: incomingLotImages } : {}),
+        };
       });
       return next;
     });

@@ -2,9 +2,12 @@ import React, { useState, useMemo, useEffect } from "react";
 import Swal from "sweetalert2";
 import { useApp } from "../context/AppContext";
 import { useAuth } from "../context/AuthContext";
-import { Modal, FormGroup, EmptyState } from "../components/UI";
+import { Modal, FormGroup, EmptyState, SearchBar } from "../components/UI";
 import Loader from "../components/Loader";
 import LoaderDashboard from "../components/LoaderDashboard";
+import ImageUploader from "../components/ImageUploader";
+import apiService from "../services/api";
+import { receiptPreviewKind } from "../components/receipt/ReceiptThumb";
 import {
   latestDateFrom,
   compareRowsByUpdatedNewestFirst,
@@ -99,6 +102,75 @@ function parseDateFlexible(ymd) {
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
+/** Lazy slip viewer for a payment row. List payloads omit the base64 blob, so we fetch on click. */
+function PaymentSlipCell({ payment, isParty }) {
+  const [loaded, setLoaded] = useState(String(payment.receipt || ""));
+  const [loading, setLoading] = useState(false);
+  const [preview, setPreview] = useState(null);
+
+  const hasSlip = Boolean(payment.receipt) || payment.hasReceipt === true;
+  if (payment._synthetic || !hasSlip) {
+    return <span style={{ color: "var(--text-muted)" }}>—</span>;
+  }
+
+  const open = async () => {
+    let src = loaded;
+    if (!src) {
+      setLoading(true);
+      try {
+        const full = await apiService.getPayment(payment.id ?? payment._id, {
+          skipTenantHeader: isParty,
+        });
+        src = String(full?.receipt || "");
+        setLoaded(src);
+      } catch {
+        src = "";
+      } finally {
+        setLoading(false);
+      }
+    }
+    if (src) setPreview({ kind: receiptPreviewKind(src), src });
+  };
+
+  return (
+    <>
+      <button
+        type="button"
+        className="btn-icon"
+        onClick={open}
+        title="View slip"
+        disabled={loading}
+        style={{ display: "inline-flex", alignItems: "center", justifyContent: "center" }}
+      >
+        {loading ? (
+          <Loader />
+        ) : (
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1e40af" strokeWidth="2">
+            <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+          </svg>
+        )}
+      </button>
+      {preview && (
+        <Modal title="Payment Slip" onClose={() => setPreview(null)}>
+          {preview.kind === "pdf" ? (
+            <iframe
+              src={preview.src}
+              title="Slip PDF"
+              style={{ width: "100%", height: "70vh", border: "1px solid var(--border)", borderRadius: 8 }}
+            />
+          ) : (
+            <img
+              src={preview.src}
+              alt=""
+              style={{ maxWidth: "100%", borderRadius: 8, display: "block", margin: "0 auto" }}
+            />
+          )}
+        </Modal>
+      )}
+    </>
+  );
+}
+
 const paymentToast = (icon, title) => {
   Swal.fire({
     toast: true,
@@ -134,6 +206,7 @@ export default function Payments() {
   const [modal, setModal] = useState(false);
   const [typeFilter, setTypeFilter] = useState("All");
   const [ownerNameFilter, setOwnerNameFilter] = useState("All");
+  const [search, setSearch] = useState("");
   const [form, setForm] = useState({
     type: "Received",
     amount: "",
@@ -142,6 +215,7 @@ export default function Payments() {
     note: "",
     linkedLot: "",
     ownerWorkspaceId: "",
+    receipt: "",
   });
   const [errors, setErrors] = useState({});
   const [paymentSaving, setPaymentSaving] = useState(false);
@@ -229,6 +303,8 @@ export default function Payments() {
     return reportingLots;
   }, [isParty, partyCrossLots, ghausiaLots, reportingLots]);
 
+  const searchTerm = search.trim().toLowerCase();
+
   const filtered = useMemo(
     () =>
       combinedRows.filter((p) => {
@@ -253,9 +329,28 @@ export default function Payments() {
         if (isAdmin && ownerNameFilter !== "All") {
           if (paymentBusinessOwnerId(p) !== ownerNameFilter) return false;
         }
+        if (searchTerm) {
+          const { lotLabel, designLabel } = resolveLinkedLotDesignDisplay(
+            p,
+            lotsLookupForLinks,
+          );
+          const haystack = [
+            p.party,
+            p.note,
+            lotLabel,
+            designLabel,
+            pt,
+            p.type,
+            String(p.amount ?? ""),
+            p.date,
+          ]
+            .map((v) => String(v || "").toLowerCase())
+            .join(" ");
+          if (!haystack.includes(searchTerm)) return false;
+        }
         return true;
       }),
-    [combinedRows, typeFilter, ownerNameFilter, isAdmin, isParty],
+    [combinedRows, typeFilter, ownerNameFilter, isAdmin, isParty, searchTerm, lotsLookupForLinks],
   );
   const sortedFiltered = useMemo(
     () =>
@@ -274,7 +369,7 @@ export default function Payments() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [typeFilter, ownerNameFilter]);
+  }, [typeFilter, ownerNameFilter, searchTerm]);
 
   useEffect(() => {
     if (currentPage > totalPages) {
@@ -427,18 +522,26 @@ export default function Payments() {
 
   const adminSummaryTransactionCount = adminSummaryPaymentsPool.length;
 
+  /** Business / collection is mandatory only for "Received from Owner" (capital in). */
+  const businessCollectionRequired =
+    form.type === "Received" &&
+    String(form.party || "").toLowerCase().trim() === "owner";
+
   const validateForm = () => {
     const newErrors = {};
     if (!form.amount) newErrors.amount = "Amount is required";
     if (!form.date) newErrors.date = "Date is required";
     if (form.type === "Paid" && !form.party)
       newErrors.party = "Please select a party";
+    // Business / collection is required ONLY when money is received from the Owner (capital in).
+    // For money received from another party, or any Paid entry, it is optional.
     if (
       isAdmin &&
+      businessCollectionRequired &&
       !String(form.ownerWorkspaceId || "").trim()
     ) {
       newErrors.ownerWorkspaceId =
-        "Select which business / collection this payment belongs to.";
+        "Select which business / collection this owner payment belongs to.";
     }
     if (form.linkedLot) {
       const key = normalizeLotKey(form.linkedLot);
@@ -470,6 +573,7 @@ export default function Payments() {
         date: form.date,
         note: form.note || "",
         linkedLot: form.linkedLot || "",
+        receipt: form.receipt || "",
       };
       const targetBiz =
         isAdmin && String(form.ownerWorkspaceId || "").trim()
@@ -484,6 +588,7 @@ export default function Payments() {
         note: "",
         linkedLot: "",
         ownerWorkspaceId: activeBusinessOwnerId || "",
+        receipt: "",
       });
       setErrors({});
       setModal(false);
@@ -533,6 +638,7 @@ export default function Payments() {
       note: "",
       linkedLot: "",
       ownerWorkspaceId: activeBusinessOwnerId || "",
+      receipt: "",
     });
   };
 
@@ -597,6 +703,7 @@ export default function Payments() {
                 note: "",
                 linkedLot: "",
                 ownerWorkspaceId: activeBusinessOwnerId || "",
+                receipt: "",
               });
               setModal(true);
             }}
@@ -918,6 +1025,11 @@ export default function Payments() {
 
       {/* Filter */}
       <div className={`toolbar pl-toolbar${isParty ? " pl-toolbar--party-user" : ""}`}>
+        <SearchBar
+          value={search}
+          onChange={setSearch}
+          placeholder="Search party, lot, design, note…"
+        />
         <select
           className="form-select pl-toolbar-filter pl-toolbar-filter--type"
           value={typeFilter}
@@ -965,13 +1077,14 @@ export default function Payments() {
                 <th>Lot · Design</th>
                 <th>Note</th>
                 <th style={{ textAlign: "right" }}>Amount (₨)</th>
+                <th>Slip</th>
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={7 + (isParty ? 0 : 1) + (isAdmin ? 1 : 0)}>
+                  <td colSpan={8 + (isParty ? 0 : 1) + (isAdmin ? 1 : 0)}>
                     <EmptyState message="No payment records found" />
                   </td>
                 </tr>
@@ -1081,6 +1194,9 @@ export default function Payments() {
                     >
                       {showPlus ? "+" : "-"}₨
                       {amt.toLocaleString()}
+                    </td>
+                    <td>
+                      <PaymentSlipCell payment={p} isParty={isParty} />
                     </td>
                     <td>
                       <button
@@ -1294,7 +1410,7 @@ export default function Payments() {
               )}
             </FormGroup>
             {isAdmin && (
-                <FormGroup label="Business / collection *">
+                <FormGroup label={businessCollectionRequired ? "Business / collection *" : "Business / collection (optional)"}>
                   <select
                     className={`form-select${errors.ownerWorkspaceId ? " input-error" : ""}`}
                     value={form.ownerWorkspaceId}
@@ -1338,8 +1454,9 @@ export default function Payments() {
                       display: "block",
                     }}
                   >
-                    This row is stored under this workspace (not only the header
-                    switcher). Choose the correct collection before saving.
+                    {businessCollectionRequired
+                      ? "Received from Owner: choose the business / collection this capital belongs to (required)."
+                      : "Optional here — leave as is unless this entry belongs to a specific collection."}
                   </span>
                 </FormGroup>
               )}
@@ -1543,6 +1660,18 @@ export default function Payments() {
                 placeholder="Optional note"
               />
             </FormGroup>
+            <div style={{ gridColumn: "1 / -1" }}>
+              <FormGroup label="Payment slip (optional)">
+                <ImageUploader
+                  value={form.receipt ? [form.receipt] : []}
+                  onChange={(arr) =>
+                    setForm((f) => ({ ...f, receipt: arr[0] || "" }))
+                  }
+                  max={1}
+                  addLabel="Add slip"
+                />
+              </FormGroup>
+            </div>
           </div>
         </Modal>
       )}
