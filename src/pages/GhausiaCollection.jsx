@@ -628,6 +628,10 @@ export default function GhausiaCollection() {
   const completingLotsRef = useRef(new Set());
   const [inlineSummaryBusy, setInlineSummaryBusy] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
+  const [billableCollapsed, setBillableCollapsed] = useState(false);
+  const [billableSearch, setBillableSearch] = useState('');
+  const [billablePage, setBillablePage] = useState(1);
+  const BILLABLE_PAGE_SIZE = 5;
 
   const statusMeta = {
     'pending': { className: 'badge badge-pending', label: 'Pending' },
@@ -857,6 +861,32 @@ export default function GhausiaCollection() {
    */
   const getOwnerBillableAmount = (lot) => getBusinessBillAmount(lot);
   const billableTotal = billable.reduce((s, l) => s + getOwnerBillableAmount(l), 0);
+
+  const billableFiltered = useMemo(() => {
+    const q = billableSearch.trim().toLowerCase();
+    if (!q) return billable;
+    return billable.filter((l) => {
+      const lotNo = String(l.lotNumber || l.lotNo || '').toLowerCase();
+      const design = String(l.designNo || '').toLowerCase();
+      const party = String(l.partyName || '').toLowerCase();
+      return lotNo.includes(q) || design.includes(q) || party.includes(q);
+    });
+  }, [billable, billableSearch]);
+
+  const billablePageCount = Math.max(1, Math.ceil(billableFiltered.length / BILLABLE_PAGE_SIZE));
+  const billableSafePage = Math.min(billablePage, billablePageCount);
+  const billablePageItems = billableFiltered.slice(
+    (billableSafePage - 1) * BILLABLE_PAGE_SIZE,
+    billableSafePage * BILLABLE_PAGE_SIZE,
+  );
+
+  useEffect(() => {
+    setBillablePage(1);
+  }, [billableSearch]);
+
+  useEffect(() => {
+    if (billablePage > billablePageCount) setBillablePage(billablePageCount);
+  }, [billablePage, billablePageCount]);
   const ownerIn = payments.filter(p => p.type === 'Received').reduce((s, p) => s + p.amount, 0);
   const ownerPaidToOwner = payments
     .filter((p) => p.type === 'Paid' && p.party === 'Owner')
@@ -1301,9 +1331,25 @@ export default function GhausiaCollection() {
 
       {/* Payment Panel */}
       <div className="card" style={{ marginBottom: 22 }}>
-        <div className="card-header">
-          <span className="card-title">Billable lots to Owner</span>
-          {/* <button className="btn btn-success btn-sm" onClick={() => setPayModal(true)}>+ Record Payment</button> */}
+        <div className="card-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+          <span className="card-title">
+            Billable lots to Owner
+            {billable.length > 0 && (
+              <span style={{ marginLeft: 8, fontSize: 12, fontWeight: 600, color: '#92600A' }}>
+                ({billable.length})
+              </span>
+            )}
+          </span>
+          {billable.length > 0 && (
+            <button
+              type="button"
+              className="btn btn-sm"
+              onClick={() => setBillableCollapsed((v) => !v)}
+              style={{ background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}
+            >
+              {billableCollapsed ? 'Show' : 'Hide'}
+            </button>
+          )}
         </div>
         {/* <div style={{ padding: 0 }}>
           {payments.length === 0 ? (
@@ -1350,57 +1396,144 @@ export default function GhausiaCollection() {
             </div>
           )}
         </div> */}
-        {billable.length > 0 && (
+        {billable.length > 0 && !billableCollapsed && (
           <div style={{ margin: '0', background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 10, padding: 14 }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: '#92600A', marginBottom: 10 }}>
-              Billable to Owner — {billable.length} lots · Total: ₨{billableTotal.toLocaleString()}
-            </div>
-            {billable.map(l => (
-              <div
-                key={l.id}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: 12,
-                  flexWrap: 'wrap',
-                  fontSize: 13,
-                  padding: '8px 0',
-                  borderBottom: '1px solid #FDE68A',
-                }}
-              >
-                <span style={{ flex: '1 1 160px', minWidth: 0 }}>
-                  {l.lotNumber || l.lotNo} / {l.designNo} — <span style={{ color: '#92600A' }}>{l.partyName || '—'}</span>
-                </span>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
-                  {partyEdits[l.id]?.amountChangeNote ? (
-                    <div style={{ textAlign: 'right', color: '#92600A' }}>
-                      <strong>₨{getOwnerBillableAmount(l).toLocaleString()}</strong>
-                      <div style={{ fontSize: 11, color: '#92400e', marginTop: 2 }}>
-                        Party ledger: Previous ₨{Number(partyEdits[l.id].amountChangeNote.previousAmount || 0).toLocaleString()} → Updated ₨{Number(partyEdits[l.id].amountChangeNote.updatedAmount || 0).toLocaleString()}
-                      </div>
-                    </div>
-                  ) : (
-                    <strong style={{ color: '#92600A' }}>₨{getOwnerBillableAmount(l).toLocaleString()}</strong>
-                  )}
-                  <button
-                    type="button"
-                    className="responsive-btn"
-                    disabled={completionPersistingLotId === l.id}
-                    onClick={() => handleCompleteFromBillable(l)}
-                    style={{ whiteSpace: 'nowrap' }}
-                  >
-                    {completionPersistingLotId === l.id ? (
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                        <Loader /> Completing…
-                      </span>
-                    ) : (
-                      'Make Complete'
-                    )}
-                  </button>
-                </div>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 10,
+                flexWrap: 'wrap',
+                marginBottom: 10,
+              }}
+            >
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#92600A' }}>
+                Billable to Owner — {billable.length} lots · Total: ₨{billableTotal.toLocaleString()}
               </div>
-            ))}
+              <input
+                type="text"
+                value={billableSearch}
+                onChange={(e) => setBillableSearch(e.target.value)}
+                placeholder="Search lot, design, party…"
+                style={{
+                  fontSize: 12.5,
+                  padding: '6px 10px',
+                  borderRadius: 8,
+                  border: '1px solid #FDE68A',
+                  background: '#fff',
+                  color: 'var(--text-primary)',
+                  minWidth: 200,
+                  flex: '0 1 240px',
+                }}
+              />
+            </div>
+
+            {billableFiltered.length === 0 ? (
+              <div style={{ fontSize: 13, color: '#92600A', padding: '8px 0' }}>
+                No billable lots match “{billableSearch}”.
+              </div>
+            ) : (
+              <>
+                {billablePageItems.map(l => (
+                  <div
+                    key={l.id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: 12,
+                      flexWrap: 'wrap',
+                      fontSize: 13,
+                      padding: '8px 0',
+                      borderBottom: '1px solid #FDE68A',
+                    }}
+                  >
+                    <span style={{ flex: '1 1 160px', minWidth: 0 }}>
+                      {l.lotNumber || l.lotNo} / {l.designNo} — <span style={{ color: '#92600A' }}>{l.partyName || '—'}</span>
+                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+                      {partyEdits[l.id]?.amountChangeNote ? (
+                        <div style={{ textAlign: 'right', color: '#92600A' }}>
+                          <strong>₨{getOwnerBillableAmount(l).toLocaleString()}</strong>
+                          <div style={{ fontSize: 11, color: '#92400e', marginTop: 2 }}>
+                            Party ledger: Previous ₨{Number(partyEdits[l.id].amountChangeNote.previousAmount || 0).toLocaleString()} → Updated ₨{Number(partyEdits[l.id].amountChangeNote.updatedAmount || 0).toLocaleString()}
+                          </div>
+                        </div>
+                      ) : (
+                        <strong style={{ color: '#92600A' }}>₨{getOwnerBillableAmount(l).toLocaleString()}</strong>
+                      )}
+                      <button
+                        type="button"
+                        className="responsive-btn"
+                        disabled={completionPersistingLotId === l.id}
+                        onClick={() => handleCompleteFromBillable(l)}
+                        style={{ whiteSpace: 'nowrap' }}
+                      >
+                        {completionPersistingLotId === l.id ? (
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                            <Loader /> Completing…
+                          </span>
+                        ) : (
+                          'Make Complete'
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+
+                {billablePageCount > 1 && (
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: 10,
+                      flexWrap: 'wrap',
+                      marginTop: 12,
+                    }}
+                  >
+                    <span style={{ fontSize: 12, color: '#92600A' }}>
+                      Showing {(billableSafePage - 1) * BILLABLE_PAGE_SIZE + 1}
+                      –{Math.min(billableSafePage * BILLABLE_PAGE_SIZE, billableFiltered.length)} of {billableFiltered.length}
+                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <button
+                        type="button"
+                        className="btn btn-sm"
+                        disabled={billableSafePage <= 1}
+                        onClick={() => setBillablePage((p) => Math.max(1, p - 1))}
+                        style={{
+                          background: '#fff',
+                          border: '1px solid #FDE68A',
+                          color: '#92600A',
+                          opacity: billableSafePage <= 1 ? 0.5 : 1,
+                        }}
+                      >
+                        ‹ Prev
+                      </button>
+                      <span style={{ fontSize: 12.5, fontWeight: 600, color: '#92600A' }}>
+                        {billableSafePage} / {billablePageCount}
+                      </span>
+                      <button
+                        type="button"
+                        className="btn btn-sm"
+                        disabled={billableSafePage >= billablePageCount}
+                        onClick={() => setBillablePage((p) => Math.min(billablePageCount, p + 1))}
+                        style={{
+                          background: '#fff',
+                          border: '1px solid #FDE68A',
+                          color: '#92600A',
+                          opacity: billableSafePage >= billablePageCount ? 0.5 : 1,
+                        }}
+                      >
+                        Next ›
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
           </div>
         )}
       </div>
