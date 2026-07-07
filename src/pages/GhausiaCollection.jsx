@@ -632,6 +632,33 @@ export default function GhausiaCollection() {
   const [billableSearch, setBillableSearch] = useState('');
   const [billablePage, setBillablePage] = useState(1);
   const BILLABLE_PAGE_SIZE = 5;
+  /** Instant UI while complete/settle API calls finish (removed when server state catches up). */
+  const [optimisticCompletions, setOptimisticCompletions] = useState({});
+
+  const effectiveCollectionLots = useMemo(() => {
+    if (!Object.keys(optimisticCompletions).length) return collectionLots;
+    return collectionLots.map((l) => {
+      const opt = optimisticCompletions[String(l.id)];
+      return opt?.lotPatch ? { ...l, ...opt.lotPatch } : l;
+    });
+  }, [collectionLots, optimisticCompletions]);
+
+  const effectivePayments = useMemo(() => {
+    const pending = Object.values(optimisticCompletions)
+      .map((o) => o.payment)
+      .filter(Boolean);
+    if (!pending.length) return payments;
+    return [...payments, ...pending];
+  }, [payments, optimisticCompletions]);
+
+  const clearOptimisticCompletion = (lotKey) => {
+    setOptimisticCompletions((prev) => {
+      if (!prev[lotKey]) return prev;
+      const next = { ...prev };
+      delete next[lotKey];
+      return next;
+    });
+  };
 
   const statusMeta = {
     'pending': { className: 'badge badge-pending', label: 'Pending' },
@@ -692,35 +719,55 @@ export default function GhausiaCollection() {
     if (completingLotsRef.current.has(lotKey)) return;
     completingLotsRef.current.add(lotKey);
     setCompletionPersistingLotId(lot.id);
+
+    const today = new Date().toISOString().slice(0, 10);
+    const lotUpdate = {
+      status: 'completed',
+      receivedBackDate: today,
+      billAmount: fromBillable && partyEdits[lot.id]?.amountChangeNote ? Number(lot.billAmount || 0) : billAmount,
+      ...(fromBillable ? { completedFromBillable: false } : {}),
+    };
+    const linkedLot = String(lot.lotNumber || lot.lotNo || '').trim();
+    const partyName = (lot.partyName && String(lot.partyName).trim()) || (lot.partyId ? getPartyName(lot.partyId) : '') || '';
+    const designNo = String(lot.designNo || '').trim() || '—';
+    const optimisticPayment = {
+      id: `optimistic-${lotKey}-${Date.now()}`,
+      type: fromBillable ? 'Paid' : 'Received',
+      amount: Number(billAmount),
+      party: 'Owner',
+      date: today,
+      linkedLot,
+      note: fromBillable
+        ? `Billable lot settled — Party: ${partyName || '—'}; Design: ${designNo}; Type: ${lot.itemType || lot.fabric || '—'}`
+        : `Lot completed — Party: ${partyName || '—'}; Design: ${designNo}; Type: ${lot.itemType || lot.fabric || '—'}`,
+      businessOwnerId: lotBizId(lot),
+    };
+
+    setOptimisticCompletions((prev) => ({
+      ...prev,
+      [lotKey]: { lotPatch: lotUpdate, payment: optimisticPayment },
+    }));
+
     try {
-      const today = new Date().toISOString().slice(0, 10);
-      const lotUpdate = {
-        status: 'completed',
-        receivedBackDate: today,
-        billAmount: fromBillable && partyEdits[lot.id]?.amountChangeNote ? Number(lot.billAmount || 0) : billAmount,
-        ...(fromBillable ? { completedFromBillable: false } : {}),
-      };
       try {
         await updateLot(lot.id, lotUpdate, { businessOwnerId: lotBizId(lot) });
       } catch (e) {
+        clearOptimisticCompletion(lotKey);
         Swal.fire({ icon: 'error', title: 'Could not update lot', text: 'Please try again.' });
         return;
       }
-      try {
-        await updatePartyEdit(lot.id, {
-          overrideStatus: 'Completed',
-          completeDate: today,
-        }, { businessOwnerId: lotBizId(lot) });
-      } catch (e) {
+
+      const partyEditPromise = updatePartyEdit(lot.id, {
+        overrideStatus: 'Completed',
+        completeDate: today,
+      }, { businessOwnerId: lotBizId(lot) }).catch((e) => {
         console.error(e);
-      }
-      try {
-        if (fromBillable) {
-          await recordOwnerBillableSettlementPayment({ ...lot, ...lotUpdate }, billAmount, today);
-        } else {
-          await recordOwnerReceivedForCompletedLot({ ...lot, ...lotUpdate }, billAmount, today);
-        }
-      } catch (e) {
+      });
+
+      const paymentPromise = (fromBillable
+        ? recordOwnerBillableSettlementPayment({ ...lot, ...lotUpdate }, billAmount, today)
+        : recordOwnerReceivedForCompletedLot({ ...lot, ...lotUpdate }, billAmount, today)
+      ).catch((e) => {
         Swal.fire({
           icon: 'warning',
           title: 'Lot updated; payment failed',
@@ -728,10 +775,13 @@ export default function GhausiaCollection() {
             ? 'The lot was marked completed, but saving the settlement payment failed. Add a Paid → Owner entry from Payment Management if needed.'
             : 'The lot was marked completed with a bill amount, but saving the owner payment failed. Add it manually from Payment Management if needed.',
         });
-      }
+      });
+
+      await Promise.all([partyEditPromise, paymentPromise]);
     } finally {
       completingLotsRef.current.delete(lotKey);
       setCompletionPersistingLotId(null);
+      clearOptimisticCompletion(lotKey);
     }
   };
 
@@ -807,7 +857,7 @@ export default function GhausiaCollection() {
   };
 
   const filtered = useMemo(() => {
-    const list = collectionLots.filter((l) => {
+    const list = effectiveCollectionLots.filter((l) => {
       const q = search.toLowerCase();
       const lotLabel = (l.lotNumber || l.lotNo || '').toLowerCase();
       const matchQ = !q || lotLabel.includes(q) || String(l.designNo || "").toLowerCase().includes(q) || String(l.description || "").toLowerCase().includes(q);
@@ -819,7 +869,7 @@ export default function GhausiaCollection() {
       return statusFilter === 'All' || l.status === statusFilter;
     });
     return [...list].sort((a, b) => compareRowsByUpdatedNewestFirst(a, b, 'lot'));
-  }, [collectionLots, search, partyFilter, dateRange, statusFilter, lotTableTab]);
+  }, [effectiveCollectionLots, search, partyFilter, dateRange, statusFilter, lotTableTab]);
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safeCurrentPage = Math.min(currentPage, totalPages);
   const pageStart = (safeCurrentPage - 1) * PAGE_SIZE;
@@ -836,11 +886,11 @@ export default function GhausiaCollection() {
   }, [currentPage, totalPages]);
 
   const visibleLots = useMemo(
-    () => collectionLots.filter((l) => {
+    () => effectiveCollectionLots.filter((l) => {
       if (partyFilter !== 'All' && String(l.partyId || '') !== String(partyFilter)) return false;
       return isWithinDateRange(latestDateFrom(l, ['updatedAt', 'createdAt', 'receivedBackDate', 'dispatchDate', 'allotDate', 'receivedDate']), dateRange);
     }),
-    [collectionLots, partyFilter, dateRange],
+    [effectiveCollectionLots, partyFilter, dateRange],
   );
 
   const completedLotsCount = useMemo(
@@ -887,21 +937,20 @@ export default function GhausiaCollection() {
   useEffect(() => {
     if (billablePage > billablePageCount) setBillablePage(billablePageCount);
   }, [billablePage, billablePageCount]);
-  const ownerIn = payments.filter(p => p.type === 'Received').reduce((s, p) => s + p.amount, 0);
-  const ownerPaidToOwner = payments
+  const ownerIn = effectivePayments.filter(p => p.type === 'Received').reduce((s, p) => s + p.amount, 0);
+  const ownerPaidToOwner = effectivePayments
     .filter((p) => p.type === 'Paid' && p.party === 'Owner')
     .reduce((s, p) => s + p.amount, 0);
   const billableSettledTotal = useMemo(
-    () => collectionLots
+    () => effectiveCollectionLots
       .filter((l) => l.status === 'completed' && l.completedFromBillable)
       .reduce((s, l) => s + Number(l.billAmount || 0), 0),
-    [collectionLots],
+    [effectiveCollectionLots],
   );
   const ownerReceivedNet = ownerIn - ownerPaidToOwner - billableSettledTotal;
   const ownerReceivedIsPending = ownerReceivedNet < 0;
-  const partyOut = payments.filter(p => p.type === 'Paid').reduce((s, p) => s + p.amount, 0);
-  const statsRefreshing = lotSaving || paymentSaving || deleteLoading
-    || completionPersistingLotId != null || inlineSummaryBusy;
+  const partyOut = effectivePayments.filter(p => p.type === 'Paid').reduce((s, p) => s + p.amount, 0);
+  const statsRefreshing = lotSaving || paymentSaving || deleteLoading || inlineSummaryBusy;
 
   const openEdit = (lot) => { setEditing(lot); setModal('form'); };
   const openAdd = () => { setEditing(null); setModal('form'); };
