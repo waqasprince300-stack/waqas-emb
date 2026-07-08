@@ -62,6 +62,13 @@ function pendingRevisionIsReal(pe) {
   return Number(pr.fromAmount) !== Number(pr.toAmount);
 }
 
+/** Max lot pictures = number of colors on the lot (minimum 1). */
+function lotPicturesMax(lot) {
+  const n = Number(lot?.colors);
+  if (!Number.isFinite(n) || n < 1) return 1;
+  return Math.floor(n);
+}
+
 function readReceiptAsStoredValue(file) {
   return new Promise((resolve, reject) => {
     if (!file) {
@@ -436,8 +443,9 @@ export default function PartyLedger() {
   /** Open the lot-pictures modal (both admin & party) and hydrate the latest pictures. */
   const openLotPictures = async (lot) => {
     setPicsLot(lot);
+    const maxPics = lotPicturesMax(lot);
     const cached = ledgerPartyEdits[lot.id]?.lotImages;
-    setPicsImages(Array.isArray(cached) ? cached : []);
+    setPicsImages((Array.isArray(cached) ? cached : []).slice(0, maxPics));
     setPicsLoading(true);
     try {
       const row = await apiService.getPartyEditByLotId(lot.id, {
@@ -446,7 +454,7 @@ export default function PartyLedger() {
         skipTenantHeader: isParty,
       });
       const imgs = Array.isArray(row?.lotImages) ? row.lotImages : [];
-      setPicsImages(imgs);
+      setPicsImages(imgs.slice(0, maxPics));
     } catch {
       // No party edit yet (404) or transient error — start from whatever was cached.
     } finally {
@@ -456,11 +464,16 @@ export default function PartyLedger() {
 
   const saveLotPictures = async () => {
     if (!picsLot) return;
+    const maxPics = lotPicturesMax(picsLot);
+    const trimmed = picsImages.slice(0, maxPics);
+    if (trimmed.length !== picsImages.length) {
+      setPicsImages(trimmed);
+    }
     setPicsSaving(true);
     try {
       await updatePartyEdit(
         picsLot.id,
-        { lotImages: picsImages },
+        { lotImages: trimmed },
         lotWorkspaceOpts(picsLot),
       );
       setPicsLot(null);
@@ -1662,12 +1675,20 @@ export default function PartyLedger() {
                         <div
                           style={{
                             display: "flex",
-                            alignItems: "center",
+                            flexDirection: "column",
                             gap: 8,
-                            flexWrap: "wrap",
-                            maxWidth: 220,
+                            minWidth: 132,
+                            maxWidth: 200,
                           }}
                         >
+                          <div
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 6,
+                              flexWrap: "wrap",
+                            }}
+                          >
                           <LazyReceiptThumb
                             lotId={l.id}
                             receipt={pe.receipt}
@@ -1745,48 +1766,57 @@ export default function PartyLedger() {
                               ) : null}
                             </>
                           ) : null}
+                          </div>
+                          {(() => {
+                            const picsMax = lotPicturesMax(l);
+                            const picsCount = Array.isArray(pe.lotImages)
+                              ? pe.lotImages.length
+                              : pe.hasLotImages
+                                ? null
+                                : 0;
+                            return (
                           <button
                             type="button"
                             onClick={() => void openLotPictures(l)}
-                            title="Lot pictures"
+                            title={`Lot pictures (max ${picsMax} — one per color)`}
                             style={{
+                              alignSelf: "flex-start",
                               fontSize: 11,
-                              fontWeight: 700,
-                              border: "1px solid #BFDBFE",
-                              background: "#EFF6FF",
-                              color: "#1e40af",
+                              fontWeight: 600,
+                              border: "1px solid #E0E7FF",
+                              background: "linear-gradient(180deg, #F8FAFF 0%, #EEF2FF 100%)",
+                              color: "#3730a3",
                               cursor: "pointer",
-                              padding: "3px 8px",
-                              borderRadius: 6,
+                              padding: "5px 10px",
+                              borderRadius: 20,
                               display: "inline-flex",
                               alignItems: "center",
-                              gap: 4,
+                              gap: 6,
+                              boxShadow: "0 1px 2px rgba(79,70,229,0.08)",
                             }}
                           >
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                               <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
                               <circle cx="8.5" cy="8.5" r="1.5" />
                               <path d="M21 15l-5-5L5 21" />
                             </svg>
-                            Pictures
-                            {(Array.isArray(pe.lotImages) ? pe.lotImages.length : 0) > 0 ||
-                            pe.hasLotImages ? (
-                              <span
-                                style={{
-                                  background: "#1e40af",
-                                  color: "#fff",
-                                  borderRadius: 999,
-                                  padding: "0 6px",
-                                  fontSize: 10,
-                                  fontWeight: 700,
-                                }}
-                              >
-                                {Array.isArray(pe.lotImages) && pe.lotImages.length
-                                  ? pe.lotImages.length
-                                  : "•"}
-                              </span>
-                            ) : null}
+                            <span>Pictures</span>
+                            <span
+                              style={{
+                                background: picsCount > 0 ? "#4f46e5" : "#c7d2fe",
+                                color: picsCount > 0 ? "#fff" : "#4338ca",
+                                borderRadius: 999,
+                                padding: "1px 7px",
+                                fontSize: 10,
+                                fontWeight: 700,
+                                lineHeight: 1.4,
+                              }}
+                            >
+                              {picsCount != null ? `${picsCount}/${picsMax}` : `•/${picsMax}`}
+                            </span>
                           </button>
+                            );
+                          })()}
                         </div>
                       </td>
                       <td>
@@ -2458,8 +2488,11 @@ export default function PartyLedger() {
           }
         >
           <p style={{ fontSize: 13, color: "var(--text-secondary)", marginTop: 0 }}>
-            Add reference pictures for this lot. Both the party and the admin can add or remove
-            pictures here.
+            This lot has <strong>{lotPicturesMax(picsLot)}</strong> color
+            {lotPicturesMax(picsLot) === 1 ? "" : "s"} — add up to{" "}
+            <strong>{lotPicturesMax(picsLot)}</strong> picture
+            {lotPicturesMax(picsLot) === 1 ? "" : "s"} (one per color). Both the party and the
+            admin can add or remove pictures here.
           </p>
           {picsLoading ? (
             <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 0" }}>
@@ -2469,9 +2502,10 @@ export default function PartyLedger() {
             <ImageUploader
               value={picsImages}
               onChange={setPicsImages}
-              max={6}
+              max={lotPicturesMax(picsLot)}
               disabled={picsSaving}
               addLabel="Add picture"
+              thumbSize={80}
             />
           )}
         </Modal>

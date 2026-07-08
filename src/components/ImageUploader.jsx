@@ -13,6 +13,7 @@ import { receiptPreviewKind } from "./receipt/ReceiptThumb";
  * @param {number}  [max]       Max number of images (default 6).
  * @param {boolean} [disabled]
  * @param {string}  [addLabel]
+ * @param {number}  [thumbSize]   Thumbnail edge size in px (default 72).
  */
 export default function ImageUploader({
   value = [],
@@ -20,6 +21,7 @@ export default function ImageUploader({
   max = 6,
   disabled = false,
   addLabel = "Add picture",
+  thumbSize = 72,
 }) {
   const inputRef = useRef(null);
   const [busy, setBusy] = useState(false);
@@ -79,12 +81,13 @@ export default function ImageUploader({
               key={idx}
               style={{
                 position: "relative",
-                width: 72,
-                height: 72,
-                borderRadius: 8,
-                border: "1px solid var(--border)",
+                width: thumbSize,
+                height: thumbSize,
+                borderRadius: 10,
+                border: "1px solid #E5E7EB",
                 overflow: "hidden",
-                background: "#f3f4f6",
+                background: "#f8fafc",
+                boxShadow: "0 1px 2px rgba(15,23,42,0.06)",
               }}
             >
               <button
@@ -160,13 +163,13 @@ export default function ImageUploader({
             onClick={() => inputRef.current?.click()}
             disabled={busy}
             style={{
-              width: 72,
-              height: 72,
-              borderRadius: 8,
-              border: "1px dashed var(--border)",
-              background: "#fff",
+              width: thumbSize,
+              height: thumbSize,
+              borderRadius: 10,
+              border: "1px dashed #C7D2FE",
+              background: "#F8FAFF",
               cursor: busy ? "wait" : "pointer",
-              color: "var(--text-secondary)",
+              color: "#4338ca",
               fontSize: 12,
               display: "flex",
               flexDirection: "column",

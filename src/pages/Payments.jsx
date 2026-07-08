@@ -1322,7 +1322,10 @@ export default function Payments() {
                     party: newType === "Received" ? "Owner" : "",
                     linkedLot: "",
                     amount: "",
-                    ownerWorkspaceId: isAdmin ? activeBusinessOwnerId || "" : "",
+                    ownerWorkspaceId:
+                      newType === "Received" && isAdmin
+                        ? activeBusinessOwnerId || ""
+                        : "",
                   }));
                   setErrors((prev) => ({
                     ...prev,
@@ -1379,9 +1382,7 @@ export default function Payments() {
                         party: e.target.value,
                         linkedLot: "",
                         amount: "",
-                        ownerWorkspaceId: isAdmin
-                          ? activeBusinessOwnerId || ""
-                          : f.ownerWorkspaceId,
+                        ownerWorkspaceId: f.ownerWorkspaceId,
                       }));
                       setErrors((p) => ({ ...p, party: undefined }));
                     }}
@@ -1628,15 +1629,42 @@ export default function Payments() {
               )}
             </FormGroup>
             <FormGroup label="Date *">
-              <input
-                className={`form-input${errors.date ? " input-error" : ""}`}
-                type="date"
-                value={form.date}
-                onChange={(e) => {
-                  setForm((f) => ({ ...f, date: e.target.value }));
-                  setErrors((p) => ({ ...p, date: undefined }));
-                }}
-              />
+              <div style={{ position: "relative" }}>
+                <input
+                  className={`form-input${errors.date ? " input-error" : ""}`}
+                  type="date"
+                  value={form.date}
+                  onChange={(e) => {
+                    setForm((f) => ({ ...f, date: e.target.value }));
+                    setErrors((p) => ({ ...p, date: undefined }));
+                  }}
+                  style={{ paddingRight: 72, width: "100%" }}
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    const today = new Date().toISOString().slice(0, 10);
+                    setForm((f) => ({ ...f, date: today }));
+                    setErrors((p) => ({ ...p, date: undefined }));
+                  }}
+                  style={{
+                    position: "absolute",
+                    right: 34,
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                    border: "none",
+                    background: "transparent",
+                    color: "#1e40af",
+                    fontSize: 12,
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    padding: "2px 4px",
+                    lineHeight: 1.2,
+                  }}
+                >
+                  Today
+                </button>
+              </div>
               {errors.date && (
                 <span
                   style={{
