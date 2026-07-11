@@ -41,6 +41,12 @@ export default function Dashboard() {
   } = useApp();
   const { isParty, isAdmin, user } = useAuth();
   const [dateRange, setDateRange] = useState('all');
+  const [customStart, setCustomStart] = useState('');
+  const [customEnd, setCustomEnd] = useState('');
+  const customRange = useMemo(
+    () => ({ start: customStart, end: customEnd }),
+    [customStart, customEnd],
+  );
   const partyUserId = String(user?.partyId || '');
   const partyNameTrim = String(user?.partyName || '').trim();
 
@@ -64,8 +70,9 @@ export default function Dashboard() {
     return lots.filter((lot) => isWithinDateRange(
       latestDateFrom(lot, ['updatedAt', 'createdAt', 'receivedBackDate', 'dispatchDate', 'allotDate', 'receivedDate']),
       dateRange,
+      customRange,
     ));
-  }, [lotsPool, isParty, partyUserId, partyNameTrim, dateRange]);
+  }, [lotsPool, isParty, partyUserId, partyNameTrim, dateRange, customRange]);
 
   const scopedPayments = useMemo(() => {
     const list =
@@ -74,8 +81,8 @@ export default function Dashboard() {
             paymentBelongsToPartyUser(p, partyUserId, partyNameTrim),
           )
         : paymentsPool;
-    return list.filter((payment) => isWithinDateRange(payment.updatedAt || payment.date, dateRange));
-  }, [paymentsPool, isParty, partyUserId, partyNameTrim, dateRange]);
+    return list.filter((payment) => isWithinDateRange(payment.updatedAt || payment.date, dateRange, customRange));
+  }, [paymentsPool, isParty, partyUserId, partyNameTrim, dateRange, customRange]);
 
   /** Minimal party dashboard stats (counts + paid total); null for admin views */
   const partyMiniStatsCards = useMemo(() => {
@@ -254,7 +261,16 @@ export default function Dashboard() {
               : 'Overview of all production and financial activity'}
           </div>
         </div>
-        <DateRangeSelect value={dateRange} onChange={setDateRange} />
+        <DateRangeSelect
+          value={dateRange}
+          onChange={setDateRange}
+          customStart={customStart}
+          customEnd={customEnd}
+          onCustomChange={({ start, end }) => {
+            setCustomStart(start);
+            setCustomEnd(end);
+          }}
+        />
       </div>
 
       {partyMiniStatsCards?.length ? (

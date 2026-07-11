@@ -615,6 +615,12 @@ export default function GhausiaCollection() {
   const [statusFilter, setStatusFilter] = useState('All');
   const [partyFilter, setPartyFilter] = useState('All');
   const [dateRange, setDateRange] = useState('all');
+  const [customStart, setCustomStart] = useState('');
+  const [customEnd, setCustomEnd] = useState('');
+  const customRange = useMemo(
+    () => ({ start: customStart, end: customEnd }),
+    [customStart, customEnd],
+  );
   const [lotTableTab, setLotTableTab] = useState('others');
   const [payModal, setPayModal] = useState(false);
   const [payForm, setPayForm] = useState({ type: 'Received', amount: '', party: 'Owner', date: '', note: '', linkedLot: '' });
@@ -863,13 +869,13 @@ export default function GhausiaCollection() {
       const matchQ = !q || lotLabel.includes(q) || String(l.designNo || "").toLowerCase().includes(q) || String(l.description || "").toLowerCase().includes(q);
       if (!matchQ) return false;
       if (partyFilter !== 'All' && String(l.partyId || '') !== String(partyFilter)) return false;
-      if (!isWithinDateRange(latestDateFrom(l, ['updatedAt', 'createdAt', 'receivedBackDate', 'dispatchDate', 'allotDate', 'receivedDate']), dateRange)) return false;
+      if (!isWithinDateRange(latestDateFrom(l, ['updatedAt', 'createdAt', 'receivedBackDate', 'dispatchDate', 'allotDate', 'receivedDate']), dateRange, customRange)) return false;
       if (lotTableTab === 'completed') return l.status === 'completed';
       if (l.status === 'completed') return false;
       return statusFilter === 'All' || l.status === statusFilter;
     });
     return [...list].sort((a, b) => compareRowsByUpdatedNewestFirst(a, b, 'lot'));
-  }, [effectiveCollectionLots, search, partyFilter, dateRange, statusFilter, lotTableTab]);
+  }, [effectiveCollectionLots, search, partyFilter, dateRange, customRange, statusFilter, lotTableTab]);
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safeCurrentPage = Math.min(currentPage, totalPages);
   const pageStart = (safeCurrentPage - 1) * PAGE_SIZE;
@@ -877,7 +883,7 @@ export default function GhausiaCollection() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [search, partyFilter, dateRange, statusFilter, lotTableTab, viewAllWorkspaces]);
+  }, [search, partyFilter, dateRange, customRange, statusFilter, lotTableTab, viewAllWorkspaces]);
 
   useEffect(() => {
     if (currentPage > totalPages) {
@@ -888,9 +894,9 @@ export default function GhausiaCollection() {
   const visibleLots = useMemo(
     () => effectiveCollectionLots.filter((l) => {
       if (partyFilter !== 'All' && String(l.partyId || '') !== String(partyFilter)) return false;
-      return isWithinDateRange(latestDateFrom(l, ['updatedAt', 'createdAt', 'receivedBackDate', 'dispatchDate', 'allotDate', 'receivedDate']), dateRange);
+      return isWithinDateRange(latestDateFrom(l, ['updatedAt', 'createdAt', 'receivedBackDate', 'dispatchDate', 'allotDate', 'receivedDate']), dateRange, customRange);
     }),
-    [effectiveCollectionLots, partyFilter, dateRange],
+    [effectiveCollectionLots, partyFilter, dateRange, customRange],
   );
 
   const completedLotsCount = useMemo(
@@ -1603,6 +1609,12 @@ export default function GhausiaCollection() {
         <DateRangeSelect
           value={dateRange}
           onChange={setDateRange}
+          customStart={customStart}
+          customEnd={customEnd}
+          onCustomChange={({ start, end }) => {
+            setCustomStart(start);
+            setCustomEnd(end);
+          }}
           className="pl-toolbar-filter pl-toolbar-filter--date"
         />
         {lotTableTab === 'others' ? (

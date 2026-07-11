@@ -662,6 +662,23 @@ class ApiService {
       body: JSON.stringify(data),
     });
   }
+
+  // In-app notifications (lot reject / pending review)
+  async getNotifications() {
+    return this.request('/notifications');
+  }
+
+  async getNotificationUnreadCount() {
+    return this.request('/notifications/unread-count');
+  }
+
+  async markNotificationRead(id) {
+    return this.request(`/notifications/${id}/read`, { method: 'PATCH' });
+  }
+
+  async markAllNotificationsRead() {
+    return this.request('/notifications/read-all', { method: 'POST' });
+  }
 }
 
 export const apiService = new ApiService();

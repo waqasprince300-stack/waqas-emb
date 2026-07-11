@@ -1,4 +1,5 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
+import { useSearchParams } from "react-router-dom";
 import Swal from "sweetalert2";
 import { useApp } from "../context/AppContext";
 import { useAuth } from "../context/AuthContext";
@@ -172,6 +173,9 @@ function adminLotNotDispatched(lot) {
 }
 
 export default function PartyLedger() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const deepLinkAppliedRef = useRef("");
+  const [highlightLotId, setHighlightLotId] = useState(null);
   const {
     reportingLots,
     reportingPayments,
@@ -199,6 +203,12 @@ export default function PartyLedger() {
   const [partyFilter, setPartyFilter] = useState("All");
   const [statusFilter, setStatusFilter] = useState("All");
   const [dateRange, setDateRange] = useState("all");
+  const [customStart, setCustomStart] = useState("");
+  const [customEnd, setCustomEnd] = useState("");
+  const customRange = useMemo(
+    () => ({ start: customStart, end: customEnd }),
+    [customStart, customEnd],
+  );
   const [editingId, setEditingId] = useState(null);
   const [ledgerEditKind, setLedgerEditKind] = useState(null);
   /** null | 'pendingReview' | 'standard' — pending = awaiting admin, party may still edit */
@@ -264,9 +274,10 @@ export default function PartyLedger() {
         isWithinDateRange(
           latestDateFrom(lot, ["updatedAt", "createdAt", "receivedBackDate", "dispatchDate", "allotDate", "receivedDate"]),
           dateRange,
+          customRange,
         ),
       );
-  }, [ledgerLots, dateRange, isAdmin, isParty, workspaceFilter]);
+  }, [ledgerLots, dateRange, customRange, isAdmin, isParty, workspaceFilter]);
 
   const formatYmd = (value) => {
     if (!value) return "";
@@ -693,6 +704,8 @@ export default function PartyLedger() {
     statusFilter,
     ledgerLotsTab,
     dateRange,
+    customStart,
+    customEnd,
     workspaceFilter,
   ]);
 
@@ -713,6 +726,56 @@ export default function PartyLedger() {
       setPartyFilter("All");
     }
   }, [isParty, user?.partyId]);
+
+  /** Deep link: /party-ledger?lotId=… → show that lot and highlight the row. */
+  useEffect(() => {
+    const lotId = String(searchParams.get("lotId") || "").trim();
+    if (!lotId || initialDataLoading) return;
+    if (deepLinkAppliedRef.current === lotId) return;
+
+    const lot = ledgerLots.find((l) => String(l.id) === lotId);
+    if (!lot) return;
+
+    deepLinkAppliedRef.current = lotId;
+    const status = getDisplayStatus(lot);
+    if (status === "Completed") {
+      setLedgerLotsTab("completed");
+    } else {
+      setLedgerLotsTab("other");
+      if (status === "Rejected" || status === "Pending" || status === "In Progress" || status === "Pending review") {
+        setStatusFilter(status === "Rejected" ? "All" : status);
+      } else {
+        setStatusFilter("All");
+      }
+    }
+    setPartyFilter("All");
+    setWorkspaceFilter("All");
+    setDateRange("all");
+    setCustomStart("");
+    setCustomEnd("");
+    setSearch(String(lot.lotNo || lot.lotNumber || "").trim());
+    setHighlightLotId(lotId);
+    setCurrentPage(1);
+
+    const next = new URLSearchParams(searchParams);
+    next.delete("lotId");
+    setSearchParams(next, { replace: true });
+
+    const t = setTimeout(() => {
+      const el = document.getElementById(`pl-lot-row-${lotId}`);
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 250);
+    const clearHl = setTimeout(() => setHighlightLotId(null), 8000);
+    return () => {
+      clearTimeout(t);
+      clearTimeout(clearHl);
+    };
+  }, [
+    searchParams,
+    setSearchParams,
+    ledgerLots,
+    initialDataLoading,
+  ]);
 
   useEffect(() => {
     if (currentPage > totalPages) {
@@ -1085,11 +1148,11 @@ export default function PartyLedger() {
       return String(p.businessOwnerId ?? "").trim() === String(workspaceFilter).trim();
     };
     const paysDateScoped = ledgerPayments.filter(
-      (p) => p.type === "Paid" && isWithinDateRange(p.updatedAt || p.date, dateRange),
+      (p) => p.type === "Paid" && isWithinDateRange(p.updatedAt || p.date, dateRange, customRange),
     );
     const pays = paysDateScoped.filter(withinWorkspace);
     const receivedDateScoped = ledgerPayments.filter(
-      (p) => p.type === "Received" && isWithinDateRange(p.updatedAt || p.date, dateRange),
+      (p) => p.type === "Received" && isWithinDateRange(p.updatedAt || p.date, dateRange, customRange),
     );
     const receiveds = receivedDateScoped.filter(withinWorkspace);
 
@@ -1172,6 +1235,7 @@ export default function PartyLedger() {
     totals.billTotal,
     totals.completedAmount,
     dateRange,
+    customRange,
     isAdmin,
     workspaceFilter,
     isParty,
@@ -1471,6 +1535,12 @@ export default function PartyLedger() {
         <DateRangeSelect
           value={dateRange}
           onChange={setDateRange}
+          customStart={customStart}
+          customEnd={customEnd}
+          onCustomChange={({ start, end }) => {
+            setCustomStart(start);
+            setCustomEnd(end);
+          }}
           className="pl-toolbar-filter pl-toolbar-filter--date"
         />
         {ledgerLotsTab === "other" && (
@@ -1532,7 +1602,15 @@ export default function PartyLedger() {
                   const partyBillOnly = getPartyLedgerBillDisplay(pe);
                   const displayComplete = getDisplayCompleteDate(l, pe);
                   return (
-                    <tr key={l.id}>
+                    <tr
+                      key={l.id}
+                      id={`pl-lot-row-${l.id}`}
+                      style={
+                        String(highlightLotId) === String(l.id)
+                          ? { background: "#FEF3C7", outline: "2px solid #F59E0B" }
+                          : undefined
+                      }
+                    >
                       <td style={{ fontWeight: 700, color: "#1e40af" }}>
                         {l.lotNo || l.lotNumber}
                       </td>

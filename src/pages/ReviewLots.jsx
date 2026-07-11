@@ -1,4 +1,5 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect, useRef } from "react";
+import { useSearchParams } from "react-router-dom";
 import LazyReceiptThumb from "../components/receipt/LazyReceiptThumb";
 import Swal from "sweetalert2";
 import { useApp } from "../context/AppContext";
@@ -63,6 +64,9 @@ function isStaleLotApprovalError(e) {
 }
 
 export default function ReviewLots() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const deepLinkAppliedRef = useRef("");
+  const [highlightLotId, setHighlightLotId] = useState(null);
   const {
     reportingLots,
     reportingPartyEdits,
@@ -106,6 +110,35 @@ export default function ReviewLots() {
       compareRowsByUpdatedNewestFirst(a, b, "lot"),
     );
   }, [reportingLots, search]);
+
+  /** Deep link: /review-lots?lotId=… → focus that pending lot. */
+  useEffect(() => {
+    const lotId = String(searchParams.get("lotId") || "").trim();
+    if (!lotId || initialDataLoading) return;
+    if (deepLinkAppliedRef.current === lotId) return;
+
+    const lot = reportingLots.find((l) => String(l.id) === lotId);
+    if (!lot) return;
+    if (String(lot.status || "").toLowerCase().trim() !== "pending approval") return;
+
+    deepLinkAppliedRef.current = lotId;
+    setSearch(String(lot.lotNo || lot.lotNumber || "").trim());
+    setHighlightLotId(lotId);
+
+    const next = new URLSearchParams(searchParams);
+    next.delete("lotId");
+    setSearchParams(next, { replace: true });
+
+    const t = setTimeout(() => {
+      const el = document.getElementById(`rl-lot-row-${lotId}`);
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 250);
+    const clearHl = setTimeout(() => setHighlightLotId(null), 8000);
+    return () => {
+      clearTimeout(t);
+      clearTimeout(clearHl);
+    };
+  }, [searchParams, setSearchParams, reportingLots, initialDataLoading]);
 
   const peBill = (lotId, lot) => {
     const pe = reportingPartyEdits[lotId] || {};
@@ -370,7 +403,15 @@ export default function ReviewLots() {
                         ? String(l.receivedBackDate).slice(0, 10)
                         : "—";
                   return (
-                    <tr key={l.id}>
+                    <tr
+                      key={l.id}
+                      id={`rl-lot-row-${l.id}`}
+                      style={
+                        String(highlightLotId) === String(l.id)
+                          ? { background: "#FEF3C7", outline: "2px solid #F59E0B" }
+                          : undefined
+                      }
+                    >
                       <td style={{ fontWeight: 700 }}>{l.lotNo || l.lotNumber}</td>
                       <td>{l.designNo}</td>
                       <td>{partyName(l.partyId, l.partyName)}</td>

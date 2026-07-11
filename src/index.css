@@ -1578,6 +1578,118 @@ tbody tr:last-child td {
   width: 150px;
 }
 
+/* Date range: preset + compact custom From/To group */
+.date-range-select {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+}
+
+.date-range-select__preset {
+  flex: 0 0 auto;
+}
+
+.date-range-custom {
+  display: inline-flex;
+  align-items: stretch;
+  min-height: 40px;
+  background: #fff;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.date-range-custom:focus-within {
+  border-color: var(--primary-light);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+}
+
+.date-range-custom__field {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1px;
+  padding: 4px 10px 5px;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.date-range-custom__label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #64748b;
+  line-height: 1;
+}
+
+.date-range-custom__input {
+  border: none;
+  outline: none;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  color: var(--text-primary);
+  min-width: 118px;
+  max-width: 140px;
+  line-height: 1.2;
+}
+
+.date-range-custom__input::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 0.55;
+}
+
+.date-range-custom__input::-webkit-calendar-picker-indicator:hover {
+  opacity: 0.9;
+}
+
+.date-range-custom__divider {
+  width: 1px;
+  align-self: stretch;
+  background: var(--border);
+  flex-shrink: 0;
+}
+
+.pl-toolbar .date-range-select {
+  width: auto;
+}
+
+.pl-toolbar .date-range-select .pl-toolbar-filter--date {
+  width: 150px;
+  max-width: 100%;
+}
+
+@media screen and (max-width: 768px) {
+  .date-range-select {
+    width: 100%;
+  }
+
+  .date-range-select__preset {
+    width: 100%;
+  }
+
+  .date-range-custom {
+    width: 100%;
+  }
+
+  .date-range-custom__field {
+    flex: 1 1 0;
+  }
+
+  .date-range-custom__input {
+    min-width: 0;
+    max-width: none;
+    width: 100%;
+  }
+}
+
 .pl-toolbar .pl-toolbar-filter--status {
   width: 160px;
 }

@@ -116,8 +116,8 @@ const navItems = [
 ];
 
 export default function Sidebar({ sidebarOpen, setSidebarOpen }) {
-  const { user, isAdmin, isSuperAdmin, logout } = useAuth();
-  const { reportingLots, reportingPartyEdits } = useApp();
+  const { user, isAdmin, isSuperAdmin, logout, isParty } = useAuth();
+  const { reportingLots, reportingPartyEdits, notificationUnreadCount, notifications } = useApp();
   const [logoutModalOpen, setLogoutModalOpen] = useState(false);
 
   /** Lots party-submitted and waiting for admin approval — shown as a badge on "Review Lots". */
@@ -134,6 +134,16 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen }) {
     () => countPendingBillRevisionRequests(reportingLots, reportingPartyEdits),
     [reportingLots, reportingPartyEdits],
   );
+
+  /** Party: unread lot_rejected notifications (fallback to total unread). */
+  const partyRejectedUnread = useMemo(() => {
+    if (!isParty) return 0;
+    const list = Array.isArray(notifications) ? notifications : [];
+    const rejectedUnread = list.filter(
+      (n) => !n.readAt && String(n.type || '') === 'lot_rejected',
+    ).length;
+    return rejectedUnread || Number(notificationUnreadCount) || 0;
+  }, [isParty, notifications, notificationUnreadCount]);
   const handleNavClick = () => {
     if (window.innerWidth <= 768) {
       setSidebarOpen(false);
@@ -241,6 +251,25 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen }) {
                 }}
               >
                 {billRevisionCount > 99 ? '99+' : billRevisionCount}
+              </span>
+            )}
+            {item.to === '/party-ledger' && isParty && partyRejectedUnread > 0 && (
+              <span
+                title={`${partyRejectedUnread} unread notification${partyRejectedUnread === 1 ? '' : 's'}`}
+                style={{
+                  marginLeft: 'auto',
+                  background: '#ef4444',
+                  color: '#fff',
+                  fontSize: 11,
+                  fontWeight: 700,
+                  lineHeight: 1,
+                  borderRadius: 999,
+                  padding: '3px 7px',
+                  minWidth: 18,
+                  textAlign: 'center',
+                }}
+              >
+                {partyRejectedUnread > 99 ? '99+' : partyRejectedUnread}
               </span>
             )}
           </NavLink>

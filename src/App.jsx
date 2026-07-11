@@ -4,6 +4,7 @@ import { AppProvider, useApp } from './context/AppContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Sidebar from './components/Sidebar';
 import LoaderDashboard from './components/LoaderDashboard';
+import NotificationBell, { LotNotificationListener } from './components/NotificationBell';
 
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const GhausiaCollection = lazy(() => import('./pages/GhausiaCollection'));
@@ -83,6 +84,10 @@ function Layout({ children, sidebarOpen, setSidebarOpen }) {
           )}
         </svg>
       </button>
+
+      <div className="app-top-actions" style={{ position: 'fixed', top: 12, right: 16, zIndex: 120 }}>
+        <NotificationBell />
+      </div>
 
       <main className={`app-main${isKhataRoute ? ' app-main--khata' : ''}`}>
         <div className="app-main-inner">
@@ -263,6 +268,7 @@ function AppRoutes() {
     <RouteChangeRefresher />
     <BootstrapErrorBanner />
     <BackgroundRefreshIndicator />
+    <LotNotificationListener />
     <Suspense
       fallback={(
         <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>

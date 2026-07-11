@@ -3,7 +3,7 @@ import { useApp } from '../context/AppContext';
 import { Modal, FormGroup, SearchBar, EmptyState, ConfirmDialog } from '../components/UI';
 import Loader from '../components/Loader';
 import LoaderDashboard from '../components/LoaderDashboard';
-import { DateRangeSelect, isWithinDateRange, latestDateFrom } from '../utils/dateFilters';
+import { DateRangeSelect, isWithinDateRange, latestDateFrom, dateRangeLabel } from '../utils/dateFilters';
 
 function toPartyFormFields(initial) {
   if (!initial) return { name: '', phone: '', address: '' };
@@ -126,6 +126,12 @@ export default function Parties() {
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [search, setSearch] = useState('');
   const [dateRange, setDateRange] = useState('all');
+  const [customStart, setCustomStart] = useState('');
+  const [customEnd, setCustomEnd] = useState('');
+  const customRange = useMemo(
+    () => ({ start: customStart, end: customEnd }),
+    [customStart, customEnd],
+  );
   const [transactionParty, setTransactionParty] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
 
@@ -133,13 +139,14 @@ export default function Parties() {
     () => reportingLots.filter((lot) => isWithinDateRange(
       latestDateFrom(lot, ['updatedAt', 'createdAt', 'receivedBackDate', 'dispatchDate', 'allotDate', 'receivedDate']),
       dateRange,
+      customRange,
     )),
-    [reportingLots, dateRange],
+    [reportingLots, dateRange, customRange],
   );
 
   const rangedPayments = useMemo(
-    () => reportingPayments.filter((payment) => isWithinDateRange(payment.updatedAt || payment.date, dateRange)),
-    [reportingPayments, dateRange],
+    () => reportingPayments.filter((payment) => isWithinDateRange(payment.updatedAt || payment.date, dateRange, customRange)),
+    [reportingPayments, dateRange, customRange],
   );
 
   const filtered = parties.filter(p => {
@@ -333,6 +340,12 @@ export default function Parties() {
         <DateRangeSelect
           value={dateRange}
           onChange={setDateRange}
+          customStart={customStart}
+          customEnd={customEnd}
+          onCustomChange={({ start, end }) => {
+            setCustomStart(start);
+            setCustomEnd(end);
+          }}
           className="pl-toolbar-filter pl-toolbar-filter--date"
         />
       </div>
@@ -649,7 +662,7 @@ export default function Parties() {
                   </div>
 
                   <p style={{ margin: '14px 0 0', fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5 }}>
-                    Newest entries first; running balance is after each transaction in date order ({dateRange === 'all' ? 'all time' : `${dateRange}`} filter applies).
+                    Newest entries first; running balance is after each transaction in date order ({dateRangeLabel(dateRange, customRange)} filter applies).
                   </p>
                 </div>
               );

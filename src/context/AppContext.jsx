@@ -227,6 +227,60 @@ export function AppProvider({ children }) {
   const ledgerReceiptsLoadRef = useRef(null);
   /** Bumped after each successful ledger receipt pull — lets thumbnails retry. */
   const [ledgerReceiptsVersion, setLedgerReceiptsVersion] = useState(0);
+  const [notifications, setNotifications] = useState([]);
+  const [notificationUnreadCount, setNotificationUnreadCount] = useState(0);
+  const [pendingLotNotice, setPendingLotNotice] = useState(null);
+
+  const refreshNotifications = useCallback(async () => {
+    if (!isAuthenticated) return;
+    if (user?.role !== 'admin' && user?.role !== 'party') return;
+    try {
+      const [list, countRes] = await Promise.all([
+        apiService.getNotifications(),
+        apiService.getNotificationUnreadCount(),
+      ]);
+      setNotifications(Array.isArray(list) ? list : []);
+      setNotificationUnreadCount(Number(countRes?.count) || 0);
+    } catch (err) {
+      console.warn('Notifications refresh failed', err);
+    }
+  }, [isAuthenticated, user?.role]);
+
+  const markNotificationRead = useCallback(async (id) => {
+    if (!id) return;
+    try {
+      const updated = await apiService.markNotificationRead(id);
+      setNotifications((prev) =>
+        prev.map((n) => (String(n.id || n._id) === String(id) ? { ...n, ...updated, readAt: updated.readAt || new Date().toISOString() } : n)),
+      );
+      setNotificationUnreadCount((c) => Math.max(0, c - 1));
+    } catch (err) {
+      console.warn('Mark notification read failed', err);
+    }
+  }, []);
+
+  const markAllNotificationsRead = useCallback(async () => {
+    try {
+      await apiService.markAllNotificationsRead();
+      const now = new Date().toISOString();
+      setNotifications((prev) => prev.map((n) => (n.readAt ? n : { ...n, readAt: now })));
+      setNotificationUnreadCount(0);
+    } catch (err) {
+      console.warn('Mark all notifications read failed', err);
+    }
+  }, []);
+
+  const clearPendingLotNotice = useCallback(() => setPendingLotNotice(null), []);
+
+  useEffect(() => {
+    if (!isAuthenticated || (user?.role !== 'admin' && user?.role !== 'party')) {
+      setNotifications([]);
+      setNotificationUnreadCount(0);
+      return undefined;
+    }
+    void refreshNotifications();
+    return undefined;
+  }, [isAuthenticated, user?.role, refreshNotifications]);
 
   const mergeReceiptRows = useCallback((setter, rows) => {
     if (!Array.isArray(rows) || rows.length === 0) return;
@@ -676,6 +730,17 @@ export function AppProvider({ children }) {
       const lotId = payload && payload.lotId != null ? String(payload.lotId) : '';
       if (lotId) pendingLotIds.add(lotId);
 
+      const action = payload && payload.action != null ? String(payload.action) : '';
+      if (action === 'lot_rejected' || action === 'lot_pending_review') {
+        setPendingLotNotice({
+          action,
+          lotId,
+          linkPath: payload.linkPath || '',
+          at: payload.at || Date.now(),
+        });
+        void refreshNotifications();
+      }
+
       if (Date.now() - lastAnyRefreshRef.current < REALTIME_MIN_INTERVAL_MS) {
         // A refresh just ran; let it settle, then reconcile once more shortly.
         if (timer) clearTimeout(timer);
@@ -705,7 +770,7 @@ export function AppProvider({ children }) {
       unsubscribe();
       if (timer) clearTimeout(timer);
     };
-  }, [isAuthenticated, user?.role, runLightBootstrapRefresh, invalidateLotReceipt, isRefreshSuppressed]);
+  }, [isAuthenticated, user?.role, runLightBootstrapRefresh, invalidateLotReceipt, isRefreshSuppressed, refreshNotifications]);
 
   // Tear down the socket entirely when the user signs out.
   useEffect(() => {
@@ -1006,6 +1071,13 @@ export function AppProvider({ children }) {
     backgroundRefreshing,
     bootstrapLoadError,
     refreshData,
+    notifications,
+    notificationUnreadCount,
+    refreshNotifications,
+    markNotificationRead,
+    markAllNotificationsRead,
+    pendingLotNotice,
+    clearPendingLotNotice,
   }), [
     parties, addParty, updateParty, deleteParty,
     ghausiaLots, addLot, updateLot, deleteLot,
@@ -1024,6 +1096,13 @@ export function AppProvider({ children }) {
     bootstrapLoadError,
     refreshData,
     getPartyById, getPartyName,
+    notifications,
+    notificationUnreadCount,
+    refreshNotifications,
+    markNotificationRead,
+    markAllNotificationsRead,
+    pendingLotNotice,
+    clearPendingLotNotice,
   ]);
 
   return (
