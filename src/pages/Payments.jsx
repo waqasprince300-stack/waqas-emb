@@ -692,7 +692,7 @@ export default function Payments() {
     <div>
       <div className="page-header">
         <div>
-          <div className="page-title">Payments</div>
+          <div className="page-title">{isParty ? "My Payments" : "Payments"}</div>
           <div className="page-subtitle">
             {isParty
               ? "Your completed work bills, and payments sent to you by the business"
@@ -755,14 +755,14 @@ export default function Payments() {
                 value: partyStatementSummary.paidFromAdmin,
                 color: "#15803d",
                 icon: "↓",
-                note: "Admin marked as Paid → you",
+                note: "Payments the business recorded to you",
               },
               {
                 label: "Paid to business",
                 value: partyStatementSummary.paidToBusiness,
                 color: "#b91c1c",
                 icon: "↑",
-                note: "Admin marked as Received from you",
+                note: "Amounts you paid to the business",
               },
               {
                 label: "Net due (bill − in + out)",
@@ -1037,7 +1037,7 @@ export default function Payments() {
         <SearchBar
           value={search}
           onChange={setSearch}
-          placeholder="Search party, lot, design, note…"
+          placeholder={isParty ? "Search lot, design, note…" : "Search party, lot, design, note…"}
         />
         <select
           className="form-select pl-toolbar-filter pl-toolbar-filter--type"
@@ -1047,7 +1047,7 @@ export default function Payments() {
           <option value="All">All Types</option>
           <option>Received</option>
           <option>Paid</option>
-          <option>Bill</option>
+          <option value="Bill">{isParty ? "Work bill" : "Bill"}</option>
         </select>
         {isAdmin && businessOwners.length > 0 && (
           <select

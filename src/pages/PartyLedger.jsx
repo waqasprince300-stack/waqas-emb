@@ -569,7 +569,7 @@ export default function PartyLedger() {
       await Swal.fire({
         icon: "success",
         title: "Request sent",
-        text: "Your bill change request was sent to the admin. The amount updates when approved.",
+        text: "Your bill change request was sent to the business. The amount updates when approved.",
         timer: 2200,
         showConfirmButton: false,
       });
@@ -936,15 +936,15 @@ export default function PartyLedger() {
             ? `<div><strong>Business / owner bill on lot:</strong> ₨${ghausiaAmount.toLocaleString()}</div>`
             : "";
           const footnote = isParty
-            ? `<div style="margin-top:10px;color:#92400e">This lot stays <strong>under admin review</strong>. The admin reconciles your ledger with the business separately — you do not see the business-side bill.</div>`
+            ? `<div style="margin-top:10px;color:#92400e">This lot stays <strong>under business review</strong>. The business reconciles your ledger separately — you do not see the business-side bill.</div>`
             : `<div style="margin-top:10px;color:#92400e">This lot stays <strong>under admin review</strong>. If the owner was already billed for this lot, the admin will choose how to update the business bill when approving.</div>`;
           const result = await Swal.fire({
-            title: "Party bill amount change",
+            title: isParty ? "Ledger amount change" : "Party bill amount change",
             icon: "question",
             html: `
             <div style="text-align:left;font-size:14px;line-height:1.6">
-              <div><strong>Party ledger (old):</strong> ₨${previousLedgerAmount.toLocaleString()}</div>
-              <div><strong>Party ledger (new):</strong> ₨${nextLedgerAmount.toLocaleString()}</div>
+              <div><strong>${isParty ? "Your amount (old)" : "Party ledger (old)"}:</strong> ₨${previousLedgerAmount.toLocaleString()}</div>
+              <div><strong>${isParty ? "Your amount (new)" : "Party ledger (new)"}:</strong> ₨${nextLedgerAmount.toLocaleString()}</div>
               <div><strong>Difference:</strong> ₨${diff.toLocaleString()}</div>
               ${businessLine}
               ${footnote}
@@ -1119,7 +1119,7 @@ export default function PartyLedger() {
           await Swal.fire({
             icon: "info",
             title: "Not available",
-            text: "From In Progress you can only submit for admin approval. You cannot save as not received.",
+            text: "From In Progress you can only submit for review. You cannot save as not received.",
           });
           return;
         }
@@ -1127,7 +1127,7 @@ export default function PartyLedger() {
           await Swal.fire({
             icon: "info",
             title: "Not available",
-            text: "You cannot save In Progress until the business has dispatched this lot.",
+            text: "You cannot save In Progress until the business has sent this lot to you.",
           });
           return;
         }
@@ -1320,7 +1320,7 @@ export default function PartyLedger() {
       await Swal.fire({
         icon: "info",
         title: "Not available",
-        text: "From In Progress you can only submit this lot for admin approval. You cannot move it back to not received.",
+        text: "From In Progress you can only submit this lot for review. You cannot move it back to not received.",
       });
       return;
     }
@@ -1328,7 +1328,7 @@ export default function PartyLedger() {
       await Swal.fire({
         icon: "info",
         title: "Not available",
-        text: "You cannot set this to In Progress until the business dispatches the lot to you. Your status will move forward when dispatch happens on the business side.",
+        text: "You cannot set this to In Progress until the business has sent the lot to you. Your status will move forward when that happens on the business side.",
       });
       return;
     }
@@ -1371,11 +1371,11 @@ export default function PartyLedger() {
     <div>
       <div className="page-header">
         <div>
-          <div className="page-title">Party Ledger</div>
+          <div className="page-title">{isParty ? "My Lots" : "Party Ledger"}</div>
           <div className="page-subtitle">
             {isAdmin
               ? "All workspaces by default — filter by party, workspace, dates, and status"
-              : "All lots assigned to parties — editable completion details"}
+              : "Your assigned lots — update status, amounts, and completion details"}
           </div>
         </div>
       </div>
@@ -1414,7 +1414,7 @@ export default function PartyLedger() {
         {[
           {
             key: "assigned",
-            label: "Assigned Lots",
+            label: isParty ? "My lots" : "Assigned Lots",
             value: totals.lots,
             color: "#1e40af",
           },
@@ -1465,14 +1465,22 @@ export default function PartyLedger() {
           },
           {
             key: "completed-lots-balance",
-            label: `Completed lots ${partyBalanceInfo.completedNet >= 0 ? `balance (${isParty ? "receivable" : "payable"})` : "(advance)"}`,
+            label: `Completed lots ${
+              partyBalanceInfo.completedNet >= 0
+                ? `balance (${isParty ? "owed to you" : "payable"})`
+                : "(advance)"
+            }`,
             value: `₨${partyBalanceInfo.completedNet.toLocaleString()}`,
             color: `${partyBalanceInfo.completedNet >= 0 ? "#0f766e" : "#dc2626"}`,
             sub: partyBalanceInfo.hint,
           },
           {
             key: "balance",
-            label: `Total Balance ${partyBalanceInfo.balance >= 0 ? `(${isParty ? "receivable" : "payable"})` : "(advance)"}`,
+            label: `Total Balance ${
+              partyBalanceInfo.balance >= 0
+                ? `(${isParty ? "owed to you" : "payable"})`
+                : `(${isParty ? "you owe" : "advance"})`
+            }`,
             value: `₨${partyBalanceInfo.balance.toLocaleString()}`,
             color: partyBalanceInfo.balance >= 0 ? "#0f766e" : "#dc2626",
             sub: partyBalanceInfo.hint,
@@ -1621,7 +1629,9 @@ export default function PartyLedger() {
           >
             <option value="All">All Statuses</option>
             <option value="Pending">{partyFacingStatusLabel("Pending", isParty)}</option>
-            <option value="In Progress">In Progress</option>
+            <option value="In Progress">
+              {partyFacingStatusLabel("In Progress", isParty)}
+            </option>
             <option value="Pending review">
               {partyFacingStatusLabel("Pending review", isParty)}
             </option>
@@ -1665,7 +1675,7 @@ export default function PartyLedger() {
               {filtered.length === 0 ? (
                 <tr>
                   <td colSpan={ledgerTableColSpan}>
-                    <EmptyState message="No assigned lots found" />
+                    <EmptyState message={isParty ? "No lots found" : "No assigned lots found"} />
                   </td>
                 </tr>
               ) : (
@@ -1792,20 +1802,24 @@ export default function PartyLedger() {
                                 disabled
                                 style={{ fontWeight: 600, color: "#b91c1c" }}
                               >
-                                Rejected
+                                {partyFacingStatusLabel("Rejected", isParty)}
                               </option>
                             )}
                             {!(isParty && displayStatus === "In Progress") ? (
                               <option value="Pending">{partyFacingStatusLabel("Pending", isParty)}</option>
                             ) : null}
                             {isParty && adminLotNotDispatched(l) && displayStatus === "In Progress" ? (
-                              <option value="In Progress">In Progress</option>
+                              <option value="In Progress">
+                                {partyFacingStatusLabel("In Progress", isParty)}
+                              </option>
                             ) : null}
                             {!(isParty && adminLotNotDispatched(l)) ? (
-                              <option value="In Progress">In Progress</option>
+                              <option value="In Progress">
+                                {partyFacingStatusLabel("In Progress", isParty)}
+                              </option>
                             ) : null}
                             <option value="Completed">
-                              {isParty ? "Submit for admin approval" : "Completed"}
+                              {isParty ? "Submit for review" : "Completed"}
                             </option>
                           </select>
                         )}
@@ -1991,7 +2005,8 @@ export default function PartyLedger() {
                               lineHeight: 1.4,
                             }}
                           >
-                            Admin: {l.rejectionNote}
+                            {isParty ? "Business: " : "Admin: "}
+                            {l.rejectionNote}
                           </div>
                         ) : null}
                         {pe.amountChangeNote && (
@@ -2324,7 +2339,7 @@ export default function PartyLedger() {
                     border: "1px solid #FCD34D",
                   }}
                 >
-                  Pending admin review — you can update bill, receipt, and dates; the lot stays with the admin until approved.
+                  Pending business review — you can update bill, receipt, and dates; the lot stays under review until approved.
                 </div>
               ) : (
                 <select
@@ -2348,13 +2363,17 @@ export default function PartyLedger() {
                     <option value="Pending">{partyFacingStatusLabel("Pending", isParty)}</option>
                   ) : null}
                   {isParty && editingLot && adminLotNotDispatched(editingLot) && editForm.status === "In Progress" ? (
-                    <option value="In Progress">In Progress</option>
+                    <option value="In Progress">
+                      {partyFacingStatusLabel("In Progress", isParty)}
+                    </option>
                   ) : null}
                   {!(isParty && editingLot && adminLotNotDispatched(editingLot)) ? (
-                    <option value="In Progress">In Progress</option>
+                    <option value="In Progress">
+                      {partyFacingStatusLabel("In Progress", isParty)}
+                    </option>
                   ) : null}
                   <option value="Completed">
-                    {isParty ? "Submit for admin approval" : "Completed"}
+                    {isParty ? "Submit for review" : "Completed"}
                   </option>
                 </select>
               )}
@@ -2602,13 +2621,16 @@ export default function PartyLedger() {
             <div className="alert alert-warning">
               <strong>Note:</strong>{" "}
               {isParty
-                ? "Saving updates your submission while it is still with the admin. If you change your ledger amount, the admin will see the old and new figures and reconciles them with the business."
+                ? "Saving updates your submission while it is still under business review. If you change your ledger amount, the business will see the old and new figures when they reconcile."
                 : "Saving updates this submission while it is under review. If you change the bill amount, the admin will see the old and new figures and can choose how the owner business bill should follow when they approve."}
             </div>
           )}
           {editForm.status === "Completed" && ledgerEditKind !== "pendingReview" && (
             <div className="alert alert-warning">
-            <strong>Note:</strong> Submitting completes the ledger entry and sends this lot to the admin for approval. Once approved it becomes billable to the owner (<strong>Received back</strong>). If rejected, you will see the admin&apos;s feedback on this row.
+            <strong>Note:</strong>{" "}
+            {isParty
+              ? "Submitting completes your ledger entry and sends this lot for business review. Once approved it shows as Delivered. If rejected, you will see the business feedback on this row."
+              : "Submitting completes the ledger entry and sends this lot to the admin for approval. Once approved it becomes billable to the owner (Received back). If rejected, you will see the admin's feedback on this row."}
           </div>
           )}
         </Modal>
@@ -2658,8 +2680,8 @@ export default function PartyLedger() {
             This lot has <strong>{lotPicturesMax(picsLot)}</strong> color
             {lotPicturesMax(picsLot) === 1 ? "" : "s"} — add up to{" "}
             <strong>{lotPicturesMax(picsLot)}</strong> picture
-            {lotPicturesMax(picsLot) === 1 ? "" : "s"} (one per color). Both the party and the
-            admin can add or remove pictures here.
+            {lotPicturesMax(picsLot) === 1 ? "" : "s"} (one per color). You and the
+            business can add or remove pictures here.
           </p>
           {picsLoading ? (
             <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 0" }}>
@@ -2797,7 +2819,7 @@ export default function PartyLedger() {
           }
         >
           <div className="alert alert-warning" style={{ marginBottom: 16 }}>
-            This lot is complete. You are requesting a new bill amount from the admin —
+            This lot is complete. You are requesting a new bill amount from the business —
             the amount updates <strong>only when approved</strong>.
           </div>
           <FormGroup label="Current ledger amount (₨)">

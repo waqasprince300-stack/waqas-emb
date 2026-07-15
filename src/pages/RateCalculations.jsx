@@ -392,7 +392,7 @@ export default function StitchCalculator() {
 
       <div className="card-calculator">
 
-        <h2 className="title">Rate Calculations</h2>
+        <h2 className="title">{isParty ? 'Rate Calculator' : 'Rate Calculations'}</h2>
 
         <p className="calc-subtitle">Add each stitch area with base stitches and repeat — totals update automatically.</p>
 

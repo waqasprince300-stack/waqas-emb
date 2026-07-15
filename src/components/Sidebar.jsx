@@ -19,7 +19,10 @@ const navItems = [
     ),
   },
   {
-    to: '/', label: 'Dashboard', exact: true,
+    to: '/',
+    label: 'Dashboard',
+    partyLabel: 'Home',
+    exact: true,
     icon: (
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
         <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
@@ -36,7 +39,9 @@ const navItems = [
     ),
   },
   {
-    to: '/party-ledger', label: 'Party Ledger',
+    to: '/party-ledger',
+    label: 'Party Ledger',
+    partyLabel: 'My Lots',
     icon: (
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
@@ -71,7 +76,9 @@ const navItems = [
     ),
   },
   {
-    to: '/payments', label: 'Payments',
+    to: '/payments',
+    label: 'Payments',
+    partyLabel: 'My Payments',
     icon: (
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
         <rect x="1" y="4" width="22" height="16" rx="2" ry="2"/>
@@ -310,7 +317,9 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen }) {
               </div>
             ) : null}
             <div style={{ marginTop: 4, textTransform: 'capitalize' }}>
-              {String(user.role || '').replace('_', ' ')}{user.partyName ? ` · ${user.partyName}` : ''}
+              {isParty
+                ? (user.partyName ? String(user.partyName) : 'Party account')
+                : `${String(user.role || '').replace('_', ' ')}${user.partyName ? ` · ${user.partyName}` : ''}`}
             </div>
             <button
               type="button"

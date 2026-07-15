@@ -2,6 +2,7 @@ import React, { useState, useMemo, useRef, useEffect } from 'react';
 import Swal from 'sweetalert2';
 import { useApp } from '../context/AppContext';
 import BusinessOwnerSwitcher from '../components/BusinessOwnerSwitcher';
+import LotStatusSelect from '../components/LotStatusSelect';
 import { Modal, FormGroup, StatusBadge, ActionBtn, SearchBar, EmptyState, ConfirmDialog } from '../components/UI';
 import Loader from '../components/Loader';
 import LoaderDashboard from '../components/LoaderDashboard';
@@ -21,7 +22,7 @@ import {
 
 const BASE_FABRICS = ['Lawn', 'Velvet', 'Cambric'];
 const COLOR_OPTIONS = Array.from({ length: 13 }, (_, i) => i);
-const STATUS_OPTIONS = ['pending', 'dispatched', 'received back', 'pending approval', 'rejected', 'completed'];
+const STATUS_OPTIONS = ['pending', 'dispatched', 'pending approval', 'rejected', 'received back', 'completed'];
 
 function lotSaveErrorToast(title) {
   Swal.fire({
@@ -1744,17 +1745,12 @@ export default function GhausiaCollection() {
                     {lotTableTab === 'completed' ?
                       <span style={{ fontSize: 12, color: 'green', marginTop: 3, fontWeight: '500', padding: '2px 8px', borderRadius: 6, background: '#DCFCE7', border: '1px solid #DCFCE7' }}>Completed</span> :
                       <>
-                        <select
-                          className="form-select"
-                          style={{ width: 150, fontSize: 12, padding: '5px 8px' }}
+                        <LotStatusSelect
                           value={l.status}
+                          options={STATUS_OPTIONS}
                           disabled={completionPersistingLotId === l.id || inlineSummaryBusy}
-                          onChange={(e) => setLotStatus(l, e.target.value)}
-                        >
-                          {STATUS_OPTIONS.map(s => (
-                            <option key={s} value={s}>{s.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}</option>
-                          ))}
-                        </select>
+                          onChange={(next) => setLotStatus(l, next)}
+                        />
                         {l.dispatchDate && l.status !== 'pending' && <div style={{ fontSize: 12, color: '#dc2626', marginTop: 3, fontWeight: '500' }}>Dispatch: {l.dispatchDate}</div>}
                         {l.receivedBackDate && <div style={{ fontSize: 12, color: 'green', marginTop: 1, fontWeight: '500' }}>Received: {l.receivedBackDate}</div>}
                       </>

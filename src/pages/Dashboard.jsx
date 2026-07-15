@@ -255,7 +255,7 @@ export default function Dashboard() {
     <div>
       <div className="page-header">
         <div>
-          <div className="page-title">Dashboard</div>
+          <div className="page-title">{isParty ? 'Home' : 'Dashboard'}</div>
           <div className="page-subtitle">
             {isParty
               ? `Welcome back${partyNameTrim ? `, ${partyNameTrim}` : ''}. Summary of your lots.`
@@ -358,7 +358,7 @@ export default function Dashboard() {
         </div>
       </section>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18, marginBottom: 24 }}>
+      <div className="dash-admin-split">
         {/* Status Breakdown */}
         <div className="card">
           <div className="card-header"><span className="card-title">Lot Status Breakdown</span></div>
@@ -432,44 +432,95 @@ export default function Dashboard() {
       <div style={{ marginBottom: 24 }}>
         <div className="card">
           <div className="card-header"><span className="card-title">Recent Lots</span></div>
-          <div className="card-body table-scroll" style={{ padding: 0 }}>
-            <table>
-              <thead>
-                <tr>
-                  <th>Lot</th>
-                  <th>Design</th>
-                  {!isParty && <th>Party</th>}
-                  <th style={{ minWidth: 130 }}>Business</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {recentLots.map(l => (
-                  <tr key={l.id}>
-                    <td style={{ fontWeight: 600 }}>{l.lotNo || l.lotNumber}</td>
-                    <td>{l.designNo}</td>
-                    {!isParty && (
-                      <td style={{ color: 'var(--text-secondary)', fontSize: 12 }}>{l.partyName}</td>
-                    )}
-                    <td style={{ color: 'var(--text-secondary)', fontSize: 12, minWidth: 120 }}>
-                      {workspaceDisplayTitleForLot(l, businessOwners, {
-                        shortIdFallback: isParty,
-                      })}
-                    </td>
-                    <td>
-                      <StatusBadge
-                        status={lotStatusBadgeKey(l.status)}
-                        label={
-                          isParty
-                            ? partyFacingLotStatusLabel(l.status)
-                            : undefined
-                        }
-                      />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="card-body dash-recent" style={{ padding: 0 }}>
+            {recentLots.length === 0 ? (
+              <p className="dash-recent-empty">No lots in this period</p>
+            ) : (
+              <>
+                {/* Mobile: stacked list */}
+                <ul className="dash-recent-list dash-recent-mobile">
+                  {recentLots.map((l) => {
+                    const lotNo = l.lotNo || l.lotNumber || '—';
+                    const design = l.designNo || '—';
+                    const business = workspaceDisplayTitleForLot(l, businessOwners, {
+                      shortIdFallback: isParty,
+                    });
+                    return (
+                      <li key={l.id} className="dash-recent-item">
+                        <div className="dash-recent-item-main">
+                          <div className="dash-recent-item-title">
+                            <span className="dash-recent-lot">{lotNo}</span>
+                            <span className="dash-recent-sep">·</span>
+                            <span className="dash-recent-design">{design}</span>
+                          </div>
+                          <div className="dash-recent-item-meta">
+                            {!isParty && l.partyName ? (
+                              <span className="dash-recent-party">{l.partyName}</span>
+                            ) : null}
+                            {business ? (
+                              <span className="dash-recent-biz">{business}</span>
+                            ) : null}
+                          </div>
+                        </div>
+                        <div className="dash-recent-item-status">
+                          <StatusBadge
+                            status={lotStatusBadgeKey(l.status)}
+                            label={
+                              isParty
+                                ? partyFacingLotStatusLabel(l.status)
+                                : undefined
+                            }
+                          />
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+
+                {/* Desktop: table */}
+                <div className="dash-recent-desktop table-scroll">
+                  <table className="dash-recent-table">
+                    <thead>
+                      <tr>
+                        <th>Lot</th>
+                        <th>Design</th>
+                        {!isParty && <th>Party</th>}
+                        <th>Business</th>
+                        <th>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {recentLots.map((l) => (
+                        <tr key={l.id}>
+                          <td style={{ fontWeight: 600 }}>{l.lotNo || l.lotNumber}</td>
+                          <td>{l.designNo}</td>
+                          {!isParty && (
+                            <td style={{ color: 'var(--text-secondary)', fontSize: 13 }}>
+                              {l.partyName}
+                            </td>
+                          )}
+                          <td style={{ color: 'var(--text-secondary)', fontSize: 13 }}>
+                            {workspaceDisplayTitleForLot(l, businessOwners, {
+                              shortIdFallback: isParty,
+                            })}
+                          </td>
+                          <td>
+                            <StatusBadge
+                              status={lotStatusBadgeKey(l.status)}
+                              label={
+                                isParty
+                                  ? partyFacingLotStatusLabel(l.status)
+                                  : undefined
+                              }
+                            />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -477,46 +528,93 @@ export default function Dashboard() {
       {!isParty && (
       <div className="card">
         <div className="card-header"><span className="card-title">Recent Payments</span></div>
-        <div className="card-body" style={{ padding: 0 }}>
+        <div className="card-body dash-recent" style={{ padding: 0 }}>
           {scopedPayments.length === 0 ? (
-            <p style={{ padding: 20, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>No payments recorded</p>
+            <p className="dash-recent-empty">No payments recorded</p>
           ) : (
-            <table>
-              <thead>
-                <tr>
-                  <th>Date</th>
-                  <th>Type</th>
-                  <th>Party / From</th>
-                  <th>Linked Lot</th>
-                  <th>Note</th>
-                  <th style={{ textAlign: 'right' }}>Amount</th>
-                </tr>
-              </thead>
-              <tbody>
+            <>
+              <ul className="dash-recent-list dash-recent-mobile">
                 {[...scopedPayments]
                   .sort((a, b) => compareRowsByUpdatedNewestFirst(a, b, 'payment'))
                   .slice(0, 8)
-                  .map(p => (
-                  <tr key={p.id}>
-                    <td>{p.date}</td>
-                    <td>
-                      <span style={{
-                        background: p.type === 'Received' ? '#F0FDF4' : '#FEF2F2',
-                        color: p.type === 'Received' ? '#166534' : '#991B1B',
-                        border: `1px solid ${p.type === 'Received' ? '#BBF7D0' : '#FECACA'}`,
-                        borderRadius: 20, padding: '2px 10px', fontSize: 11.5, fontWeight: 600,
-                      }}>{p.type}</span>
-                    </td>
-                    <td>{p.party}</td>
-                    <td>{p.linkedLot || '—'}</td>
-                    <td style={{ color: 'var(--text-secondary)', fontSize: 12 }}>{p.note || '—'}</td>
-                    <td style={{ textAlign: 'right', fontWeight: 700, color: p.type === 'Received' ? '#15803d' : '#dc2626' }}>
-                      ₨{Number(p.amount || 0).toLocaleString()}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                  .map((p) => (
+                    <li key={p.id} className="dash-recent-item">
+                      <div className="dash-recent-item-main">
+                        <div className="dash-recent-item-title dash-recent-pay-title">
+                          <span className="dash-recent-date">{p.date || '—'}</span>
+                          <span
+                            className={`dash-pay-type ${
+                              p.type === 'Received' ? 'dash-pay-type--in' : 'dash-pay-type--out'
+                            }`}
+                          >
+                            {p.type}
+                          </span>
+                        </div>
+                        <div className="dash-recent-item-meta">
+                          <span className="dash-recent-party">{p.party || '—'}</span>
+                          {p.note ? (
+                            <span className="dash-recent-note">{p.note}</span>
+                          ) : null}
+                        </div>
+                      </div>
+                      <div
+                        className={`dash-recent-amount ${
+                          p.type === 'Received' ? 'dash-recent-amount--in' : 'dash-recent-amount--out'
+                        }`}
+                      >
+                        ₨{Number(p.amount || 0).toLocaleString()}
+                      </div>
+                    </li>
+                  ))}
+              </ul>
+
+              <div className="dash-recent-desktop table-scroll">
+                <table className="dash-recent-table">
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th>Type</th>
+                      <th>Party / From</th>
+                      <th>Note</th>
+                      <th style={{ textAlign: 'right' }}>Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[...scopedPayments]
+                      .sort((a, b) => compareRowsByUpdatedNewestFirst(a, b, 'payment'))
+                      .slice(0, 8)
+                      .map((p) => (
+                        <tr key={p.id}>
+                          <td>{p.date}</td>
+                          <td>
+                            <span
+                              className={`dash-pay-type ${
+                                p.type === 'Received' ? 'dash-pay-type--in' : 'dash-pay-type--out'
+                              }`}
+                            >
+                              {p.type}
+                            </span>
+                          </td>
+                          <td>{p.party}</td>
+                          <td style={{ color: 'var(--text-secondary)', fontSize: 13 }}>
+                            {p.note || '—'}
+                          </td>
+                          <td
+                            style={{
+                              textAlign: 'right',
+                              fontWeight: 700,
+                              color: p.type === 'Received' ? '#15803d' : '#dc2626',
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            ₨{Number(p.amount || 0).toLocaleString()}
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
         </div>
       </div>

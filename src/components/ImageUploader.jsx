@@ -1,12 +1,71 @@
-import React, { useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Modal } from "./UI";
 import Loader from "./Loader";
 import { fileToFinalizedImage } from "../utils/imageCompress";
 import { receiptPreviewKind } from "./receipt/ReceiptThumb";
 
+function filesFromClipboardData(clipboardData) {
+  const files = [];
+  const items = clipboardData?.items;
+  if (items) {
+    for (let i = 0; i < items.length; i += 1) {
+      const item = items[i];
+      if (!item || item.kind !== "file") continue;
+      if (!String(item.type || "").startsWith("image/")) continue;
+      const file = item.getAsFile();
+      if (file) files.push(file);
+    }
+  }
+  if (!files.length && clipboardData?.files?.length) {
+    for (let i = 0; i < clipboardData.files.length; i += 1) {
+      const file = clipboardData.files[i];
+      if (file && String(file.type || "").startsWith("image/")) {
+        files.push(file);
+      }
+    }
+  }
+  return files;
+}
+
+/** Mobile-friendly: read image(s) via Clipboard API after a tap on Paste. */
+async function filesFromClipboardApi() {
+  if (!navigator.clipboard?.read) {
+    throw new Error(
+      "This browser cannot read the clipboard. Use Add slip and pick from Gallery, or save the WhatsApp image first.",
+    );
+  }
+  const items = await navigator.clipboard.read();
+  const files = [];
+  for (const item of items) {
+    const types = Array.isArray(item.types) ? item.types : [];
+    const imageType = types.find((t) => String(t).startsWith("image/"));
+    if (!imageType) continue;
+    // eslint-disable-next-line no-await-in-loop
+    const blob = await item.getType(imageType);
+    if (!blob) continue;
+    const ext = imageType.includes("png")
+      ? "png"
+      : imageType.includes("webp")
+        ? "webp"
+        : "jpg";
+    files.push(
+      new File([blob], `clipboard-slip.${ext}`, {
+        type: blob.type || imageType,
+      }),
+    );
+  }
+  if (!files.length) {
+    throw new Error(
+      "No image in clipboard. In WhatsApp: long-press the slip → Copy, then tap Paste here.",
+    );
+  }
+  return files;
+}
+
 /**
  * Reusable picture uploader for lot pictures / payment slips.
  * Stores each picture as a compressed base64 data URL (image) or a data URL (PDF).
+ * Supports file pick and clipboard paste (desktop Ctrl/Cmd+V, mobile Paste button).
  *
  * @param {string[]} value      Current stored images (data URLs).
  * @param {(next:string[])=>void} onChange
@@ -24,35 +83,108 @@ export default function ImageUploader({
   thumbSize = 72,
 }) {
   const inputRef = useRef(null);
+  const rootRef = useRef(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [preview, setPreview] = useState(null);
 
   const images = Array.isArray(value) ? value.filter(Boolean) : [];
   const canAddMore = images.length < max;
+  const canPaste = !disabled && (canAddMore || max === 1);
+
+  const addFiles = useCallback(
+    async (files, { replace = false } = {}) => {
+      const list = Array.from(files || []).filter(Boolean);
+      if (!list.length || disabled) return;
+      const base = replace && max === 1 ? [] : images;
+      if (!replace && base.length >= max) return;
+      setError("");
+      setBusy(true);
+      try {
+        const room = Math.max(0, max - base.length);
+        const chosen = list.slice(0, room);
+        const finalized = [];
+        for (const file of chosen) {
+          // eslint-disable-next-line no-await-in-loop
+          const stored = await fileToFinalizedImage(file);
+          if (stored) finalized.push(stored);
+        }
+        if (finalized.length) onChange([...base, ...finalized]);
+      } catch (err) {
+        setError(err?.message || "Could not add this picture.");
+      } finally {
+        setBusy(false);
+      }
+    },
+    [disabled, images, max, onChange],
+  );
 
   const handlePick = async (e) => {
     const files = Array.from(e.target.files || []);
     if (inputRef.current) inputRef.current.value = "";
-    if (!files.length) return;
+    await addFiles(files);
+  };
+
+  const pasteClipboardFiles = useCallback(
+    (files) => {
+      if (!files?.length) return;
+      void addFiles(files, { replace: max === 1 && images.length >= 1 });
+    },
+    [addFiles, images.length, max],
+  );
+
+  const handlePasteEvent = useCallback(
+    (e) => {
+      if (!canPaste || busy) return;
+      const files = filesFromClipboardData(e.clipboardData);
+      if (!files.length) return;
+      e.preventDefault();
+      e.stopPropagation();
+      pasteClipboardFiles(files);
+    },
+    [busy, canPaste, pasteClipboardFiles],
+  );
+
+  const handlePasteButton = async () => {
+    if (!canPaste || busy) return;
     setError("");
     setBusy(true);
     try {
-      const room = Math.max(0, max - images.length);
-      const chosen = files.slice(0, room);
-      const finalized = [];
-      for (const file of chosen) {
-        // eslint-disable-next-line no-await-in-loop
-        const stored = await fileToFinalizedImage(file);
-        if (stored) finalized.push(stored);
-      }
-      if (finalized.length) onChange([...images, ...finalized]);
-    } catch (err) {
-      setError(err?.message || "Could not add this picture.");
-    } finally {
+      const files = await filesFromClipboardApi();
       setBusy(false);
+      pasteClipboardFiles(files);
+    } catch (err) {
+      setBusy(false);
+      const name = err?.name || "";
+      if (name === "NotAllowedError") {
+        setError(
+          "Clipboard permission denied. Allow paste when asked, or use Add slip → Gallery.",
+        );
+      } else {
+        setError(err?.message || "Could not paste from clipboard.");
+      }
     }
   };
+
+  // Desktop: Ctrl/Cmd+V while this uploader is on screen.
+  useEffect(() => {
+    if (!canPaste) return undefined;
+    const onPaste = (e) => {
+      if (busy) return;
+      const files = filesFromClipboardData(e.clipboardData);
+      if (!files.length) return;
+      const root = rootRef.current;
+      const active = document.activeElement;
+      if (active && root && !root.contains(active)) {
+        const otherUploader = active.closest?.("[data-image-uploader]");
+        if (otherUploader && otherUploader !== root) return;
+      }
+      e.preventDefault();
+      pasteClipboardFiles(files);
+    };
+    document.addEventListener("paste", onPaste);
+    return () => document.removeEventListener("paste", onPaste);
+  }, [busy, canPaste, pasteClipboardFiles]);
 
   const removeAt = (idx) => {
     const next = images.filter((_, i) => i !== idx);
@@ -64,8 +196,31 @@ export default function ImageUploader({
     setPreview({ kind, src });
   };
 
+  const tileBtnStyle = {
+    width: thumbSize,
+    height: thumbSize,
+    borderRadius: 10,
+    border: "1px dashed #C7D2FE",
+    background: "#F8FAFF",
+    cursor: busy ? "wait" : "pointer",
+    color: "#4338ca",
+    fontSize: 12,
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+  };
+
   return (
-    <div>
+    <div
+      ref={rootRef}
+      data-image-uploader
+      tabIndex={0}
+      onPaste={handlePasteEvent}
+      style={{ outline: "none" }}
+      aria-label={`${addLabel}. You can also paste an image from the clipboard.`}
+    >
       <div
         style={{
           display: "flex",
@@ -160,23 +315,13 @@ export default function ImageUploader({
         {!disabled && canAddMore && (
           <button
             type="button"
-            onClick={() => inputRef.current?.click()}
-            disabled={busy}
-            style={{
-              width: thumbSize,
-              height: thumbSize,
-              borderRadius: 10,
-              border: "1px dashed #C7D2FE",
-              background: "#F8FAFF",
-              cursor: busy ? "wait" : "pointer",
-              color: "#4338ca",
-              fontSize: 12,
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 4,
+            onClick={() => {
+              rootRef.current?.focus?.();
+              inputRef.current?.click();
             }}
+            disabled={busy}
+            title="Pick from gallery or files"
+            style={tileBtnStyle}
           >
             {busy ? (
               <Loader />
@@ -185,6 +330,34 @@ export default function ImageUploader({
                 <span style={{ fontSize: 22, lineHeight: 1 }}>+</span>
                 <span style={{ fontSize: 10, textAlign: "center", padding: "0 4px" }}>
                   {addLabel}
+                </span>
+              </>
+            )}
+          </button>
+        )}
+
+        {canPaste && (
+          <button
+            type="button"
+            onClick={() => void handlePasteButton()}
+            disabled={busy}
+            title="Paste image copied from WhatsApp or clipboard"
+            style={{
+              ...tileBtnStyle,
+              borderColor: "#86efac",
+              background: "#f0fdf4",
+              color: "#166534",
+            }}
+          >
+            {busy ? (
+              <Loader />
+            ) : (
+              <>
+                <span style={{ fontSize: 18, lineHeight: 1 }} aria-hidden>
+                  ⎘
+                </span>
+                <span style={{ fontSize: 10, textAlign: "center", padding: "0 4px" }}>
+                  Paste
                 </span>
               </>
             )}
@@ -201,8 +374,18 @@ export default function ImageUploader({
         style={{ display: "none" }}
       />
 
-      <div style={{ marginTop: 4, fontSize: 11, color: "var(--text-muted)" }}>
-        {images.length}/{max} pictures{max > 1 ? " · JPG, PNG ya PDF" : ""}
+      <div style={{ marginTop: 4, fontSize: 11, color: "var(--text-muted)", lineHeight: 1.45 }}>
+        {images.length}/{max} pictures
+        {max > 1 ? " · JPG, PNG ya PDF" : ""}
+        {!disabled ? (
+          <>
+            <br />
+            Phone: WhatsApp pe slip long-press → Copy → yahan <strong>Paste</strong>.
+            {" "}Warna <strong>{addLabel}</strong> se Gallery.
+            <br />
+            Computer: Ctrl+V / Cmd+V, ya Paste button.
+          </>
+        ) : null}
       </div>
 
       {error && (

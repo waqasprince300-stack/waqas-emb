@@ -307,15 +307,17 @@ export function LotNotificationListener() {
                 : 'Lot awaiting your review';
     const text =
       action === 'lot_rejected'
-        ? 'A lot was rejected. Open it from Party Ledger to fix and resubmit.'
+        ? isParty
+          ? 'A lot was rejected. Open it from My Lots to fix and resubmit.'
+          : 'A lot was rejected. Open it from Party Ledger to fix and resubmit.'
         : action === 'bill_revision_request'
           ? 'A party requested a bill change. Open Party Ledger to review that lot.'
           : action === 'bill_revision_approved'
-            ? 'Admin approved your bill change. Open Party Ledger to see the updated amount.'
+            ? 'The business approved your bill change. Open My Lots to see the updated amount.'
             : action === 'bill_revision_rejected'
-              ? 'Admin rejected your bill change. Open Party Ledger to review.'
+              ? 'The business rejected your bill change. Open My Lots to review.'
               : action === 'payment_recorded'
-                ? 'Admin recorded a payment for your account. Open Payments to review.'
+                ? 'The business recorded a payment for your account. Open My Payments to review.'
                 : 'A party submitted a lot for completion approval.';
     const linkPath = String(pendingLotNotice.linkPath || '').trim() || (action === 'payment_recorded' ? '/payments' : '');
 
