@@ -515,6 +515,7 @@ class ApiService {
   async getPartyEditByLotId(lotId, opts = {}) {
     const qs = new URLSearchParams();
     if (opts.includeReceipts) qs.set('includeReceipts', '1');
+    if (opts.includeLotImages) qs.set('includeLotImages', '1');
     const biz = opts.businessOwnerId != null ? String(opts.businessOwnerId).trim() : '';
     if (biz) qs.set('businessOwnerId', biz);
     const q = qs.toString();
@@ -576,7 +577,15 @@ class ApiService {
   /** Fetch a single payment incl. its slip image (list payloads omit the base64 blob for size). */
   async getPayment(id, opts = {}) {
     const safe = encodeURIComponent(String(id ?? '').trim());
-    return this.request(`/payments/${safe}`, {}, metaPartySkipTenant(opts));
+    const biz = opts.businessOwnerId != null ? String(opts.businessOwnerId).trim() : '';
+    return this.request(
+      `/payments/${safe}`,
+      {},
+      {
+        businessOwnerId: biz || undefined,
+        ...metaPartySkipTenant(opts),
+      },
+    );
   }
 
   async createPayment(data, businessOwnerId) {

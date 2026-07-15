@@ -28,10 +28,14 @@ import {
 } from "../utils/partyBillPrivacy";
 import {
   workspaceDisplayTitleForLot,
+  normalizedBusinessOwnerId,
 } from "../utils/businessWorkspace";
 import {
   countPendingBillRevisionRequests,
+  hasPendingBillRevisionRequest,
+  partyEditForLot,
 } from "../utils/partyLedgerNotifications";
+import { partyFacingLedgerDisplayLabel, partyFacingLotStatusLabel } from "../utils/partyFacingLabels";
 
 // From the party's perspective: dispatched = In Progress, received back = Completed
 // If party name is unknown, status should be Pending
@@ -50,11 +54,10 @@ const toTitleCase = (s) =>
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
     .join(" ");
 
-/** Party UI label: admin "pending" lot = not yet received by party for work. */
+/** Party UI label for ledger display statuses. */
 function partyFacingStatusLabel(displayStatus, isParty) {
   if (!isParty) return displayStatus;
-  if (displayStatus === "Pending") return "Lot Not Received";
-  return displayStatus;
+  return partyFacingLedgerDisplayLabel(displayStatus);
 }
 
 function pendingRevisionIsReal(pe) {
@@ -189,6 +192,7 @@ export default function PartyLedger() {
     parties,
     businessOwners,
     initialDataLoading,
+    patchLotImages,
   } = useApp();
 
   const { isAdmin, isParty, user } = useAuth();
@@ -239,8 +243,10 @@ export default function PartyLedger() {
   const samePartyId = (a, b) =>
     String(a ?? "").trim() === String(b ?? "").trim();
 
-  const lotWorkspaceOpts = (lot) =>
-    lot?.businessOwnerId ? { businessOwnerId: lot.businessOwnerId } : {};
+  const lotWorkspaceOpts = (lot) => {
+    const biz = normalizedBusinessOwnerId(lot?.businessOwnerId);
+    return biz ? { businessOwnerId: biz } : {};
+  };
 
   const normalizeLotKey = (v) => String(v ?? "").trim().toLowerCase();
   const lotNumberOf = (lot) => lot?.lotNo || lot?.lotNumber || "";
@@ -261,7 +267,10 @@ export default function PartyLedger() {
     const byWorkspace = (l) => {
       if (isParty || !isAdmin) return true;
       if (workspaceFilter === "All") return true;
-      return String(l.businessOwnerId ?? "").trim() === String(workspaceFilter).trim();
+      return (
+        normalizedBusinessOwnerId(l.businessOwnerId) ===
+        String(workspaceFilter).trim()
+      );
     };
 
     return ledgerLots
@@ -337,9 +346,18 @@ export default function PartyLedger() {
           displayStatus === statusFilter);
       return matchQ && matchP && matchS;
     });
-    return [...list].sort((a, b) =>
-      compareRowsByUpdatedNewestFirst(a, b, "lot"),
-    );
+    return [...list].sort((a, b) => {
+      if (ledgerLotsTab === "completed" && isAdmin) {
+        const aPend = hasPendingBillRevisionRequest(
+          partyEditForLot(ledgerPartyEdits, a),
+        );
+        const bPend = hasPendingBillRevisionRequest(
+          partyEditForLot(ledgerPartyEdits, b),
+        );
+        if (aPend !== bPend) return aPend ? -1 : 1;
+      }
+      return compareRowsByUpdatedNewestFirst(a, b, "lot");
+    });
   }, [
     assignedLots,
     search,
@@ -347,6 +365,7 @@ export default function PartyLedger() {
     ledgerLotsTab,
     statusFilter,
     ledgerPartyEdits,
+    isAdmin,
   ]);
 
   /** Same filters as the table but ignoring Other vs Completed tab — summary cards always reflect all matching lots. */
@@ -451,23 +470,25 @@ export default function PartyLedger() {
     }
   };
 
-  /** Open the lot-pictures modal (both admin & party) and hydrate the latest pictures. */
+  /** Open the lot-pictures modal immediately; hydrate pictures in the background (lotImages only). */
   const openLotPictures = async (lot) => {
     setPicsLot(lot);
     const maxPics = lotPicturesMax(lot);
-    const cached = ledgerPartyEdits[lot.id]?.lotImages;
-    setPicsImages((Array.isArray(cached) ? cached : []).slice(0, maxPics));
-    setPicsLoading(true);
+    const pe = ledgerPartyEdits[lot.id] || {};
+    const cached = Array.isArray(pe.lotImages) ? pe.lotImages.filter(Boolean) : [];
+    setPicsImages(cached.slice(0, maxPics));
+    setPicsLoading(cached.length === 0);
     try {
       const row = await apiService.getPartyEditByLotId(lot.id, {
-        includeReceipts: true,
-        businessOwnerId: lot.businessOwnerId || undefined,
+        includeLotImages: true,
+        businessOwnerId: normalizedBusinessOwnerId(lot.businessOwnerId) || undefined,
         skipTenantHeader: isParty,
       });
-      const imgs = Array.isArray(row?.lotImages) ? row.lotImages : [];
+      const imgs = Array.isArray(row?.lotImages) ? row.lotImages.filter(Boolean) : [];
       setPicsImages(imgs.slice(0, maxPics));
+      patchLotImages?.(lot.id, imgs);
     } catch {
-      // No party edit yet (404) or transient error — start from whatever was cached.
+      // No party edit yet (404) or transient error — keep cached / empty.
     } finally {
       setPicsLoading(false);
     }
@@ -727,23 +748,33 @@ export default function PartyLedger() {
     }
   }, [isParty, user?.partyId]);
 
-  /** Deep link: /party-ledger?lotId=… → show that lot and highlight the row. */
+  /** Deep link: /party-ledger?lotId=… → show that lot (and open bill review if billReview=1). */
   useEffect(() => {
     const lotId = String(searchParams.get("lotId") || "").trim();
-    if (!lotId || initialDataLoading) return;
+    if (!lotId) {
+      deepLinkAppliedRef.current = "";
+      return;
+    }
+    if (initialDataLoading) return;
     if (deepLinkAppliedRef.current === lotId) return;
 
     const lot = ledgerLots.find((l) => String(l.id) === lotId);
     if (!lot) return;
 
     deepLinkAppliedRef.current = lotId;
+    const openBillReview = String(searchParams.get("billReview") || "").trim() === "1";
     const status = getDisplayStatus(lot);
     if (status === "Completed") {
       setLedgerLotsTab("completed");
     } else {
       setLedgerLotsTab("other");
-      if (status === "Rejected" || status === "Pending" || status === "In Progress" || status === "Pending review") {
-        setStatusFilter(status === "Rejected" ? "All" : status);
+      if (
+        status === "Rejected" ||
+        status === "Pending" ||
+        status === "In Progress" ||
+        status === "Pending review"
+      ) {
+        setStatusFilter(status);
       } else {
         setStatusFilter("All");
       }
@@ -759,12 +790,29 @@ export default function PartyLedger() {
 
     const next = new URLSearchParams(searchParams);
     next.delete("lotId");
+    next.delete("billReview");
     setSearchParams(next, { replace: true });
+
+    const pe = ledgerPartyEdits[lot.id] || {};
+    const shouldOpenReview =
+      isAdmin &&
+      (openBillReview || hasPendingBillRevisionRequest(pe));
 
     const t = setTimeout(() => {
       const el = document.getElementById(`pl-lot-row-${lotId}`);
       if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
-    }, 250);
+      if (shouldOpenReview) {
+        setRevisionReview({
+          lot,
+          updateOwnerBill: true,
+          useCustomOwner: false,
+          customOwnerAmount: "",
+          rejectionNote: "",
+        });
+      } else if (isParty && (status === "Rejected" || status === "Pending review")) {
+        openEdit(lot);
+      }
+    }, 350);
     const clearHl = setTimeout(() => setHighlightLotId(null), 8000);
     return () => {
       clearTimeout(t);
@@ -774,8 +822,30 @@ export default function PartyLedger() {
     searchParams,
     setSearchParams,
     ledgerLots,
+    ledgerPartyEdits,
     initialDataLoading,
+    isAdmin,
   ]);
+
+  const jumpToPendingBillRevision = () => {
+    const pendingLot = ledgerLots.find(
+      (l) =>
+        getDisplayStatus(l) === "Completed" &&
+        hasPendingBillRevisionRequest(partyEditForLot(ledgerPartyEdits, l)),
+    );
+    if (!pendingLot) {
+      setLedgerLotsTab("completed");
+      return;
+    }
+    deepLinkAppliedRef.current = "";
+    setSearchParams(
+      {
+        lotId: String(pendingLot.id),
+        billReview: "1",
+      },
+      { replace: false },
+    );
+  };
 
   useEffect(() => {
     if (currentPage > totalPages) {
@@ -1332,9 +1402,9 @@ export default function PartyLedger() {
             type="button"
             className="btn btn-sm"
             style={{ background: "#f59e0b", color: "#fff", border: "none" }}
-            onClick={() => setLedgerLotsTab("completed")}
+            onClick={jumpToPendingBillRevision}
           >
-            View completed lots
+            Open request
           </button>
         </div>
       )}
@@ -1371,20 +1441,20 @@ export default function PartyLedger() {
             key: "pending",
             label: (
               <>
-                {isParty ? "Lot not received" : "Pending"}{" "}
+                {isParty ? "Not received yet" : "Pending"}{" "}
                 <strong style={{ fontSize: 14, color: "#d97706" }}>
                   ({totals.pending})
                 </strong>
               </>
             ),
-            value: isParty ? "Business has not dispatched to you" : "Awaiting dispatch",
+            value: isParty ? "Business has not sent this to you yet" : "Awaiting dispatch",
             color: "#d97706",
           },
           {
             key: "inprogress",
             label: (
               <>
-                In Progress{" "}
+                {isParty ? "With you / in progress" : "In Progress"}{" "}
                 <strong style={{ fontSize: 14, color: "#d97706" }}>
                   ({totals.inProgress})
                 </strong>
@@ -1552,8 +1622,12 @@ export default function PartyLedger() {
             <option value="All">All Statuses</option>
             <option value="Pending">{partyFacingStatusLabel("Pending", isParty)}</option>
             <option value="In Progress">In Progress</option>
-            <option value="Pending review">Pending review</option>
-            <option value="Rejected">Rejected</option>
+            <option value="Pending review">
+              {partyFacingStatusLabel("Pending review", isParty)}
+            </option>
+            <option value="Rejected">
+              {partyFacingStatusLabel("Rejected", isParty)}
+            </option>
           </select>
         )}
       </div>
@@ -1681,7 +1755,7 @@ export default function PartyLedger() {
                               border: "1px solid #FCD34D",
                             }}
                           >
-                            Pending review
+                            {partyFacingStatusLabel("Pending review", isParty)}
                           </span>
                         ) : displayStatus === "Pending" && isParty ? (
                           <span
@@ -1771,7 +1845,7 @@ export default function PartyLedger() {
                             lotId={l.id}
                             receipt={pe.receipt}
                             hasReceipt={pe.hasReceipt}
-                            businessOwnerId={l.businessOwnerId}
+                            businessOwnerId={normalizedBusinessOwnerId(l.businessOwnerId)}
                             lotLabel={l.lotNo || l.lotNumber}
                             onOpen={setReceiptPreview}
                             emptyLabel="No bill"
@@ -1847,11 +1921,19 @@ export default function PartyLedger() {
                           </div>
                           {(() => {
                             const picsMax = lotPicturesMax(l);
-                            const picsCount = Array.isArray(pe.lotImages)
-                              ? pe.lotImages.length
-                              : pe.hasLotImages
-                                ? null
-                                : 0;
+                            const hydrated =
+                              Array.isArray(pe.lotImages) && pe.lotImages.length > 0
+                                ? pe.lotImages.length
+                                : null;
+                            const counted = Number(pe.lotImagesCount);
+                            const picsCount =
+                              hydrated != null
+                                ? hydrated
+                                : Number.isFinite(counted) && counted >= 0
+                                  ? counted
+                                  : pe.hasLotImages
+                                    ? null
+                                    : 0;
                             return (
                           <button
                             type="button"
@@ -1881,8 +1963,8 @@ export default function PartyLedger() {
                             <span>Pictures</span>
                             <span
                               style={{
-                                background: picsCount > 0 ? "#4f46e5" : "#c7d2fe",
-                                color: picsCount > 0 ? "#fff" : "#4338ca",
+                                background: (picsCount == null || picsCount > 0) ? "#4f46e5" : "#c7d2fe",
+                                color: (picsCount == null || picsCount > 0) ? "#fff" : "#4338ca",
                                 borderRadius: 999,
                                 padding: "1px 7px",
                                 fontSize: 10,
@@ -2168,7 +2250,14 @@ export default function PartyLedger() {
                 <span style={{ color: "var(--text-muted)" }}>
                   {isParty ? "Business order status: " : "Ghausia Status: "}
                 </span>
-                <StatusBadge status={toTitleCase(editingLot.status)} />
+                <StatusBadge
+                  status={toTitleCase(editingLot.status)}
+                  label={
+                    isParty
+                      ? partyFacingLotStatusLabel(editingLot.status)
+                      : undefined
+                  }
+                />
               </div>
             </div>
           </div>

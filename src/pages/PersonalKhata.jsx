@@ -419,6 +419,58 @@ export default function PersonalKhata({ standalone = false } = {}) {
     return { receivable, payable };
   }, [scopedContacts, scopedEntries]);
 
+  const renderContactList = (activeId = null) => {
+    if (sortedContactList.length === 0) {
+      return (
+        <div className="pk-empty">
+          <div className="pk-empty-icon"><UserPlus size={24} /></div>
+          <p>No contacts yet.<br />Tap Add to start your ledger.</p>
+        </div>
+      );
+    }
+    return sortedContactList.map((c) => {
+      const { net } = contactBalance(c.id, entries);
+      const accent = net > 0 ? 'pk-contact-accent--in' : net < 0 ? 'pk-contact-accent--out' : 'pk-contact-accent--zero';
+      const amtClass = net > 0 ? 'pk-contact-amt-val--in' : net < 0 ? 'pk-contact-amt-val--out' : 'pk-contact-amt-val--zero';
+      return (
+        <Link
+          key={c.id}
+          to={`/personal-khata/contact/${c.id}`}
+          className={`pk-contact${activeId === c.id ? ' pk-contact--active' : ''}`}
+        >
+          <span className={`pk-contact-accent ${accent}`} aria-hidden />
+          <div className="pk-av" style={{ background: avatarColor(c.name) }}>
+            {initials(c.name)}
+          </div>
+          <div className="pk-contact-body">
+            <div className="pk-contact-name">{c.name}</div>
+            {c.phone ? <div className="pk-contact-phone">{c.phone}</div> : null}
+          </div>
+          <div className="pk-contact-amt">
+            <div className={`pk-contact-amt-val ${amtClass}`}>
+              {net === 0 ? '₨0' : `${net > 0 ? '' : '−'}${fmtMoney(net)}`}
+            </div>
+            <div className="pk-contact-amt-tag">
+              {net > 0 ? 'Get' : net < 0 ? 'Give' : 'Clear'}
+            </div>
+          </div>
+          <button
+            type="button"
+            className="pk-contact-del"
+            onClick={(ev) => {
+              ev.preventDefault();
+              ev.stopPropagation();
+              deleteContact(c.id);
+            }}
+            title="Delete"
+          >
+            <Trash2 size={16} />
+          </button>
+        </Link>
+      );
+    });
+  };
+
   const openAddContact = () => {
     setFormName('');
     setFormPhone('');
@@ -530,6 +582,41 @@ export default function PersonalKhata({ standalone = false } = {}) {
     if (!ok.isConfirmed) return;
     setContacts(contacts.filter((c) => c.id !== cid));
     setEntries(entries.filter((e) => e.contactId !== cid));
+    navigate('/personal-khata');
+  };
+
+  const deleteActiveBusiness = async () => {
+    if (businesses.length <= 1) {
+      await Swal.fire({
+        icon: 'info',
+        title: 'Cannot delete',
+        text: 'At least one business must remain.',
+      });
+      return;
+    }
+    const biz = businesses.find((b) => b.id === activeBusinessId);
+    if (!biz) return;
+    const bid = String(activeBusinessId || '').trim();
+    const bizContacts = contacts.filter((c) => String(c.businessId || bid) === bid);
+    const contactIds = new Set(bizContacts.map((c) => c.id));
+    const entryCount = entries.filter((e) => contactIds.has(e.contactId)).length;
+
+    const ok = await Swal.fire({
+      icon: 'warning',
+      title: `Delete “${biz.name}”?`,
+      html: `<p style="margin:0;font-size:14px;line-height:1.5">This removes <strong>${bizContacts.length}</strong> contact${bizContacts.length === 1 ? '' : 's'} and <strong>${entryCount}</strong> entr${entryCount === 1 ? 'y' : 'ies'} in this business.</p>`,
+      showCancelButton: true,
+      confirmButtonText: 'Delete business',
+      confirmButtonColor: '#dc2626',
+      cancelButtonText: 'Cancel',
+    });
+    if (!ok.isConfirmed) return;
+
+    const nextBiz = businesses.filter((b) => b.id !== activeBusinessId);
+    setBusinesses(nextBiz);
+    setContacts(contacts.filter((c) => String(c.businessId || bid) !== bid));
+    setEntries(entries.filter((e) => !contactIds.has(e.contactId)));
+    setActiveBusinessId(nextBiz[0]?.id || '');
     navigate('/personal-khata');
   };
 
@@ -713,6 +800,27 @@ export default function PersonalKhata({ standalone = false } = {}) {
     const runMap = runningBalances(entries, active.id);
 
     return (
+      <div className="pk-shell pk-shell--detail">
+        <aside className="pk-shell-master" aria-label="Contacts">
+          <div className="pk-shell-master-head">
+            <Link to="/personal-khata" className="pk-shell-master-back">
+              <ChevronLeft size={16} aria-hidden /> Ledger
+            </Link>
+            <span>Contacts ({sortedContactList.length})</span>
+          </div>
+          <div className="pk-shell-master-search">
+            <Search size={16} aria-hidden />
+            <input
+              placeholder="Search name or phone"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              aria-label="Search contacts"
+            />
+          </div>
+          <div className="pk-shell-master-list">
+            {renderContactList(active.id)}
+          </div>
+        </aside>
       <div className={`pk-wrap${standalone ? ' pk-standalone-view' : ' pk-wrap-embedded'}`}>
         <div className="pk-hero">
           <Link to="/personal-khata" className="pk-back">
@@ -1010,6 +1118,7 @@ export default function PersonalKhata({ standalone = false } = {}) {
 
         {pdfPreviewLayer}
       </div>
+      </div>
     );
   }
 
@@ -1023,6 +1132,7 @@ export default function PersonalKhata({ standalone = false } = {}) {
   }
 
   return (
+    <div className="pk-shell">
     <div className={`pk-app${khataEmbedded ? ' pk-app-embedded' : ''}`}>
       <header className="pk-header">
         <div className="pk-header-row">
@@ -1057,12 +1167,23 @@ export default function PersonalKhata({ standalone = false } = {}) {
               type="button"
               className="pk-biz-pill-btn"
               aria-label="New business"
+              title="Add business"
               onClick={() => {
                 setFormBizName('');
                 setBizModalOpen(true);
               }}
             >
               <Plus size={16} />
+            </button>
+            <button
+              type="button"
+              className="pk-biz-pill-btn pk-biz-pill-btn--danger"
+              aria-label="Delete business"
+              title={businesses.length <= 1 ? 'At least one business required' : 'Delete this business'}
+              disabled={businesses.length <= 1}
+              onClick={() => void deleteActiveBusiness()}
+            >
+              <Trash2 size={14} />
             </button>
           </div>
         </div>
@@ -1095,50 +1216,7 @@ export default function PersonalKhata({ standalone = false } = {}) {
             <UserPlus size={14} aria-hidden /> Add
           </button>
         </div>
-        {sortedContactList.length === 0 ? (
-          <div className="pk-empty">
-            <div className="pk-empty-icon"><UserPlus size={24} /></div>
-            <p>No contacts yet.<br />Tap Add to start your ledger.</p>
-          </div>
-        ) : (
-          sortedContactList.map((c) => {
-            const { net } = contactBalance(c.id, entries);
-            const accent = net > 0 ? 'pk-contact-accent--in' : net < 0 ? 'pk-contact-accent--out' : 'pk-contact-accent--zero';
-            const amtClass = net > 0 ? 'pk-contact-amt-val--in' : net < 0 ? 'pk-contact-amt-val--out' : 'pk-contact-amt-val--zero';
-            return (
-              <Link key={c.id} to={`/personal-khata/contact/${c.id}`} className="pk-contact">
-                <span className={`pk-contact-accent ${accent}`} aria-hidden />
-                <div className="pk-av" style={{ background: avatarColor(c.name) }}>
-                  {initials(c.name)}
-                </div>
-                <div className="pk-contact-body">
-                  <div className="pk-contact-name">{c.name}</div>
-                  {c.phone ? <div className="pk-contact-phone">{c.phone}</div> : null}
-                </div>
-                <div className="pk-contact-amt">
-                  <div className={`pk-contact-amt-val ${amtClass}`}>
-                    {net === 0 ? '₨0' : `${net > 0 ? '' : '−'}${fmtMoney(net)}`}
-                  </div>
-                  <div className="pk-contact-amt-tag">
-                    {net > 0 ? 'Get' : net < 0 ? 'Give' : 'Clear'}
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  className="pk-contact-del"
-                  onClick={(ev) => {
-                    ev.preventDefault();
-                    ev.stopPropagation();
-                    deleteContact(c.id);
-                  }}
-                  title="Delete"
-                >
-                  <Trash2 size={16} />
-                </button>
-              </Link>
-            );
-          })
-        )}
+        {renderContactList()}
       </section>
 
       <div className={`pk-home-bar${khataEmbedded ? ' pk-home-bar-sidebar' : ''}`}>
@@ -1205,7 +1283,7 @@ export default function PersonalKhata({ standalone = false } = {}) {
               style={{ width: '100%', marginBottom: 14, padding: 12, borderRadius: 12, border: '1px solid #e2e8f0' }}
               value={formName}
               onChange={(e) => setFormName(e.target.value)}
-              placeholder="e.g. Zeeshan, C Shafiq"
+              placeholder="Contact name"
             />
             <label style={{ display: 'block', fontSize: 12, fontWeight: 700, marginBottom: 6, color: '#475569' }}>
               Phone
@@ -1318,6 +1396,18 @@ export default function PersonalKhata({ standalone = false } = {}) {
       )}
 
       {pdfPreviewLayer}
+    </div>
+    <aside className="pk-shell-detail-empty" aria-label="Ledger detail">
+      <div className="pk-shell-detail-empty-inner">
+        <div className="pk-shell-detail-empty-icon" aria-hidden>
+          <UserPlus size={28} />
+        </div>
+        <p className="pk-shell-detail-empty-title">Select a contact</p>
+        <p className="pk-shell-detail-empty-sub">
+          Open a person on the left to see balances and entries here.
+        </p>
+      </div>
+    </aside>
     </div>
   );
 }

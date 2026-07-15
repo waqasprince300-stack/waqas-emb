@@ -42,7 +42,7 @@ export function FormGroup({ label, children, half }) {
   );
 }
 
-export function StatusBadge({ status }) {
+export function StatusBadge({ status, label }) {
   const map = {
     'Pending':       'badge badge-pending',
     'Dispatched':    'badge badge-dispatched',
@@ -52,7 +52,7 @@ export function StatusBadge({ status }) {
     'Pending Approval': 'badge badge-inprogress',
     'Rejected':       'badge badge-dispatched',
   };
-  return <span className={map[status] || 'badge'}>{status}</span>;
+  return <span className={map[status] || 'badge'}>{label || status}</span>;
 }
 
 export function ActionBtn({ variant = 'edit', onClick }) {

@@ -1,5 +1,8 @@
 /** Consistent Mongo / string IDs for workspaces (business owners). */
 export function normalizedBusinessOwnerId(raw) {
+  if (raw != null && typeof raw === "object" && !Array.isArray(raw)) {
+    return String(raw._id ?? raw.id ?? "").trim();
+  }
   return String(raw ?? "").trim();
 }
 

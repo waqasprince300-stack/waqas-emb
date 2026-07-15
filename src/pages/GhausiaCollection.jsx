@@ -904,6 +904,16 @@ export default function GhausiaCollection() {
     [visibleLots],
   );
   const otherLotsCount = visibleLots.length - completedLotsCount;
+  const othersTabStatusLabel = statusFilter === 'All'
+    ? 'Others'
+    : statusFilter.split(' ').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+  const othersTabCount = useMemo(() => {
+    if (statusFilter === 'All') return otherLotsCount;
+    return visibleLots.filter((l) => l.status === statusFilter).length;
+  }, [visibleLots, statusFilter, otherLotsCount]);
+  const othersTabHint = statusFilter === 'All'
+    ? 'Pending, dispatched, and received back (not completed)'
+    : `${othersTabStatusLabel} lots in the current filters`;
 
   const billable = useMemo(
     () => [...visibleLots.filter((l) => l.status === 'received back')].sort((a, b) =>
@@ -1645,7 +1655,7 @@ export default function GhausiaCollection() {
         }}
       >
         {[
-          { id: 'others', label: 'Others', count: otherLotsCount, hint: 'Pending, dispatched, and received back (not completed)' },
+          { id: 'others', label: othersTabStatusLabel, count: othersTabCount, hint: othersTabHint },
           { id: 'completed', label: 'Completed', count: completedLotsCount, hint: 'Lots marked completed' },
         ].map((tab) => (
           <button

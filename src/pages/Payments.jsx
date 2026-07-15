@@ -120,11 +120,20 @@ function PaymentSlipCell({ payment, isParty }) {
       try {
         const full = await apiService.getPayment(payment.id ?? payment._id, {
           skipTenantHeader: isParty,
+          businessOwnerId: isParty
+            ? undefined
+            : String(payment.businessOwnerId?._id ?? payment.businessOwnerId ?? "").trim() ||
+              undefined,
         });
         src = String(full?.receipt || "");
         setLoaded(src);
-      } catch {
+      } catch (err) {
         src = "";
+        await Swal.fire({
+          icon: "error",
+          title: "Could not load slip",
+          text: err?.message || "Please try again.",
+        });
       } finally {
         setLoading(false);
       }

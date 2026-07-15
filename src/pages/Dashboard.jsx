@@ -6,6 +6,10 @@ import { StatusBadge } from '../components/UI';
 import LoaderDashboard from '../components/LoaderDashboard';
 import { DateRangeSelect, isWithinDateRange, latestDateFrom, compareRowsByUpdatedNewestFirst } from '../utils/dateFilters';
 import { workspaceDisplayTitleForLot } from '../utils/businessWorkspace';
+import {
+  partyFacingLotStatusLabel,
+  lotStatusBadgeKey,
+} from '../utils/partyFacingLabels';
 
 function lotBelongsToPartyUser(lot, partyId, partyName) {
   const pid = String(partyId || '').trim();
@@ -24,9 +28,6 @@ function paymentBelongsToPartyUser(payment, partyId, partyName) {
   }
   return String(payment.party || '').trim() === pname;
 }
-
-const toTitleCase = (s) =>
-  String(s || '').split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
 
 export default function Dashboard() {
   const {
@@ -110,25 +111,25 @@ export default function Dashboard() {
         label: 'Active work',
         value: partyInProgressRough,
         color: '#0284c7',
-        sub: 'Pending + dispatched + in progress',
+        sub: 'Not received yet + with you + in progress',
       },
       {
-        label: 'Needs review / rework',
+        label: 'Needs your action',
         value: partyNeedsAttention,
         color: '#ca8a04',
-        sub: 'Awaiting approval + rejected',
+        sub: 'Submitted for review + needs rework',
       },
       {
-        label: 'Approved finished',
+        label: 'Finished & delivered',
         value: partyApprovedDone,
         color: '#15803d',
-        sub: 'Received back + completed',
+        sub: 'Delivered to business + completed',
       },
       {
         label: 'Paid to you',
         display: `₨${paidTotal.toLocaleString()}`,
         color: '#166534',
-        sub: 'From business (payments marked Paid)',
+        sub: 'Payments from the business',
       },
     ];
   }, [isParty, scopedLots, scopedPayments]);
@@ -455,7 +456,16 @@ export default function Dashboard() {
                         shortIdFallback: isParty,
                       })}
                     </td>
-                    <td><StatusBadge status={toTitleCase(l.status)} /></td>
+                    <td>
+                      <StatusBadge
+                        status={lotStatusBadgeKey(l.status)}
+                        label={
+                          isParty
+                            ? partyFacingLotStatusLabel(l.status)
+                            : undefined
+                        }
+                      />
+                    </td>
                   </tr>
                 ))}
               </tbody>

@@ -105,6 +105,13 @@
   padding: max(12px, env(safe-area-inset-top)) 12px 24px;
 }
 
+@media (min-width: 1024px) {
+  .pk-standalone-shell {
+    padding-left: 20px;
+    padding-right: 20px;
+  }
+}
+
 /* Personal Khata inside main app (admin / party logged-in) */
 .app-main.app-main--khata {
   background: #f0f2f5;
@@ -112,6 +119,12 @@
 
 .app-main.app-main--khata .app-main-inner {
   max-width: 520px;
+}
+
+@media (min-width: 1024px) {
+  .app-main.app-main--khata .app-main-inner {
+    max-width: 1120px;
+  }
 }
 
 @media (max-width: 768px) {

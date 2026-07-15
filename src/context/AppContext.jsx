@@ -136,19 +136,48 @@ const mergePartyEditsFromRemote = (remotePartyEdits, prev = {}) => {
     const remote = incoming[lotId];
     const existing = prev[lotId];
     const remoteReceipt = remote.receipt;
+    const keptReceipt =
+      remoteReceipt != null && remoteReceipt !== ''
+        ? remoteReceipt
+        : (existing?.receipt ?? '');
+
     // Lot pictures are excluded from list payloads; keep the hydrated copy when the remote omits them.
-    const remoteLotImages = Array.isArray(remote.lotImages) ? remote.lotImages : undefined;
-    next[lotId] = {
+    const remoteHasLotImagesArray = Array.isArray(remote.lotImages);
+    const remoteLotImages = remoteHasLotImagesArray ? remote.lotImages : undefined;
+    const remoteCount = Number(remote.lotImagesCount);
+    const existingCount = Number(existing?.lotImagesCount);
+    const hydratedCount = Array.isArray(existing?.lotImages) ? existing.lotImages.length : 0;
+
+    const lotImagesCount = remoteHasLotImagesArray
+      ? remoteLotImages.length
+      : Number.isFinite(remoteCount)
+        ? remoteCount
+        : Number.isFinite(existingCount)
+          ? existingCount
+          : hydratedCount;
+
+    const merged = {
       ...remote,
-      receipt:
-        remoteReceipt != null && remoteReceipt !== ''
-          ? remoteReceipt
-          : (existing?.receipt ?? ''),
-      lotImages:
-        remoteLotImages !== undefined
-          ? remoteLotImages
-          : (existing?.lotImages ?? []),
+      receipt: keptReceipt,
+      lotImagesCount,
+      hasLotImages:
+        remote.hasLotImages === true ||
+        lotImagesCount > 0 ||
+        existing?.hasLotImages === true,
+      hasReceipt:
+        remote.hasReceipt === true ||
+        (typeof keptReceipt === 'string' && keptReceipt.trim() !== '') ||
+        existing?.hasReceipt === true,
     };
+
+    if (remoteLotImages !== undefined) {
+      merged.lotImages = remoteLotImages;
+    } else if (Array.isArray(existing?.lotImages) && existing.lotImages.length > 0) {
+      merged.lotImages = existing.lotImages;
+    }
+    // Do NOT default to [] — empty array made the UI show 0/N and ignore hasLotImages.
+
+    next[lotId] = merged;
   });
   return next;
 };
@@ -293,10 +322,21 @@ export function AppProvider({ children }) {
         const incomingLotImages = Array.isArray(row.lotImages) ? row.lotImages : undefined;
         if (!incomingReceipt && incomingLotImages === undefined) return;
         const existing = next[lotId] || { lotId };
+        const lotImagesCount = incomingLotImages !== undefined
+          ? incomingLotImages.length
+          : (Number.isFinite(Number(row.lotImagesCount))
+            ? Number(row.lotImagesCount)
+            : existing.lotImagesCount);
         next[lotId] = {
           ...existing,
-          ...(incomingReceipt ? { receipt: incomingReceipt } : {}),
-          ...(incomingLotImages !== undefined ? { lotImages: incomingLotImages } : {}),
+          ...(incomingReceipt ? { receipt: incomingReceipt, hasReceipt: true } : {}),
+          ...(incomingLotImages !== undefined
+            ? {
+                lotImages: incomingLotImages,
+                lotImagesCount,
+                hasLotImages: incomingLotImages.length > 0,
+              }
+            : {}),
         };
       });
       return next;
@@ -366,7 +406,28 @@ export function AppProvider({ children }) {
     const merge = (prev) => {
       const existing = prev[lotId];
       if (existing?.receipt === receipt) return prev;
-      return { ...prev, [lotId]: { ...(existing || { lotId }), receipt } };
+      return { ...prev, [lotId]: { ...(existing || { lotId }), receipt, hasReceipt: true } };
+    };
+    setPartyEdits(merge);
+    if (user?.role === 'admin') setAdminReportingPartyEdits(merge);
+    if (user?.role === 'party') setPartyCrossPartyEdits(merge);
+  }, [user?.role]);
+
+  /** Cache lot pictures (and count) after lazy fetch for the pictures modal. */
+  const patchLotImages = useCallback((lotId, lotImages) => {
+    if (!lotId || !Array.isArray(lotImages)) return;
+    const count = lotImages.length;
+    const merge = (prev) => {
+      const existing = prev[lotId] || { lotId };
+      return {
+        ...prev,
+        [lotId]: {
+          ...existing,
+          lotImages,
+          lotImagesCount: count,
+          hasLotImages: count > 0,
+        },
+      };
     };
     setPartyEdits(merge);
     if (user?.role === 'admin') setAdminReportingPartyEdits(merge);
@@ -731,11 +792,11 @@ export function AppProvider({ children }) {
       if (lotId) pendingLotIds.add(lotId);
 
       const action = payload && payload.action != null ? String(payload.action) : '';
-      if (action === 'lot_rejected' || action === 'lot_pending_review') {
+      if (action === 'lot_rejected' || action === 'lot_pending_review' || action === 'bill_revision_request' || action === 'bill_revision_approved' || action === 'bill_revision_rejected' || action === 'payment_recorded') {
         setPendingLotNotice({
           action,
-          lotId,
-          linkPath: payload.linkPath || '',
+          lotId: lotId || (payload.paymentId != null ? String(payload.paymentId) : ''),
+          linkPath: payload.linkPath || (action === 'payment_recorded' ? '/payments' : ''),
           at: payload.at || Date.now(),
         });
         void refreshNotifications();
@@ -989,10 +1050,17 @@ export function AppProvider({ children }) {
     const { businessOwnerId } = opts;
     try {
       const result = await trackWrite(apiService.upsertPartyEditByLotId(lotId, data, businessOwnerId));
+      const imgs = Array.isArray(result.lotImages) ? result.lotImages : undefined;
+      const lotImagesCount = imgs !== undefined
+        ? imgs.length
+        : (Number.isFinite(Number(result.lotImagesCount)) ? Number(result.lotImagesCount) : undefined);
       const normalizedEdit = {
         ...result,
         completeDate: result.completeDate ? normalizeDateString(result.completeDate) : '',
         allotDate: result.allotDate ? normalizeDateString(result.allotDate) : '',
+        ...(lotImagesCount !== undefined
+          ? { lotImagesCount, hasLotImages: lotImagesCount > 0 }
+          : {}),
       };
       setPartyEdits((prev) => ({ ...prev, [lotId]: normalizedEdit }));
       if (user?.role === 'admin') {
@@ -1053,7 +1121,7 @@ export function AppProvider({ children }) {
       parties, addParty, updateParty, deleteParty,
       ghausiaLots, addLot, updateLot, deleteLot,
       approveLotCompletion, rejectLotCompletion,
-    partyEdits, updatePartyEdit, patchLotReceipt, loadLedgerReceipts, ledgerReceiptsVersion,
+    partyEdits, updatePartyEdit, patchLotReceipt, patchLotImages, loadLedgerReceipts, ledgerReceiptsVersion,
       payments, addPayment, deletePayment,
       reportingLots, reportingPayments, reportingPartyEdits,
       partyCrossLots, partyCrossPartyEdits, partyCrossPayments,
@@ -1082,7 +1150,7 @@ export function AppProvider({ children }) {
     parties, addParty, updateParty, deleteParty,
     ghausiaLots, addLot, updateLot, deleteLot,
     approveLotCompletion, rejectLotCompletion,
-    partyEdits, updatePartyEdit, patchLotReceipt, loadLedgerReceipts, ledgerReceiptsVersion,
+    partyEdits, updatePartyEdit, patchLotReceipt, patchLotImages, loadLedgerReceipts, ledgerReceiptsVersion,
     payments, addPayment, deletePayment,
     reportingLots, reportingPayments, reportingPartyEdits,
     partyCrossLots, partyCrossPartyEdits, partyCrossPayments,

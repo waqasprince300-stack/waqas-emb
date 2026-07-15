@@ -17,6 +17,31 @@ function formatWhen(iso) {
   });
 }
 
+function resolveLinkPath(n) {
+  const path = String(n?.linkPath || '').trim();
+  if (path.startsWith('/')) return path;
+  const lotId = String(n?.lotId || '').trim();
+  if (!lotId) return '';
+  const type = String(n?.type || '').trim();
+  if (type === 'lot_pending_review') {
+    return `/review-lots?lotId=${encodeURIComponent(lotId)}`;
+  }
+  if (type === 'bill_revision_request') {
+    return `/party-ledger?lotId=${encodeURIComponent(lotId)}&billReview=1`;
+  }
+  if (
+    type === 'lot_rejected' ||
+    type === 'bill_revision_approved' ||
+    type === 'bill_revision_rejected'
+  ) {
+    return `/party-ledger?lotId=${encodeURIComponent(lotId)}`;
+  }
+  if (type === 'payment_recorded') {
+    return '/payments';
+  }
+  return '';
+}
+
 /** Bell + dropdown inbox for lot reject / pending-review notifications. */
 export default function NotificationBell() {
   const { isAuthenticated, isAdmin, isParty, isSuperAdmin, isPersonalKhata } = useAuth();
@@ -30,6 +55,7 @@ export default function NotificationBell() {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const wrapRef = useRef(null);
+  const panelRef = useRef(null);
 
   const show =
     isAuthenticated &&
@@ -38,26 +64,44 @@ export default function NotificationBell() {
     (isAdmin || isParty);
 
   useEffect(() => {
-    if (!show) return undefined;
+    if (!show || !open) return undefined;
     const onDoc = (e) => {
-      if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false);
+      const t = e.target;
+      if (wrapRef.current?.contains(t)) return;
+      if (panelRef.current?.contains(t)) return;
+      setOpen(false);
     };
-    document.addEventListener('mousedown', onDoc);
-    return () => document.removeEventListener('mousedown', onDoc);
-  }, [show]);
+    // Use click (not mousedown) so item/button handlers run first.
+    document.addEventListener('click', onDoc);
+    return () => document.removeEventListener('click', onDoc);
+  }, [show, open]);
 
   if (!show) return null;
 
   const unread = Number(notificationUnreadCount) || 0;
   const list = Array.isArray(notifications) ? notifications : [];
+  // Inbox shows unread only — once read (or mark-all), they leave the bell list.
+  const visibleList = list.filter((n) => !n.readAt);
 
-  const openItem = async (n) => {
-    if (!n?.readAt && n?.id) {
-      await markNotificationRead(n.id);
-    }
+  const openItem = async (n, e) => {
+    e?.preventDefault?.();
+    e?.stopPropagation?.();
+    const id = n?.id || n?._id;
+    const path = resolveLinkPath(n);
     setOpen(false);
-    const path = String(n?.linkPath || '').trim();
-    if (path.startsWith('/')) navigate(path);
+    if (!n?.readAt && id) {
+      void markNotificationRead(id);
+    }
+    if (path.startsWith('/')) {
+      navigate(path);
+    }
+  };
+
+  const onMarkAll = async (e) => {
+    e?.preventDefault?.();
+    e?.stopPropagation?.();
+    await markAllNotificationsRead();
+    setOpen(false);
   };
 
   return (
@@ -67,9 +111,13 @@ export default function NotificationBell() {
         className="app-notif-bell"
         aria-label={unread ? `${unread} unread notifications` : 'Notifications'}
         title="Notifications"
-        onClick={() => {
-          setOpen((v) => !v);
-          if (!open) void refreshNotifications();
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen((v) => {
+            const next = !v;
+            if (!v) void refreshNotifications();
+            return next;
+          });
         }}
         style={{
           position: 'relative',
@@ -115,7 +163,11 @@ export default function NotificationBell() {
       {open &&
         createPortal(
           <div
+            ref={panelRef}
             className="app-notif-panel"
+            role="dialog"
+            aria-label="Notifications"
+            onClick={(e) => e.stopPropagation()}
             style={{
               position: 'fixed',
               top: 56,
@@ -146,7 +198,7 @@ export default function NotificationBell() {
               {unread > 0 && (
                 <button
                   type="button"
-                  onClick={() => void markAllNotificationsRead()}
+                  onClick={(e) => void onMarkAll(e)}
                   style={{
                     border: 'none',
                     background: 'transparent',
@@ -161,48 +213,45 @@ export default function NotificationBell() {
               )}
             </div>
             <div style={{ overflowY: 'auto', flex: 1 }}>
-              {list.length === 0 ? (
+              {visibleList.length === 0 ? (
                 <p style={{ padding: 16, margin: 0, fontSize: 13, color: '#64748b' }}>
-                  No notifications yet.
+                  {list.length === 0 ? 'No notifications yet.' : 'All caught up — no unread notifications.'}
                 </p>
               ) : (
-                list.map((n) => {
-                  const unreadRow = !n.readAt;
-                  return (
-                    <button
-                      key={n.id || n._id}
-                      type="button"
-                      onClick={() => void openItem(n)}
+                visibleList.map((n) => (
+                  <button
+                    key={n.id || n._id}
+                    type="button"
+                    onClick={(e) => void openItem(n, e)}
+                    style={{
+                      display: 'block',
+                      width: '100%',
+                      textAlign: 'left',
+                      border: 'none',
+                      borderBottom: '1px solid #f1f5f9',
+                      background: '#eff6ff',
+                      padding: '12px 14px',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <div
                       style={{
-                        display: 'block',
-                        width: '100%',
-                        textAlign: 'left',
-                        border: 'none',
-                        borderBottom: '1px solid #f1f5f9',
-                        background: unreadRow ? '#eff6ff' : '#fff',
-                        padding: '12px 14px',
-                        cursor: 'pointer',
+                        fontSize: 13,
+                        fontWeight: 700,
+                        color: '#0f172a',
+                        marginBottom: 4,
                       }}
                     >
-                      <div
-                        style={{
-                          fontSize: 13,
-                          fontWeight: unreadRow ? 700 : 600,
-                          color: '#0f172a',
-                          marginBottom: 4,
-                        }}
-                      >
-                        {n.title}
-                      </div>
-                      <div style={{ fontSize: 12, color: '#475569', lineHeight: 1.4 }}>
-                        {n.body}
-                      </div>
-                      <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 6 }}>
-                        {formatWhen(n.createdAt)}
-                      </div>
-                    </button>
-                  );
-                })
+                      {n.title}
+                    </div>
+                    <div style={{ fontSize: 12, color: '#475569', lineHeight: 1.4 }}>
+                      {n.body}
+                    </div>
+                    <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 6 }}>
+                      {formatWhen(n.createdAt)}
+                    </div>
+                  </button>
+                ))
               )}
             </div>
           </div>,
@@ -213,7 +262,7 @@ export default function NotificationBell() {
 }
 
 /**
- * Shows a toast when realtime payload has lot_rejected / lot_pending_review for this role.
+ * Shows a toast when realtime payload has lot_rejected / pending review / bill revision for this role.
  * Must render inside BrowserRouter.
  */
 export function LotNotificationListener() {
@@ -228,8 +277,14 @@ export function LotNotificationListener() {
     if (shownRef.current === key) return;
 
     const action = String(pendingLotNotice.action || '');
-    const forParty = action === 'lot_rejected' && isParty;
-    const forAdmin = action === 'lot_pending_review' && isAdmin;
+    const forParty =
+      (action === 'lot_rejected' ||
+        action === 'bill_revision_approved' ||
+        action === 'bill_revision_rejected' ||
+        action === 'payment_recorded') &&
+      isParty;
+    const forAdmin =
+      (action === 'lot_pending_review' || action === 'bill_revision_request') && isAdmin;
     if (!forParty && !forAdmin) {
       clearPendingLotNotice?.();
       return;
@@ -239,17 +294,40 @@ export function LotNotificationListener() {
     void refreshNotifications?.();
 
     const title =
-      action === 'lot_rejected' ? 'Lot rejected' : 'Lot awaiting your review';
+      action === 'lot_rejected'
+        ? 'Lot rejected'
+        : action === 'bill_revision_request'
+          ? 'Bill change request'
+          : action === 'bill_revision_approved'
+            ? 'Bill change approved'
+            : action === 'bill_revision_rejected'
+              ? 'Bill change rejected'
+              : action === 'payment_recorded'
+                ? 'New payment'
+                : 'Lot awaiting your review';
     const text =
       action === 'lot_rejected'
         ? 'A lot was rejected. Open it from Party Ledger to fix and resubmit.'
-        : 'A party submitted a lot for completion approval.';
-    const linkPath = String(pendingLotNotice.linkPath || '').trim();
+        : action === 'bill_revision_request'
+          ? 'A party requested a bill change. Open Party Ledger to review that lot.'
+          : action === 'bill_revision_approved'
+            ? 'Admin approved your bill change. Open Party Ledger to see the updated amount.'
+            : action === 'bill_revision_rejected'
+              ? 'Admin rejected your bill change. Open Party Ledger to review.'
+              : action === 'payment_recorded'
+                ? 'Admin recorded a payment for your account. Open Payments to review.'
+                : 'A party submitted a lot for completion approval.';
+    const linkPath = String(pendingLotNotice.linkPath || '').trim() || (action === 'payment_recorded' ? '/payments' : '');
 
     Swal.fire({
       toast: true,
       position: 'top-end',
-      icon: action === 'lot_rejected' ? 'warning' : 'info',
+      icon:
+        action === 'lot_rejected' || action === 'bill_revision_rejected'
+          ? 'warning'
+          : action === 'bill_revision_approved' || action === 'payment_recorded'
+            ? 'success'
+            : 'info',
       title,
       text,
       showConfirmButton: Boolean(linkPath),
