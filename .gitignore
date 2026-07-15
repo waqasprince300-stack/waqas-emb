@@ -22,3 +22,7 @@ yarn-error.log*
 # IDEs
 .vscode
 .idea
+
+# local agent / preview screenshots
+.tmp-preview/
+
