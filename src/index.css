@@ -994,6 +994,12 @@ tbody tr:last-child td {
   border: 1px solid #fecaca;
 }
 
+.dash-pay-type--bill {
+  background: #fffbeb;
+  color: #92400e;
+  border: 1px solid #fcd34d;
+}
+
 .dash-recent-amount {
   flex-shrink: 0;
   font-weight: 700;

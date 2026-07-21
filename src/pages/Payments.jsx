@@ -16,6 +16,11 @@ import {
   getAdminLedgerOrBusinessBill,
   getPartyLedgerBillNumeric,
 } from "../utils/partyBillPrivacy";
+import {
+  adminPaymentPartyLabel,
+  adminPaymentTypeLabel,
+  isOwnerBillSettlement,
+} from "../utils/paymentDisplay";
 
 function normalizeLotKey(linkedLot) {
   return String(linkedLot || "")
@@ -323,7 +328,7 @@ export default function Payments() {
         } else if (typeFilter === "Bill") {
           if (isParty) {
             if (pt !== "Bill") return false;
-          } else if (!(p.type === "Paid" && String(p.party || "").toLowerCase() === "owner")) {
+          } else if (!isOwnerBillSettlement(p)) {
             return false;
           }
         } else if (typeFilter === "Received") {
@@ -331,8 +336,9 @@ export default function Payments() {
         } else if (typeFilter === "Paid") {
           if (isParty) {
             if (pt !== "Paid") return false;
-          } else if (p.type !== "Paid") {
-            return false;
+          } else {
+            // Real party payouts only — owner bill settlements belong under "Bill".
+            if (p.type !== "Paid" || isOwnerBillSettlement(p)) return false;
           }
         }
         if (isAdmin && ownerNameFilter !== "All") {
@@ -1102,16 +1108,18 @@ export default function Payments() {
                   const pt = presentationType(p, isParty);
                   const partyReceived = isParty && pt === "Received";
                   const partyWorkBill = isParty && pt === "Bill";
+                  const ownerBill = !isParty && isOwnerBillSettlement(p);
                   const badgeGreen = isParty ? partyReceived : p.type === "Received";
 
-                  const typeLabel =
-                    !isParty &&
-                    String(p.party || "").toLowerCase() === "owner" &&
-                    p.type === "Paid"
-                      ? "Bill"
-                      : pt === "Bill" && isParty
-                        ? "Work bill"
-                        : pt;
+                  const typeLabel = isParty
+                    ? pt === "Bill"
+                      ? "Work bill"
+                      : pt
+                    : adminPaymentTypeLabel(p);
+
+                  const partyLabel = isParty
+                    ? String(p.party || "—")
+                    : adminPaymentPartyLabel(p, businessOwners);
 
                   const amt = Number(p.amount ?? 0);
                   const showPlus = isParty
@@ -1136,9 +1144,23 @@ export default function Payments() {
                     <td>
                       <span
                         style={{
-                          background: badgeGreen ? "#F0FDF4" : "#FEF2F2",
-                          color: badgeGreen ? "#166534" : "#991B1B",
-                          border: `1px solid ${badgeGreen ? "#BBF7D0" : "#FECACA"}`,
+                          background: ownerBill
+                            ? "#FFFBEB"
+                            : badgeGreen
+                              ? "#F0FDF4"
+                              : "#FEF2F2",
+                          color: ownerBill
+                            ? "#92400E"
+                            : badgeGreen
+                              ? "#166534"
+                              : "#991B1B",
+                          border: `1px solid ${
+                            ownerBill
+                              ? "#FCD34D"
+                              : badgeGreen
+                                ? "#BBF7D0"
+                                : "#FECACA"
+                          }`,
                           borderRadius: 20,
                           padding: "3px 12px",
                           fontSize: 12,
@@ -1149,7 +1171,7 @@ export default function Payments() {
                       </span>
                     </td>
                     {!isParty && (
-                      <td style={{ fontWeight: 500 }}>{String(p.party || "—")}</td>
+                      <td style={{ fontWeight: 500 }}>{partyLabel}</td>
                     )}
                     {isAdmin && (
                       <td style={{ color: "var(--text-secondary)", fontSize: 13 }}>

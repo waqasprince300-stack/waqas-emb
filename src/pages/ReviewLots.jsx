@@ -33,6 +33,25 @@ function pendingRevisionIsReal(pe) {
   return Number(pr.fromAmount) !== Number(pr.toAmount);
 }
 
+/** Party submit moment for Review Lots (date + time). */
+function formatReviewSubmittedAt(lot, pe) {
+  const raw =
+    lot?.pendingReviewSubmittedAt ||
+    pe?.updatedAt ||
+    lot?.updatedAt ||
+    "";
+  if (!raw) return null;
+  const d = new Date(raw);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 function needsOwnerBillingChoice(lot, pe, payments) {
   return hasOwnerReceivedForLot(lot, payments) || pendingRevisionIsReal(pe);
 }
@@ -379,7 +398,7 @@ export default function ReviewLots() {
                 <th>Design</th>
                 <th>Party</th>
                 <th>Collection</th>
-                <th>Complete date</th>
+                <th>Submitted</th>
                 <th style={{ textAlign: "right" }}>Amount (₨)</th>
                 <th>Receipt</th>
                 <th>Notes</th>
@@ -396,12 +415,7 @@ export default function ReviewLots() {
               ) : (
                 pendingLots.map((l) => {
                   const pe = reportingPartyEdits[l.id] || {};
-                  const completeYmd =
-                    pe.completeDate
-                      ? String(pe.completeDate).slice(0, 10)
-                      : l.receivedBackDate
-                        ? String(l.receivedBackDate).slice(0, 10)
-                        : "—";
+                  const submittedLabel = formatReviewSubmittedAt(l, pe);
                   return (
                     <tr
                       key={l.id}
@@ -418,7 +432,12 @@ export default function ReviewLots() {
                       <td style={{ fontSize: 13, color: "var(--text-secondary)" }}>
                         {businessName(l.businessOwnerId)}
                       </td>
-                      <td>{completeYmd}</td>
+                      <td
+                        style={{ fontSize: 12.5, color: "var(--text-secondary)", whiteSpace: "nowrap" }}
+                        title="When the party submitted this lot for review"
+                      >
+                        {submittedLabel || "—"}
+                      </td>
                       <td style={{ textAlign: "right", fontWeight: 700 }}>
                         ₨{peBill(l.id, l).toLocaleString()}
                       </td>

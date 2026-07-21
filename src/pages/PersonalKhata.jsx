@@ -13,6 +13,7 @@ import {
   Search,
   Share2,
   Trash2,
+  ContactRound,
   UserPlus,
   X,
 } from 'lucide-react';
@@ -32,6 +33,12 @@ import {
   downloadContactLedgerPdf,
 } from '../utils/personalKhataPdf';
 import { buildKhataShareUrl } from '../utils/personalKhataShare';
+import {
+  extractPhoneFromText,
+  isContactPickerSupported,
+  pickDeviceContact,
+  readPhoneFromClipboard,
+} from '../utils/pickDeviceContact';
 import { useAuth } from '../context/AuthContext';
 import { apiService } from '../services/api';
 import './personalKhata.css';
@@ -183,6 +190,9 @@ export default function PersonalKhata({ standalone = false } = {}) {
 
   const [formName, setFormName] = useState('');
   const [formPhone, setFormPhone] = useState('');
+  const [deviceContactSupported, setDeviceContactSupported] = useState(false);
+  const [pickingDeviceContact, setPickingDeviceContact] = useState(false);
+  const [pastingPhone, setPastingPhone] = useState(false);
   const [formAmount, setFormAmount] = useState('');
   const [formDesc, setFormDesc] = useState('');
   const [formContactId, setFormContactId] = useState('');
@@ -474,7 +484,102 @@ export default function PersonalKhata({ standalone = false } = {}) {
   const openAddContact = () => {
     setFormName('');
     setFormPhone('');
+    setPickingDeviceContact(false);
+    setPastingPhone(false);
+    setDeviceContactSupported(isContactPickerSupported());
     setContactModal(true);
+  };
+
+  const pastePhoneFromClipboard = async () => {
+    if (pastingPhone || pickingDeviceContact) return;
+    setPastingPhone(true);
+    try {
+      const phone = await readPhoneFromClipboard();
+      setFormPhone(phone);
+    } catch (err) {
+      if (err?.code === 'EMPTY') {
+        await Swal.fire({
+          icon: 'info',
+          title: 'No number in clipboard',
+          html: 'iPhone: <b>Contacts</b> → person → number pe <b>Copy</b> → yahan <b>Paste number</b>.',
+        });
+        return;
+      }
+      await Swal.fire({
+        icon: 'info',
+        title: 'Paste number',
+        html: 'Phone field pe long-press → <b>Paste</b>, ya pehle Contacts se number copy karein.',
+      });
+    } finally {
+      setPastingPhone(false);
+    }
+  };
+
+  const pickFromPhoneContacts = async () => {
+    if (pickingDeviceContact) return;
+    if (!isContactPickerSupported()) {
+      await Swal.fire({
+        icon: 'info',
+        title: 'Not available here',
+        text: 'Phone contacts work on Chrome/Edge for Android (HTTPS or localhost). You can still type the number.',
+      });
+      return;
+    }
+    setPickingDeviceContact(true);
+    try {
+      const picked = await pickDeviceContact();
+      if (!picked) return;
+
+      let phone = picked.phones[0] || '';
+      if (picked.phones.length > 1) {
+        const inputOptions = Object.fromEntries(
+          picked.phones.map((p) => [p, p]),
+        );
+        const choice = await Swal.fire({
+          title: 'Select number',
+          text: picked.name ? `${picked.name} has more than one number` : 'Choose which number to save',
+          input: 'radio',
+          inputOptions,
+          inputValue: picked.phones[0],
+          showCancelButton: true,
+          confirmButtonText: 'Use this number',
+          cancelButtonText: 'Cancel',
+          customClass: { popup: 'pk-swal' },
+        });
+        if (!choice.isConfirmed || !choice.value) return;
+        phone = String(choice.value);
+      }
+
+      if (picked.name) setFormName(picked.name);
+      if (phone) setFormPhone(phone);
+
+      if (!picked.name && !phone) {
+        await Swal.fire({
+          icon: 'info',
+          title: 'No details shared',
+          text: 'That contact had no name or phone to fill. Type them manually.',
+          timer: 2200,
+          showConfirmButton: false,
+        });
+      }
+    } catch (err) {
+      if (err?.code === 'UNSUPPORTED') {
+        setDeviceContactSupported(false);
+        await Swal.fire({
+          icon: 'info',
+          title: 'Not available here',
+          text: 'Phone contacts are not supported in this browser. Type the number instead.',
+        });
+        return;
+      }
+      await Swal.fire({
+        icon: 'error',
+        title: 'Could not open contacts',
+        text: err?.message || 'Try again, or type the number manually.',
+      });
+    } finally {
+      setPickingDeviceContact(false);
+    }
   };
 
   const saveContact = () => {
@@ -1274,7 +1379,38 @@ export default function PersonalKhata({ standalone = false } = {}) {
             }}
           >
             <h2 style={{ margin: '0 0 6px', fontSize: 20, fontWeight: 900 }}>New contact</h2>
-            <p style={{ margin: '0 0 18px', color: '#64748b', fontSize: 13 }}>Name required — phone optional</p>
+            <p style={{ margin: '0 0 14px', color: '#64748b', fontSize: 13 }}>
+              Name required — phone optional
+            </p>
+
+            {deviceContactSupported ? (
+              <button
+                type="button"
+                className="pk-pick-contact-btn"
+                disabled={pickingDeviceContact || pastingPhone}
+                onClick={() => void pickFromPhoneContacts()}
+              >
+                <ContactRound size={18} aria-hidden />
+                {pickingDeviceContact ? 'Opening contacts…' : 'Pick from phone contacts'}
+              </button>
+            ) : (
+              <div className="pk-ios-contact-hint">
+                <p>
+                  iPhone / Safari contacts list open nahi kar sakte (Apple limit).
+                  {' '}Asaan tariqa: <strong>Contacts</strong> → number <strong>Copy</strong> → neeche{' '}
+                  <strong>Paste number</strong>.
+                </p>
+                <button
+                  type="button"
+                  className="pk-pick-contact-btn pk-pick-contact-btn--paste"
+                  disabled={pickingDeviceContact || pastingPhone}
+                  onClick={() => void pastePhoneFromClipboard()}
+                >
+                  {pastingPhone ? 'Pasting…' : 'Paste number from clipboard'}
+                </button>
+              </div>
+            )}
+
             <label style={{ display: 'block', fontSize: 12, fontWeight: 700, marginBottom: 6, color: '#475569' }}>
               Name
             </label>
@@ -1284,6 +1420,8 @@ export default function PersonalKhata({ standalone = false } = {}) {
               value={formName}
               onChange={(e) => setFormName(e.target.value)}
               placeholder="Contact name"
+              autoComplete="name"
+              disabled={pickingDeviceContact || pastingPhone}
             />
             <label style={{ display: 'block', fontSize: 12, fontWeight: 700, marginBottom: 6, color: '#475569' }}>
               Phone
@@ -1293,18 +1431,35 @@ export default function PersonalKhata({ standalone = false } = {}) {
               style={{ width: '100%', marginBottom: 20, padding: 12, borderRadius: 12, border: '1px solid #e2e8f0' }}
               value={formPhone}
               onChange={(e) => setFormPhone(e.target.value)}
+              onPaste={(e) => {
+                const text = e.clipboardData?.getData('text') || '';
+                const phone = extractPhoneFromText(text);
+                if (!phone) return;
+                e.preventDefault();
+                setFormPhone(phone);
+              }}
               placeholder="03xx..."
+              type="tel"
+              inputMode="tel"
+              autoComplete="tel"
+              disabled={pickingDeviceContact || pastingPhone}
             />
             <div style={{ display: 'flex', gap: 10 }}>
               <button
                 type="button"
                 className="btn btn-ghost"
                 style={{ flex: 1 }}
+                disabled={pickingDeviceContact || pastingPhone}
                 onClick={() => setContactModal(false)}
               >
                 Cancel
               </button>
-              <button type="submit" className="btn btn-primary" style={{ flex: 1 }}>
+              <button
+                type="submit"
+                className="btn btn-primary"
+                style={{ flex: 1 }}
+                disabled={pickingDeviceContact || pastingPhone}
+              >
                 Save
               </button>
             </div>

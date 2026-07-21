@@ -7,6 +7,11 @@ import LoaderDashboard from '../components/LoaderDashboard';
 import { DateRangeSelect, isWithinDateRange, latestDateFrom, compareRowsByUpdatedNewestFirst } from '../utils/dateFilters';
 import { workspaceDisplayTitleForLot } from '../utils/businessWorkspace';
 import {
+  adminPaymentPartyLabel,
+  adminPaymentTypeLabel,
+  isOwnerBillSettlement,
+} from '../utils/paymentDisplay';
+import {
   partyFacingLotStatusLabel,
   lotStatusBadgeKey,
 } from '../utils/partyFacingLabels';
@@ -143,6 +148,14 @@ export default function Dashboard() {
       .reduce((s, p) => s + Number(p.amount || 0), 0);
   }, [scopedPayments]);
 
+  const recentPayments = useMemo(
+    () =>
+      [...scopedPayments]
+        .sort((a, b) => compareRowsByUpdatedNewestFirst(a, b, 'payment'))
+        .slice(0, 8),
+    [scopedPayments],
+  );
+
   if (initialDataLoading) {
     return (
       <div style={{ textAlign: 'center', display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
@@ -190,6 +203,12 @@ export default function Dashboard() {
   const recentLots = [...scopedLots]
     .sort((a, b) => compareRowsByUpdatedNewestFirst(a, b, 'lot'))
     .slice(0, 12);
+
+  const paymentTypeClass = (p) => {
+    if (p.type === 'Received') return 'dash-pay-type--in';
+    if (isOwnerBillSettlement(p)) return 'dash-pay-type--bill';
+    return 'dash-pay-type--out';
+  };
 
   const partyStats = parties.map(p => {
     const lots = scopedLots.filter(l => String(l.partyId ?? '') === String(p.id ?? ''));
@@ -534,24 +553,19 @@ export default function Dashboard() {
           ) : (
             <>
               <ul className="dash-recent-list dash-recent-mobile">
-                {[...scopedPayments]
-                  .sort((a, b) => compareRowsByUpdatedNewestFirst(a, b, 'payment'))
-                  .slice(0, 8)
-                  .map((p) => (
+                {recentPayments.map((p) => (
                     <li key={p.id} className="dash-recent-item">
                       <div className="dash-recent-item-main">
                         <div className="dash-recent-item-title dash-recent-pay-title">
                           <span className="dash-recent-date">{p.date || '—'}</span>
-                          <span
-                            className={`dash-pay-type ${
-                              p.type === 'Received' ? 'dash-pay-type--in' : 'dash-pay-type--out'
-                            }`}
-                          >
-                            {p.type}
+                          <span className={`dash-pay-type ${paymentTypeClass(p)}`}>
+                            {adminPaymentTypeLabel(p)}
                           </span>
                         </div>
                         <div className="dash-recent-item-meta">
-                          <span className="dash-recent-party">{p.party || '—'}</span>
+                          <span className="dash-recent-party">
+                            {adminPaymentPartyLabel(p, businessOwners)}
+                          </span>
                           {p.note ? (
                             <span className="dash-recent-note">{p.note}</span>
                           ) : null}
@@ -580,22 +594,15 @@ export default function Dashboard() {
                     </tr>
                   </thead>
                   <tbody>
-                    {[...scopedPayments]
-                      .sort((a, b) => compareRowsByUpdatedNewestFirst(a, b, 'payment'))
-                      .slice(0, 8)
-                      .map((p) => (
+                    {recentPayments.map((p) => (
                         <tr key={p.id}>
                           <td>{p.date}</td>
                           <td>
-                            <span
-                              className={`dash-pay-type ${
-                                p.type === 'Received' ? 'dash-pay-type--in' : 'dash-pay-type--out'
-                              }`}
-                            >
-                              {p.type}
+                            <span className={`dash-pay-type ${paymentTypeClass(p)}`}>
+                              {adminPaymentTypeLabel(p)}
                             </span>
                           </td>
-                          <td>{p.party}</td>
+                          <td>{adminPaymentPartyLabel(p, businessOwners)}</td>
                           <td style={{ color: 'var(--text-secondary)', fontSize: 13 }}>
                             {p.note || '—'}
                           </td>
