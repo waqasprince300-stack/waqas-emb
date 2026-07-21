@@ -186,7 +186,7 @@ export default function Parties() {
 
   const EMPTY_LOT_STATS = {
     total: 0, active: 0, completed: 0, activeAmount: 0,
-    completedAmount: 0, totalValue: 0, paid: 0, remaining: 0,
+    completedAmount: 0, totalValue: 0, paid: 0, receivedFromParty: 0, remaining: 0,
   };
 
   /** Pre-compute stats for every party in one pass instead of scanning all lots per card. */
@@ -198,18 +198,24 @@ export default function Parties() {
       lotsByParty.get(pid).push(l);
     }
 
-    const paidByPartyId = new Map();
-    const paidByPartyName = new Map();
-    for (const p of rangedPayments) {
-      if (p.type !== 'Paid') continue;
-      const amt = Number(p.amount || 0);
+    const addAmt = (byId, byName, p, amt) => {
       if (p.partyId != null && String(p.partyId).trim() !== '') {
         const k = String(p.partyId);
-        paidByPartyId.set(k, (paidByPartyId.get(k) || 0) + amt);
+        byId.set(k, (byId.get(k) || 0) + amt);
       } else {
         const k = String(p.party || '').trim();
-        paidByPartyName.set(k, (paidByPartyName.get(k) || 0) + amt);
+        byName.set(k, (byName.get(k) || 0) + amt);
       }
+    };
+
+    const paidByPartyId = new Map();
+    const paidByPartyName = new Map();
+    const receivedByPartyId = new Map();
+    const receivedByPartyName = new Map();
+    for (const p of rangedPayments) {
+      const amt = Number(p.amount || 0);
+      if (p.type === 'Paid') addAmt(paidByPartyId, paidByPartyName, p, amt);
+      else if (p.type === 'Received') addAmt(receivedByPartyId, receivedByPartyName, p, amt);
     }
 
     const result = new Map();
@@ -234,6 +240,9 @@ export default function Parties() {
         }
       }
       const totalPaid = (paidByPartyId.get(pid) || 0) + (paidByPartyName.get(partyName) || 0);
+      const receivedFromParty =
+        (receivedByPartyId.get(pid) || 0) + (receivedByPartyName.get(partyName) || 0);
+      // Align with Party Ledger: remaining = bill − paid + received from party
       result.set(pid, {
         total: lots.length,
         active,
@@ -242,7 +251,8 @@ export default function Parties() {
         completedAmount,
         totalValue: totalPayable,
         paid: totalPaid,
-        remaining: totalPayable - totalPaid,
+        receivedFromParty,
+        remaining: totalPayable - totalPaid + receivedFromParty,
       });
     }
     return result;
@@ -502,6 +512,8 @@ export default function Parties() {
               partyPayments.forEach((p) => {
                 const when = latestDateFrom(p, ['updatedAt', 'date']);
                 const sortMs = when ? when.getTime() : 0;
+                const amt = Number(p.amount || 0);
+                const isReceived = p.type === 'Received';
                 raw.push({
                   rowKey: `paid-${p.id || p._id}`,
                   kind: 'paid',
@@ -511,8 +523,9 @@ export default function Parties() {
                   note: (p.note || '').trim(),
                   linkedLot: (p.linkedLot || '').trim(),
                   paymentType: p.type || 'Paid',
-                  diye: Number(p.amount || 0),
-                  liye: 0,
+                  // Paid out reduces what you owe; Received from party increases it (ledger-aligned).
+                  diye: isReceived ? 0 : amt,
+                  liye: isReceived ? amt : 0,
                 });
               });
 
@@ -576,7 +589,7 @@ export default function Parties() {
                     </div>
                     <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4 }}>
                       {netBalance > 0
-                        ? 'You owe this party (work billed − paid out).'
+                        ? 'You owe this party (bill − paid + received from party).'
                         : netBalance < 0
                           ? 'Paid more than billed — advance with this party.'
                           : 'Settled up in this period.'}
@@ -600,11 +613,11 @@ export default function Parties() {
                     <div>Date</div>
                     <div style={{ color: '#b91c1c', textAlign: 'center' }}>
                       Paid out
-                      <div style={{ fontWeight: 500, opacity: 0.85 }}>(Paid out)</div>
+                      <div style={{ fontWeight: 500, opacity: 0.85 }}>(to party)</div>
                     </div>
                     <div style={{ color: '#047857', textAlign: 'center' }}>
-                      Received in
-                      <div style={{ fontWeight: 500, opacity: 0.85 }}>(Work billed)</div>
+                      In
+                      <div style={{ fontWeight: 500, opacity: 0.85 }}>(bill / from party)</div>
                     </div>
                   </div>
 
@@ -614,7 +627,11 @@ export default function Parties() {
                         ? new Date(t.whenDate)
                         : null;
                       const subtitle = t.kind === 'paid'
-                        ? [t.note || 'Payment', t.linkedLot ? `Lot: ${t.linkedLot}` : ''].filter(Boolean).join(' · ') || `${t.paymentType}`
+                        ? [
+                          t.paymentType === 'Received' ? 'Received from party' : (t.note || 'Payment'),
+                          t.linkedLot ? `Lot: ${t.linkedLot}` : '',
+                          t.paymentType === 'Received' && t.note ? t.note : '',
+                        ].filter(Boolean).join(' · ') || `${t.paymentType}`
                         : `Lot ${t.lotNo || '—'} / ${t.designNo || '—'} · ${t.status || ''}`;
                       const diye = t.diye > 0 ? t.diye : null;
                       const liye = t.liye > 0 ? t.liye : null;

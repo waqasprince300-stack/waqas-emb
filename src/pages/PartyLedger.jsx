@@ -368,7 +368,7 @@ export default function PartyLedger() {
     isAdmin,
   ]);
 
-  /** Same filters as the table but ignoring Other vs Completed tab — summary cards always reflect all matching lots. */
+  /** Summary cards ignore Status filter — only party / search / dates / workspace (via assignedLots). */
   const lotsForSummaryStats = useMemo(() => {
     return assignedLots.filter((l) => {
       const q = search.toLowerCase();
@@ -380,18 +380,9 @@ export default function PartyLedger() {
         String(l.description || "").toLowerCase().includes(q);
       const matchP =
         partyFilter === "All" || samePartyId(l.partyId, partyFilter);
-      const displayStatus = getDisplayStatus(l);
-      const matchS =
-        statusFilter === "All" || displayStatus === statusFilter;
-      return matchQ && matchP && matchS;
+      return matchQ && matchP;
     });
-  }, [
-    assignedLots,
-    search,
-    partyFilter,
-    statusFilter,
-    ledgerPartyEdits,
-  ]);
+  }, [assignedLots, search, partyFilter, ledgerPartyEdits]);
 
   const otherLotsTabCount = useMemo(
     () =>
@@ -1183,6 +1174,12 @@ export default function PartyLedger() {
   const totals = useMemo(() => {
     let completedAmount = 0;
     let inProgressAmount = 0;
+    let otherAmount = 0;
+    let pending = 0;
+    let inProgress = 0;
+    let pendingReview = 0;
+    let rejected = 0;
+    let completed = 0;
 
     lotsForSummaryStats.forEach((l) => {
       const status = getDisplayStatus(l);
@@ -1190,24 +1187,35 @@ export default function PartyLedger() {
 
       if (status === "Completed") {
         completedAmount += bill;
+        completed += 1;
       } else if (status === "Pending") {
-        inProgressAmount += 0;
-      } else {
+        pending += 1;
+      } else if (status === "In Progress") {
         inProgressAmount += bill;
+        inProgress += 1;
+      } else if (status === "Pending review") {
+        otherAmount += bill;
+        pendingReview += 1;
+      } else if (status === "Rejected") {
+        otherAmount += bill;
+        rejected += 1;
+      } else {
+        otherAmount += bill;
       }
     });
 
     return {
       lots: lotsForSummaryStats.length,
       billTotal: lotsForSummaryStats.reduce((s, l) => s + getLedgerAmountForTotals(l), 0),
-      completed: lotsForSummaryStats.filter((l) => getDisplayStatus(l) === "Completed")
-        .length,
-      pending: lotsForSummaryStats.filter((l) => getDisplayStatus(l) === "Pending")
-        .length,
-      inProgress: lotsForSummaryStats.filter((l) => getDisplayStatus(l) === "In Progress")
-        .length,
+      completed,
+      pending,
+      inProgress,
+      pendingReview,
+      rejected,
+      otherCount: pendingReview + rejected,
       completedAmount,
       inProgressAmount,
+      otherAmount,
       withReceipt: lotsForSummaryStats.filter((l) => ledgerPartyEdits[l.id]?.receipt).length,
     };
   }, [lotsForSummaryStats, ledgerPartyEdits, isParty]);
@@ -1267,11 +1275,11 @@ export default function PartyLedger() {
         hint:
           workspaceFilter === "All"
             ? (isParty
-              ? "All lots in scope (all tabs) — amounts you agreed on the ledger."
-              : "Totals for all parties in the filtered workspaces.")
+              ? "Overall ledger (Status filter does not change these totals)."
+              : "Overall totals for filtered workspaces — Status filter only changes the table below.")
             : (isParty
-              ? "All lots in this workspace (all tabs)."
-              : "Totals for all parties in this workspace."),
+              ? "Overall for this workspace (Status filter does not change these totals)."
+              : "Overall for this workspace — Status filter only changes the table below."),
       };
     }
 
@@ -1293,9 +1301,9 @@ export default function PartyLedger() {
         totals.completedAmount - receivedFromBusiness + paidToBusiness,
       hint: pname
         ? (isParty
-          ? `${pname} — ledger balance (all lots in this view, all tabs).`
-          : `${pname}'s balance (bill − paid to party + received from party)`)
-        : "Bill value minus paid to party plus received from party",
+          ? `${pname} — overall balance (bill − paid to you + you paid back). Status filter does not change this.`
+          : `${pname}: overall = bill − paid to party + received from party. Status filter only filters the table.`)
+        : "Bill − paid to party + received from party (overall; Status filter ignores summary).",
     };
   }, [
     partyFilter,
@@ -1409,7 +1417,7 @@ export default function PartyLedger() {
         </div>
       )}
 
-      {/* Summary */}
+      {/* Summary — overall (Status filter does not affect these cards) */}
       <div className="pl-grid">
         {[
           {
@@ -1417,12 +1425,14 @@ export default function PartyLedger() {
             label: isParty ? "My lots" : "Assigned Lots",
             value: totals.lots,
             color: "#1e40af",
+            sub: "Overall (not limited by Status filter)",
           },
           {
             key: "bill",
             label: isParty ? "Your ledger total" : "Total Bill Value",
             value: `₨${totals.billTotal.toLocaleString()}`,
             color: "#7c3aed",
+            sub: "All lots in this view",
           },
           {
             key: "completed",
@@ -1464,10 +1474,30 @@ export default function PartyLedger() {
             color: "#d97706",
           },
           {
+            key: "other-status",
+            label: (
+              <>
+                {isParty ? "Review / rework" : "Pending review + Rejected"}{" "}
+                <strong style={{ fontSize: 14, color: "#a16207" }}>
+                  ({totals.otherCount})
+                </strong>
+              </>
+            ),
+            value:
+              totals.otherCount > 0
+                ? `₨${totals.otherAmount.toLocaleString()}`
+                : "None",
+            color: "#a16207",
+            sub:
+              totals.otherCount > 0
+                ? `${totals.pendingReview} in review · ${totals.rejected} rejected`
+                : undefined,
+          },
+          {
             key: "completed-lots-balance",
             label: `Completed lots ${
               partyBalanceInfo.completedNet >= 0
-                ? `balance (${isParty ? "owed to you" : "payable"})`
+                ? `balance (${isParty ? "owed to you" : "still payable"})`
                 : "(advance)"
             }`,
             value: `₨${partyBalanceInfo.completedNet.toLocaleString()}`,
@@ -1476,7 +1506,7 @@ export default function PartyLedger() {
           },
           {
             key: "balance",
-            label: `Total Balance ${
+            label: `Overall balance ${
               partyBalanceInfo.balance >= 0
                 ? `(${isParty ? "owed to you" : "payable"})`
                 : `(${isParty ? "you owe" : "advance"})`
@@ -1641,6 +1671,25 @@ export default function PartyLedger() {
           </select>
         )}
       </div>
+
+      {ledgerLotsTab === "other" && statusFilter !== "All" && (
+        <div
+          style={{
+            marginBottom: 12,
+            padding: "10px 14px",
+            borderRadius: 10,
+            background: "#EFF6FF",
+            border: "1px solid #BFDBFE",
+            fontSize: 13,
+            color: "#1e40af",
+            lineHeight: 1.4,
+          }}
+        >
+          Table filtered by status:{" "}
+          <strong>{partyFacingStatusLabel(statusFilter, isParty)}</strong>.
+          {" "}Summary cards above stay overall (Status does not change them).
+        </div>
+      )}
 
       {/* Table */}
       <div className="table-wrapper">
