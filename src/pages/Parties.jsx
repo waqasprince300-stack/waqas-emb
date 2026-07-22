@@ -3,7 +3,7 @@ import { useApp } from '../context/AppContext';
 import { Modal, FormGroup, SearchBar, EmptyState, ConfirmDialog } from '../components/UI';
 import Loader from '../components/Loader';
 import LoaderDashboard from '../components/LoaderDashboard';
-import { DateRangeSelect, isWithinDateRange, latestDateFrom, dateRangeLabel } from '../utils/dateFilters';
+import { DateRangeSelect, isWithinDateRange, latestDateFrom, dateRangeLabel, formatDisplayDateTime } from '../utils/dateFilters';
 
 function toPartyFormFields(initial) {
   if (!initial) return { name: '', phone: '', address: '' };
@@ -59,29 +59,6 @@ function PartyForm({ initial, onSave, onClose, saving }) {
 
 function formatMoney(n) {
   return `₨${Number(n).toLocaleString()}`;
-}
-
-function dayOrdinal(day) {
-  const v = day % 100;
-  if (v >= 11 && v <= 13) return `${day}th`;
-  switch (day % 10) {
-    case 1:
-      return `${day}st`;
-    case 2:
-      return `${day}nd`;
-    case 3:
-      return `${day}rd`;
-    default:
-      return `${day}th`;
-  }
-}
-
-function formatTxnDateTime(date) {
-  const d = date instanceof Date ? date : new Date(date);
-  if (!d || Number.isNaN(d.getTime())) return '—';
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const t = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-  return `${dayOrdinal(d.getDate())} ${months[d.getMonth()]}, ${t}`;
 }
 
 /** Party payment filter: match getLotStats (partyId preferred, else exact name). */
@@ -650,7 +627,7 @@ export default function Parties() {
                           }}
                         >
                           <div>
-                            <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{when ? formatTxnDateTime(when) : '—'}</div>
+                            <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{when ? formatDisplayDateTime(when) : '—'}</div>
                             <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4, lineHeight: 1.35 }}>{subtitle}</div>
                             <div style={{
                               display: 'inline-block',

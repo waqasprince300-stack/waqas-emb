@@ -21,6 +21,7 @@ import {
   isWithinDateRange,
   latestDateFrom,
   compareRowsByUpdatedNewestFirst,
+  formatDisplayDate,
 } from "../utils/dateFilters";
 import {
   getPartyLedgerBillDisplay,
@@ -1765,9 +1766,11 @@ export default function PartyLedger() {
                       </td>
                       <td>{l.colors}</td>
                       <td>{l.pieces}</td>
-                      <td>{l.allotDate}</td>
+                      <td>{formatDisplayDate(l.allotDate)}</td>
                       <td style={{ fontWeight: 500 }}>
-                        {displayComplete || (
+                        {displayComplete ? (
+                          formatDisplayDate(displayComplete)
+                        ) : (
                           <span style={{ color: "var(--text-muted)" }}>—</span>
                         )}
                       </td>

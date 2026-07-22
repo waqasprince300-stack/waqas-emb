@@ -6,7 +6,7 @@ import { useApp } from "../context/AppContext";
 import { Modal, FormGroup, EmptyState, SearchBar } from "../components/UI";
 import Loader from "../components/Loader";
 import LoaderDashboard from "../components/LoaderDashboard";
-import { compareRowsByUpdatedNewestFirst } from "../utils/dateFilters";
+import { compareRowsByUpdatedNewestFirst, formatDisplayDateTime } from "../utils/dateFilters";
 import { getAdminLedgerOrBusinessBill } from "../utils/partyBillPrivacy";
 
 function normalizeLotKey(linkedLot) {
@@ -41,15 +41,8 @@ function formatReviewSubmittedAt(lot, pe) {
     lot?.updatedAt ||
     "";
   if (!raw) return null;
-  const d = new Date(raw);
-  if (Number.isNaN(d.getTime())) return null;
-  return d.toLocaleString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  const label = formatDisplayDateTime(raw, "");
+  return label || null;
 }
 
 function needsOwnerBillingChoice(lot, pe, payments) {

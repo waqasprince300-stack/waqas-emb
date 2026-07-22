@@ -3,21 +3,12 @@ import { Link, useLocation } from 'react-router-dom';
 import { BookOpen } from 'lucide-react';
 import { contactBalance, entriesChronological } from '../utils/personalKhataStorage';
 import { parseKhataShareFromLocation } from '../utils/personalKhataShare';
+import { formatDisplayDateTime } from '../utils/dateFilters';
 
 const fmtMoney = (n) =>
   `₨${Math.abs(Number(n) || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
 
-const fmtWhen = (iso) => {
-  if (!iso) return '—';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '—';
-  return d.toLocaleString(undefined, {
-    day: 'numeric',
-    month: 'short',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-};
+const fmtWhen = (iso) => formatDisplayDateTime(iso);
 
 export default function PersonalKhataShared() {
   const location = useLocation();

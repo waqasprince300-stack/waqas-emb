@@ -1,6 +1,7 @@
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { contactBalance, entriesForRunningBalance } from './personalKhataStorage';
+import { formatDisplayDateTime } from './dateFilters';
 
 /** Brand palette (RGB 0–255) */
 const C = {
@@ -22,10 +23,7 @@ function fmtRs(n) {
 }
 
 function fmtDt(iso) {
-  if (!iso) return '—';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '—';
-  return d.toLocaleString();
+  return formatDisplayDateTime(iso);
 }
 
 function safeNameForFile(name) {

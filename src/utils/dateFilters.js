@@ -33,9 +33,41 @@ export const getDateRangeStart = (range) => {
 
 export const parseDateValue = (value) => {
   if (!value) return null;
-  const date = value instanceof Date ? value : new Date(value);
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value;
+  }
+  const raw = String(value).trim();
+  if (!raw) return null;
+  // Date-only YYYY-MM-DD → local calendar day (avoid UTC shift).
+  const ymd = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw);
+  if (ymd) {
+    const date = new Date(Number(ymd[1]), Number(ymd[2]) - 1, Number(ymd[3]));
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+  const date = new Date(raw);
   if (Number.isNaN(date.getTime())) return null;
   return date;
+};
+
+const pad2 = (n) => String(n).padStart(2, '0');
+
+/** Display dates as day/month/year (DD/MM/YYYY). */
+export const formatDisplayDate = (value, fallback = '—') => {
+  const date = parseDateValue(value);
+  if (!date) return fallback;
+  return `${pad2(date.getDate())}/${pad2(date.getMonth() + 1)}/${date.getFullYear()}`;
+};
+
+/** Display date + time as DD/MM/YYYY, h:mm AM/PM. */
+export const formatDisplayDateTime = (value, fallback = '—') => {
+  const date = parseDateValue(value);
+  if (!date) return fallback;
+  const time = date.toLocaleTimeString('en-GB', {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  });
+  return `${formatDisplayDate(date, '')}, ${time}`;
 };
 
 /** Inclusive day bounds for custom YYYY-MM-DD strings. */
@@ -84,9 +116,11 @@ export const dateRangeLabel = (range, custom = {}) => {
   if (range === 'custom') {
     const s = String(custom.start || '').trim();
     const e = String(custom.end || '').trim();
-    if (s && e) return `${s} → ${e}`;
-    if (s) return `From ${s}`;
-    if (e) return `Until ${e}`;
+    const sLabel = s ? formatDisplayDate(s, s) : '';
+    const eLabel = e ? formatDisplayDate(e, e) : '';
+    if (sLabel && eLabel) return `${sLabel} → ${eLabel}`;
+    if (sLabel) return `From ${sLabel}`;
+    if (eLabel) return `Until ${eLabel}`;
     return 'Custom range';
   }
   return DATE_RANGE_OPTIONS.find((o) => o.value === range)?.label || 'All Time';

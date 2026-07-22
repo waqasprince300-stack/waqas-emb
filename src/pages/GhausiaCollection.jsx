@@ -6,7 +6,7 @@ import LotStatusSelect from '../components/LotStatusSelect';
 import { Modal, FormGroup, StatusBadge, ActionBtn, SearchBar, EmptyState, ConfirmDialog } from '../components/UI';
 import Loader from '../components/Loader';
 import LoaderDashboard from '../components/LoaderDashboard';
-import { DateRangeSelect, isWithinDateRange, latestDateFrom, compareRowsByUpdatedNewestFirst } from '../utils/dateFilters';
+import { DateRangeSelect, isWithinDateRange, latestDateFrom, compareRowsByUpdatedNewestFirst, formatDisplayDate } from '../utils/dateFilters';
 import { workspaceDisplayTitleForLot } from '../utils/businessWorkspace';
 import { getAdminLedgerOrBusinessBill, getBusinessBillAmount } from '../utils/partyBillPrivacy';
 import { generateSerialLotNumbers, previewSerialLotNumbers } from '../utils/lotSerial';
@@ -1432,7 +1432,7 @@ export default function GhausiaCollection() {
                 <tbody>
                   {payments.map(p => (
                     <tr key={p.id}>
-                      <td>{p.date}</td>
+                      <td>{formatDisplayDate(p.date)}</td>
                       <td>
                         <span style={{
                           background: p.type === 'Received' ? '#F0FDF4' : '#FEF2F2',
@@ -1724,7 +1724,7 @@ export default function GhausiaCollection() {
                   <td><span style={{ background: '#F0F9FF', color: '#0369a1', border: '1px solid #BAE6FD', borderRadius: 6, padding: '2px 8px', fontSize: 12 }}>{l.itemType || l.fabric}</span></td>
                   <td>{l.colors}</td>
                   <td>{l.pieces}</td>
-                  <td>{l.allotDate}</td>
+                  <td>{formatDisplayDate(l.allotDate)}</td>
                   <td style={{ color: 'var(--text-secondary)', fontSize: 13, maxWidth: 160 }}>
                     {workspaceDisplayTitleForLot(l, businessOwners)}
                   </td>
@@ -1751,8 +1751,8 @@ export default function GhausiaCollection() {
                           disabled={completionPersistingLotId === l.id || inlineSummaryBusy}
                           onChange={(next) => setLotStatus(l, next)}
                         />
-                        {l.dispatchDate && l.status !== 'pending' && <div style={{ fontSize: 12, color: '#dc2626', marginTop: 3, fontWeight: '500' }}>Dispatch: {l.dispatchDate}</div>}
-                        {l.receivedBackDate && <div style={{ fontSize: 12, color: 'green', marginTop: 1, fontWeight: '500' }}>Received: {l.receivedBackDate}</div>}
+                        {l.dispatchDate && l.status !== 'pending' && <div style={{ fontSize: 12, color: '#dc2626', marginTop: 3, fontWeight: '500' }}>Dispatch: {formatDisplayDate(l.dispatchDate)}</div>}
+                        {l.receivedBackDate && <div style={{ fontSize: 12, color: 'green', marginTop: 1, fontWeight: '500' }}>Received: {formatDisplayDate(l.receivedBackDate)}</div>}
                       </>
                     }
                   </td>

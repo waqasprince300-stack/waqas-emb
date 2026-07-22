@@ -4,7 +4,7 @@ import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
 import { StatusBadge } from '../components/UI';
 import LoaderDashboard from '../components/LoaderDashboard';
-import { DateRangeSelect, isWithinDateRange, latestDateFrom, compareRowsByUpdatedNewestFirst } from '../utils/dateFilters';
+import { DateRangeSelect, isWithinDateRange, latestDateFrom, compareRowsByUpdatedNewestFirst, formatDisplayDate } from '../utils/dateFilters';
 import { workspaceDisplayTitleForLot } from '../utils/businessWorkspace';
 import {
   adminPaymentPartyLabel,
@@ -557,7 +557,7 @@ export default function Dashboard() {
                     <li key={p.id} className="dash-recent-item">
                       <div className="dash-recent-item-main">
                         <div className="dash-recent-item-title dash-recent-pay-title">
-                          <span className="dash-recent-date">{p.date || '—'}</span>
+                          <span className="dash-recent-date">{formatDisplayDate(p.date)}</span>
                           <span className={`dash-pay-type ${paymentTypeClass(p)}`}>
                             {adminPaymentTypeLabel(p)}
                           </span>
@@ -596,7 +596,7 @@ export default function Dashboard() {
                   <tbody>
                     {recentPayments.map((p) => (
                         <tr key={p.id}>
-                          <td>{p.date}</td>
+                          <td>{formatDisplayDate(p.date)}</td>
                           <td>
                             <span className={`dash-pay-type ${paymentTypeClass(p)}`}>
                               {adminPaymentTypeLabel(p)}

@@ -3,6 +3,7 @@ import apiService from '../services/api';
 import LoaderDashboard from '../components/LoaderDashboard';
 import { EmptyState } from '../components/UI';
 import { formatApiError } from '../utils/formatApiError';
+import { formatDisplayDateTime } from '../utils/dateFilters';
 
 const getUserId = (user) => String(user?._id || user?.id || '');
 
@@ -190,15 +191,15 @@ export default function SuperAdminApprovals() {
                   const busy = savingId === id;
                   const st = String(row.status || '').toLowerCase();
                   const pending = st === 'pending';
-                  const approvedAt = row.approvedAt ? new Date(row.approvedAt).toLocaleString() : '';
-                  const rejectedAt = row.rejectedAt ? new Date(row.rejectedAt).toLocaleString() : '';
+                  const approvedAt = row.approvedAt ? formatDisplayDateTime(row.approvedAt, '') : '';
+                  const rejectedAt = row.rejectedAt ? formatDisplayDateTime(row.rejectedAt, '') : '';
                   const resolved = approvedAt || rejectedAt || '—';
                   return (
                     <tr key={id}>
                       <td style={{ fontWeight: 700 }}>{row.name}</td>
                       <td>{row.email}</td>
                       <td style={statusStyle(row.status)}>{statusLabel(row.status)}</td>
-                      <td>{row.createdAt ? new Date(row.createdAt).toLocaleString() : '—'}</td>
+                      <td>{formatDisplayDateTime(row.createdAt)}</td>
                       <td>{resolved}</td>
                       <td style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{verifierLabel(row)}</td>
                       <td>

@@ -4,17 +4,10 @@ import { useNavigate } from 'react-router-dom';
 import Swal from 'sweetalert2';
 import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
+import { formatDisplayDateTime } from '../utils/dateFilters';
 
 function formatWhen(iso) {
-  if (!iso) return '';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '';
-  return d.toLocaleString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  return formatDisplayDateTime(iso, '');
 }
 
 function resolveLinkPath(n) {

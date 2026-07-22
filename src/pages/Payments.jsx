@@ -11,6 +11,7 @@ import { receiptPreviewKind } from "../components/receipt/ReceiptThumb";
 import {
   latestDateFrom,
   compareRowsByUpdatedNewestFirst,
+  formatDisplayDate,
 } from "../utils/dateFilters";
 import {
   getAdminLedgerOrBusinessBill,
@@ -358,6 +359,7 @@ export default function Payments() {
             p.type,
             String(p.amount ?? ""),
             p.date,
+            formatDisplayDate(p.date, ""),
           ]
             .map((v) => String(v || "").toLowerCase())
             .join(" ");
@@ -1140,7 +1142,7 @@ export default function Payments() {
                     <td style={{ color: "var(--text-muted)", fontWeight: 500 }}>
                       {filtered.length - (pageStart + i)}
                     </td>
-                    <td>{p.date}</td>
+                    <td>{formatDisplayDate(p.date)}</td>
                     <td>
                       <span
                         style={{

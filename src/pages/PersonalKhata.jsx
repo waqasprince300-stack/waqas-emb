@@ -41,6 +41,7 @@ import {
 } from '../utils/pickDeviceContact';
 import { useAuth } from '../context/AuthContext';
 import { apiService } from '../services/api';
+import { formatDisplayDateTime } from '../utils/dateFilters';
 import './personalKhata.css';
 
 /** Ensure a khata state from any source has a valid business list + active id. */
@@ -64,17 +65,7 @@ function normalizeKhataState(raw) {
 const fmtMoney = (n) =>
   `₨${Math.abs(Number(n) || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
 
-const fmtWhen = (iso) => {
-  if (!iso) return '—';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '—';
-  return d.toLocaleString(undefined, {
-    day: 'numeric',
-    month: 'short',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-};
+const fmtWhen = (iso) => formatDisplayDateTime(iso);
 
 function initials(name) {
   const p = String(name || '')
