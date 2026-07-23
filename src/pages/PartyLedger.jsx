@@ -1648,6 +1648,10 @@ export default function PartyLedger() {
             background: '#EFF6FF',
             border: '1px solid #BFDBFE',
             fontSize: 13,
+            color: '#1e40af',
+            lineHeight: 1.4,
+          }}
+        >
           Table filtered by status: <strong>{partyFacingStatusLabel(statusFilter, isParty)}</strong>
           . Summary cards above stay overall (Status does not change them).
         </div>
