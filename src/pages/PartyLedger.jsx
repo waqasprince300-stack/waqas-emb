@@ -1582,8 +1582,8 @@ export default function PartyLedger() {
           })}
         </div>
 
-        {/* View Switcher: Table View vs Tile View */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, paddingRight: 6 }}>
+        {/* View Switcher: Table View vs Tile View (Mobile Only) */}
+        <div className="mobile-view-switcher" style={{ display: 'flex', alignItems: 'center', gap: 6, paddingRight: 6 }}>
           <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>View:</span>
           <button
             type="button"
@@ -1596,7 +1596,7 @@ export default function PartyLedger() {
               <line x1="3" y1="12" x2="21" y2="12"/>
               <line x1="3" y1="18" x2="21" y2="18"/>
             </svg>
-            Table
+            List
           </button>
           <button
             type="button"
@@ -1694,9 +1694,8 @@ export default function PartyLedger() {
         </div>
       )}
 
-      {/* Table vs Tile View */}
-      {viewMode === 'table' ? (
-        <div className="table-wrapper desktop-only-table">
+      {/* Table for Desktop & Tablet (Always visible on Desktop > 768px) */}
+      <div className="table-wrapper desktop-only-table">
           <div className="table-scroll">
             <table>
               <thead>
@@ -2225,11 +2224,12 @@ export default function PartyLedger() {
                 )}
               </tbody>
             </table>
-          </div>
         </div>
-      ) : (
-        /* Tile / Grid View for Desktop & Mobile */
-        <div className="tiles-grid">
+      </div>
+
+      {/* Mobile Views (< 768px): Ultra-Compact Tiles vs Single-Column Cards List */}
+      {viewMode === 'tile' ? (
+        <div className="tiles-grid mobile-only-tiles">
           {filtered.length === 0 ? (
             <EmptyState message={isParty ? 'No lots found' : 'No assigned lots found'} />
           ) : (
@@ -2319,10 +2319,7 @@ export default function PartyLedger() {
             })
           )}
         </div>
-      )}
-
-      {/* Mobile Card List for Party Ledger (shown only in Table View mode) */}
-      {viewMode === 'table' && (
+      ) : (
         <div className="mobile-only-party-ledger-cards">
           {filtered.length === 0 ? (
             <EmptyState message={isParty ? 'No lots found' : 'No assigned lots found'} />

@@ -2203,31 +2203,41 @@ tbody tr:last-child td {
   }
 }
 
-/* Ultra-Compact Tile / Grid View Styles */
+/* Mobile View Switcher - Only visible on Mobile (< 768px) */
+.mobile-view-switcher {
+  display: none !important;
+}
+
+@media screen and (max-width: 768px) {
+  .mobile-view-switcher {
+    display: flex !important;
+  }
+}
+
+/* Ultra-Compact Grid Tiles for Mobile Preview */
 .tiles-grid {
   display: grid !important;
-  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 8px;
   width: 100%;
-  margin-top: 12px;
-  margin-bottom: 16px;
+  margin-top: 10px;
+  margin-bottom: 14px;
 }
 
 .lot-tile-card {
   background: #ffffff;
   border: 1px solid var(--border, #e2e8f0);
-  border-radius: 10px;
-  padding: 10px 12px;
+  border-radius: 8px;
+  padding: 8px 10px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
   transition: all 0.15s ease;
 }
 
 .lot-tile-card:hover {
   border-color: #3b82f6;
-  transform: translateY(-2px);
   box-shadow: 0 4px 10px rgba(59, 130, 246, 0.12);
 }
 
@@ -2235,19 +2245,20 @@ tbody tr:last-child td {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  gap: 6px;
+  gap: 4px;
   border-bottom: 1px solid #f1f5f9;
-  padding-bottom: 6px;
+  padding-bottom: 4px;
 }
 
 .lot-tile-number {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 700;
   color: #1e40af;
+  line-height: 1.2;
 }
 
 .lot-tile-design {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   color: #334155;
   margin-top: 1px;
@@ -2256,22 +2267,23 @@ tbody tr:last-child td {
 .lot-tile-body {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
 }
 
 .lot-tile-chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: 3px;
   align-items: center;
 }
 
 .lot-tile-info {
-  font-size: 11.5px;
+  font-size: 10.5px;
   color: #475569;
   display: flex;
   flex-direction: column;
   gap: 2px;
+  line-height: 1.25;
 }
 
 .lot-tile-bill {
@@ -2279,9 +2291,9 @@ tbody tr:last-child td {
   justify-content: space-between;
   align-items: center;
   background: #f8fafc;
-  padding: 6px 8px;
-  border-radius: 6px;
-  font-size: 12px;
+  padding: 4px 6px;
+  border-radius: 5px;
+  font-size: 11px;
   font-weight: 600;
 }
 
@@ -2289,18 +2301,19 @@ tbody tr:last-child td {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 6px;
-  padding-top: 6px;
+  gap: 4px;
+  padding-top: 4px;
   border-top: 1px dashed #e2e8f0;
   flex-wrap: wrap;
 }
 
-@media screen and (max-width: 768px) {
+@media screen and (max-width: 480px) {
   .tiles-grid {
-    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-    gap: 10px;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 6px;
   }
 }
+
 
 
 
