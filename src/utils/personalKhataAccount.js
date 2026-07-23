@@ -33,7 +33,9 @@ export function validatePersonalKhataIdentifier(method, email, phone) {
 export function identifiersForPersonalKhataSignup(method, email, phone) {
   if (method === 'email') {
     return {
-      email: String(email || '').trim().toLowerCase(),
+      email: String(email || '')
+        .trim()
+        .toLowerCase(),
       phone: '',
     };
   }

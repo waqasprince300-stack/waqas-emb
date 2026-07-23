@@ -80,7 +80,7 @@ function drawFooterStrip(pdf, tagline) {
 export function buildPersonalKhataSummaryPdf(contacts, entries) {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const pageW = doc.internal.pageSize.getWidth();
-  const pageH = doc.internal.pageSize.getHeight();
+  const _pageH = doc.internal.pageSize.getHeight();
 
   drawHeaderBand(doc, pageW, 22, [C.indigo, C.violet, C.fuchsia]);
 
@@ -153,7 +153,7 @@ export function buildPersonalKhataSummaryPdf(contacts, entries) {
 export function buildContactLedgerPdf(contact, entries) {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const pageW = doc.internal.pageSize.getWidth();
-  const pageH = doc.internal.pageSize.getHeight();
+  const _pageH = doc.internal.pageSize.getHeight();
   const { given, received, net } = contactBalance(contact.id, entries);
 
   drawHeaderBand(doc, pageW, 20, [C.fuchsia, C.violet, C.indigo]);
@@ -168,7 +168,7 @@ export function buildContactLedgerPdf(contact, entries) {
   doc.text(
     `${sub}Paid out ${fmtRs(given)}  ·  Received ${fmtRs(received)}  ·  Balance ${fmtRs(Math.abs(net))} ${net > 0 ? '(receivable)' : net < 0 ? '(payable)' : ''}`,
     14,
-    17,
+    17
   );
 
   doc.setFillColor(...C.slateLight);

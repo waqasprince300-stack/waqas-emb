@@ -35,8 +35,7 @@ export default function ForgotPassword() {
   const [otpError, setOtpError] = useState('');
   const [otpSubmitting, setOtpSubmitting] = useState(false);
 
-  const buildIdentifier = () =>
-    identifiersForPersonalKhataSignup(idMethod, form.email, form.phone);
+  const buildIdentifier = () => identifiersForPersonalKhataSignup(idMethod, form.email, form.phone);
 
   const handleRequest = async (event) => {
     event.preventDefault();
@@ -57,7 +56,9 @@ export default function ForgotPassword() {
         setStage('verify');
         setOtpError('');
       } else {
-        setMessage(payload.message || 'If that account is registered, a verification code has been sent.');
+        setMessage(
+          payload.message || 'If that account is registered, a verification code has been sent.'
+        );
       }
     } catch (err) {
       setError(formatApiError(err, 'Unable to send a reset code'));
@@ -114,7 +115,14 @@ export default function ForgotPassword() {
       }
       sideTitle="Reset access without losing your work history."
       sideText="Password recovery uses a short-lived one-time code so accounts can be restored safely."
-      footer={<>Remembered your password? <Link className="auth-inline-link" to="/login">Login</Link></>}
+      footer={
+        <>
+          Remembered your password?{' '}
+          <Link className="auth-inline-link" to="/login">
+            Login
+          </Link>
+        </>
+      }
     >
       {stage === 'verify' ? (
         <OtpVerify
@@ -129,8 +137,11 @@ export default function ForgotPassword() {
           submitLabel="Reset password"
           onSubmit={handleVerify}
           onResend={handleResend}
-          onBack={() => { setStage('request'); setOtpError(''); }}
-          extraFields={(
+          onBack={() => {
+            setStage('request');
+            setOtpError('');
+          }}
+          extraFields={
             <>
               <label className="auth-label">
                 <span className="auth-label-text">New password</span>
@@ -155,7 +166,7 @@ export default function ForgotPassword() {
                 />
               </label>
             </>
-          )}
+          }
         />
       ) : (
         <form className="auth-form" onSubmit={handleRequest}>
@@ -163,20 +174,33 @@ export default function ForgotPassword() {
           {message && <div className="alert alert-success">{message}</div>}
 
           <div style={{ display: 'flex', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', alignSelf: 'center' }}>
+            <span
+              style={{
+                fontSize: 13,
+                fontWeight: 600,
+                color: 'var(--text-secondary)',
+                alignSelf: 'center',
+              }}
+            >
               Send code to
             </span>
             <button
               type="button"
               className={idMethod === 'email' ? 'btn btn-primary btn-sm' : 'btn btn-ghost btn-sm'}
-              onClick={() => { setIdMethod('email'); setError(''); }}
+              onClick={() => {
+                setIdMethod('email');
+                setError('');
+              }}
             >
               Email
             </button>
             <button
               type="button"
               className={idMethod === 'phone' ? 'btn btn-primary btn-sm' : 'btn btn-ghost btn-sm'}
-              onClick={() => { setIdMethod('phone'); setError(''); }}
+              onClick={() => {
+                setIdMethod('phone');
+                setError('');
+              }}
             >
               Phone
             </button>
@@ -212,7 +236,12 @@ export default function ForgotPassword() {
             </label>
           )}
 
-          <button className="btn btn-primary" type="submit" disabled={isSubmitting} style={{ width: '100%', justifyContent: 'center' }}>
+          <button
+            className="btn btn-primary"
+            type="submit"
+            disabled={isSubmitting}
+            style={{ width: '100%', justifyContent: 'center' }}
+          >
             {isSubmitting ? 'Sending...' : 'Send verification code'}
           </button>
         </form>

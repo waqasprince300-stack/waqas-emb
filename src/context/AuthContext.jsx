@@ -15,12 +15,16 @@ const safeJsonParse = (value, fallback) => {
   }
 };
 
-const normalizeEmail = (email) => String(email || '').trim().toLowerCase();
+const normalizeEmail = (email) =>
+  String(email || '')
+    .trim()
+    .toLowerCase();
 
 export const normalizeAuthResponse = (response) => {
   const payload = response?.data || response || {};
   const user = payload.user || payload;
-  const token = payload.token || payload.accessToken || response?.token || response?.accessToken || '';
+  const token =
+    payload.token || payload.accessToken || response?.token || response?.accessToken || '';
   const rawRole = user?.role;
   const role = ['super_admin', 'admin', 'party', 'personal_khata'].includes(rawRole)
     ? rawRole
@@ -43,7 +47,9 @@ export function AuthProvider({ children }) {
   const [session, setSession] = useState(() => {
     const stored = safeJsonParse(localStorage.getItem(SESSION_KEY), null);
     if (!stored) return null;
-    return normalizeAuthResponse(stored.user ? stored : { user: stored, token: stored.token || '' });
+    return normalizeAuthResponse(
+      stored.user ? stored : { user: stored, token: stored.token || '' }
+    );
   });
 
   const saveSession = useCallback((nextSession) => {
@@ -61,6 +67,7 @@ export function AuthProvider({ children }) {
     return nextSession.user;
   }, []);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     const u = session?.user;
     if (!u || u.status !== 'approved' || u.role === 'admin' || u.role === 'super_admin') return;
@@ -70,7 +77,7 @@ export function AuthProvider({ children }) {
     } catch {
       /* ignore */
     }
-  }, [session?.user?.role, session?.user?.status, session?.user?._id]);
+  }, [session?.user]);
 
   useEffect(() => {
     registerSessionExpiredHandler(() => {
@@ -98,63 +105,63 @@ export function AuthProvider({ children }) {
     return () => registerSessionExpiredHandler(null);
   }, []);
 
-  const signup = useCallback(async ({
-    name,
-    email,
-    phone,
-    password,
-    role,
-    partyId,
-    partyName,
-    adminEmail,
-  }) => {
-    return apiService.signup({
-      name: String(name || '').trim(),
-      email: email != null ? normalizeEmail(email) : '',
-      phone: phone != null ? String(phone || '').trim() : '',
-      password,
-      role,
-      partyId,
-      partyName,
-      adminEmail,
-      deviceId: getDeviceId(),
-      deviceLabel: getDeviceLabel(),
-    });
-  }, []);
+  const signup = useCallback(
+    async ({ name, email, phone, password, role, partyId, partyName, adminEmail }) => {
+      return apiService.signup({
+        name: String(name || '').trim(),
+        email: email != null ? normalizeEmail(email) : '',
+        phone: phone != null ? String(phone || '').trim() : '',
+        password,
+        role,
+        partyId,
+        partyName,
+        adminEmail,
+        deviceId: getDeviceId(),
+        deviceLabel: getDeviceLabel(),
+      });
+    },
+    []
+  );
 
   /**
    * `email` and/or `phone` — backend accepts one of them.
    * Returns `{ otpRequired: true, otpId, channel, ... }` when a new device must be verified,
    * otherwise `{ otpRequired: false, user }` after the session is saved.
    */
-  const login = useCallback(async ({ email, phone, password, otpChannel }) => {
-    const phoneTrim = phone != null ? String(phone || '').trim() : '';
-    const body = {
-      password,
-      deviceId: getDeviceId(),
-      deviceLabel: getDeviceLabel(),
-      ...(otpChannel ? { otpChannel } : {}),
-      ...(phoneTrim ? { phone: phoneTrim } : { email: normalizeEmail(email) }),
-    };
-    const response = await apiService.login(body);
-    const payload = response?.data || response || {};
-    if (payload.otpRequired) {
-      return { otpRequired: true, ...payload };
-    }
-    const user = saveSession(normalizeAuthResponse(response));
-    return { otpRequired: false, user };
-  }, [saveSession]);
+  const login = useCallback(
+    async ({ email, phone, password, otpChannel }) => {
+      const phoneTrim = phone != null ? String(phone || '').trim() : '';
+      const body = {
+        password,
+        deviceId: getDeviceId(),
+        deviceLabel: getDeviceLabel(),
+        ...(otpChannel ? { otpChannel } : {}),
+        ...(phoneTrim ? { phone: phoneTrim } : { email: normalizeEmail(email) }),
+      };
+      const response = await apiService.login(body);
+      const payload = response?.data || response || {};
+      if (payload.otpRequired) {
+        return { otpRequired: true, ...payload };
+      }
+      const user = saveSession(normalizeAuthResponse(response));
+      return { otpRequired: false, user };
+    },
+    [saveSession]
+  );
 
   /** Verify the new-device login code and save the session. Returns the signed-in user. */
-  const verifyLoginOtp = useCallback(async ({ otpId, code }) => {
-    const response = await apiService.verifyLoginOtp({
-      otpId,
-      code: String(code || '').trim(),
-      deviceId: getDeviceId(),
-      deviceLabel: getDeviceLabel(),
-    });
-    return saveSession(normalizeAuthResponse(response));
-  }, [saveSession]);
+  const verifyLoginOtp = useCallback(
+    async ({ otpId, code }) => {
+      const response = await apiService.verifyLoginOtp({
+        otpId,
+        code: String(code || '').trim(),
+        deviceId: getDeviceId(),
+        deviceLabel: getDeviceLabel(),
+      });
+      return saveSession(normalizeAuthResponse(response));
+    },
+    [saveSession]
+  );
 
   const resendLoginOtp = useCallback(({ otpId, channel }) => {
     return apiService.resendLoginOtp({ otpId, ...(channel ? { channel } : {}) });
@@ -170,31 +177,37 @@ export function AuthProvider({ children }) {
   }, []);
 
   /** OTP password reset — step 2. Auto-signs in when the account is approved. */
-  const verifyPasswordReset = useCallback(async ({ otpId, code, password }) => {
-    const response = await apiService.verifyPasswordResetOtp({
-      otpId,
-      code: String(code || '').trim(),
-      password,
-      deviceId: getDeviceId(),
-    });
-    const payload = response?.data || response || {};
-    if (payload.token && payload.user) {
-      saveSession(normalizeAuthResponse(response));
-      return { ...payload, loggedIn: true };
-    }
-    return { ...payload, loggedIn: false };
-  }, [saveSession]);
+  const verifyPasswordReset = useCallback(
+    async ({ otpId, code, password }) => {
+      const response = await apiService.verifyPasswordResetOtp({
+        otpId,
+        code: String(code || '').trim(),
+        password,
+        deviceId: getDeviceId(),
+      });
+      const payload = response?.data || response || {};
+      if (payload.token && payload.user) {
+        saveSession(normalizeAuthResponse(response));
+        return { ...payload, loggedIn: true };
+      }
+      return { ...payload, loggedIn: false };
+    },
+    [saveSession]
+  );
 
   /** Upgrade the current Personal Khata account to admin/party. Auto-signs in when approved. */
-  const upgradeAccount = useCallback(async (data) => {
-    const response = await apiService.upgradeAccount(data);
-    const payload = response?.data || response || {};
-    if (payload.token && payload.user) {
-      saveSession(normalizeAuthResponse(response));
-      return { ...payload, loggedIn: true };
-    }
-    return { ...payload, loggedIn: false };
-  }, [saveSession]);
+  const upgradeAccount = useCallback(
+    async (data) => {
+      const response = await apiService.upgradeAccount(data);
+      const payload = response?.data || response || {};
+      if (payload.token && payload.user) {
+        saveSession(normalizeAuthResponse(response));
+        return { ...payload, loggedIn: true };
+      }
+      return { ...payload, loggedIn: false };
+    },
+    [saveSession]
+  );
 
   const forgotPassword = useCallback(({ email }) => {
     return apiService.forgotPassword({ email: normalizeEmail(email) });
@@ -217,40 +230,43 @@ export function AuthProvider({ children }) {
 
   const user = session?.user || null;
 
-  const value = useMemo(() => ({
-    user,
-    isAuthenticated: !!user && user?.status === 'approved',
-    /** Tenant (business) administrator — owns businesses, parties, operational data */
-    isAdmin: user?.role === 'admin',
-    isTenantAdmin: user?.role === 'admin',
-    isSuperAdmin: user?.role === 'super_admin',
-    isParty: user?.role === 'party',
-    isPersonalKhata: user?.role === 'personal_khata',
-    signup,
-    login,
-    verifyLoginOtp,
-    resendLoginOtp,
-    requestPasswordReset,
-    verifyPasswordReset,
-    upgradeAccount,
-    forgotPassword,
-    resetPassword,
-    logout,
-    refreshSession: saveSession,
-  }), [
-    forgotPassword,
-    login,
-    verifyLoginOtp,
-    resendLoginOtp,
-    requestPasswordReset,
-    verifyPasswordReset,
-    upgradeAccount,
-    logout,
-    resetPassword,
-    saveSession,
-    signup,
-    user,
-  ]);
+  const value = useMemo(
+    () => ({
+      user,
+      isAuthenticated: !!user && user?.status === 'approved',
+      /** Tenant (business) administrator — owns businesses, parties, operational data */
+      isAdmin: user?.role === 'admin',
+      isTenantAdmin: user?.role === 'admin',
+      isSuperAdmin: user?.role === 'super_admin',
+      isParty: user?.role === 'party',
+      isPersonalKhata: user?.role === 'personal_khata',
+      signup,
+      login,
+      verifyLoginOtp,
+      resendLoginOtp,
+      requestPasswordReset,
+      verifyPasswordReset,
+      upgradeAccount,
+      forgotPassword,
+      resetPassword,
+      logout,
+      refreshSession: saveSession,
+    }),
+    [
+      forgotPassword,
+      login,
+      verifyLoginOtp,
+      resendLoginOtp,
+      requestPasswordReset,
+      verifyPasswordReset,
+      upgradeAccount,
+      logout,
+      resetPassword,
+      saveSession,
+      signup,
+      user,
+    ]
+  );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

@@ -264,9 +264,15 @@
   border-radius: 0 4px 4px 0;
 }
 
-.pk-contact-accent--in { background: var(--pk-in); }
-.pk-contact-accent--out { background: var(--pk-out); }
-.pk-contact-accent--zero { background: #cbd5e1; }
+.pk-contact-accent--in {
+  background: var(--pk-in);
+}
+.pk-contact-accent--out {
+  background: var(--pk-out);
+}
+.pk-contact-accent--zero {
+  background: #cbd5e1;
+}
 
 .pk-av {
   width: 44px;
@@ -312,9 +318,15 @@
   line-height: 1.2;
 }
 
-.pk-contact-amt-val--in { color: var(--pk-in); }
-.pk-contact-amt-val--out { color: var(--pk-out); }
-.pk-contact-amt-val--zero { color: var(--pk-muted); }
+.pk-contact-amt-val--in {
+  color: var(--pk-in);
+}
+.pk-contact-amt-val--out {
+  color: var(--pk-out);
+}
+.pk-contact-amt-val--zero {
+  color: var(--pk-muted);
+}
 
 .pk-contact-amt-tag {
   font-size: 0.65rem;
@@ -505,8 +517,12 @@
   letter-spacing: -0.02em;
 }
 
-.pk-balance-amt--in { color: var(--pk-out); }
-.pk-balance-amt--out { color: var(--pk-in); }
+.pk-balance-amt--in {
+  color: var(--pk-out);
+}
+.pk-balance-amt--out {
+  color: var(--pk-in);
+}
 
 .pk-balance-lbl {
   font-size: 0.72rem;
@@ -608,8 +624,14 @@
   border-left: 1px solid #f1f5f9;
 }
 
-.pk-tx-out { background: #fffbfb; color: #b91c1c; }
-.pk-tx-in { background: #fafffb; color: #047857; }
+.pk-tx-out {
+  background: #fffbfb;
+  color: #b91c1c;
+}
+.pk-tx-in {
+  background: #fafffb;
+  color: #047857;
+}
 .pk-tx-out.pk-tx-empty,
 .pk-tx-in.pk-tx-empty {
   color: #e2e8f0;
@@ -708,7 +730,10 @@
   font-size: 13.5px;
   font-weight: 700;
   cursor: pointer;
-  transition: background 0.15s, border-color 0.15s, opacity 0.15s;
+  transition:
+    background 0.15s,
+    border-color 0.15s,
+    opacity 0.15s;
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
 }
@@ -798,22 +823,38 @@
 @media (max-width: 620px) {
   .pk-tx-head {
     grid-template-columns: 1fr 1fr;
-    grid-template-areas: "hmain hmain" "hout hin";
+    grid-template-areas: 'hmain hmain' 'hout hin';
   }
   .pk-tx-head > span:first-child {
     grid-area: hmain;
     text-align: center;
     border-bottom: 1px solid var(--pk-line);
   }
-  .pk-tx-head-out { grid-area: hout; border-left: none; }
-  .pk-tx-head-in { grid-area: hin; }
+  .pk-tx-head-out {
+    grid-area: hout;
+    border-left: none;
+  }
+  .pk-tx-head-in {
+    grid-area: hin;
+  }
   .pk-tx-row {
     grid-template-columns: 1fr 1fr;
-    grid-template-areas: "main main" "out in";
+    grid-template-areas: 'main main' 'out in';
   }
-  .pk-tx-main { grid-area: main; border-bottom: 1px solid #f1f5f9; }
-  .pk-tx-out { grid-area: out; border-left: none; min-height: 48px; }
-  .pk-tx-in { grid-area: in; border-left: 1px solid #f1f5f9; min-height: 48px; }
+  .pk-tx-main {
+    grid-area: main;
+    border-bottom: 1px solid #f1f5f9;
+  }
+  .pk-tx-out {
+    grid-area: out;
+    border-left: none;
+    min-height: 48px;
+  }
+  .pk-tx-in {
+    grid-area: in;
+    border-left: 1px solid #f1f5f9;
+    min-height: 48px;
+  }
 }
 
 /* ── Desktop split (contacts | detail) ── */

@@ -12,7 +12,14 @@ const navItems = [
     label: 'Verify administrators',
     superOnly: true,
     icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <svg
+        width="18"
+        height="18"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+      >
         <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
         <path d="M9 12l2 2 4-4" />
       </svg>
@@ -24,17 +31,34 @@ const navItems = [
     partyLabel: 'Home',
     exact: true,
     icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
-        <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
+      <svg
+        width="18"
+        height="18"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+      >
+        <rect x="3" y="3" width="7" height="7" />
+        <rect x="14" y="3" width="7" height="7" />
+        <rect x="14" y="14" width="7" height="7" />
+        <rect x="3" y="14" width="7" height="7" />
       </svg>
     ),
   },
   {
-    to: '/ghausia', label: 'Work Spaces',
+    to: '/ghausia',
+    label: 'Work Spaces',
     icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+      <svg
+        width="18"
+        height="18"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+      >
+        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
       </svg>
     ),
   },
@@ -43,22 +67,37 @@ const navItems = [
     label: 'Party Ledger',
     partyLabel: 'My Lots',
     icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-        <polyline points="14 2 14 8 20 8"/>
-        <line x1="16" y1="13" x2="8" y2="13"/>
-        <line x1="16" y1="17" x2="8" y2="17"/>
+      <svg
+        width="18"
+        height="18"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+      >
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+        <polyline points="14 2 14 8 20 8" />
+        <line x1="16" y1="13" x2="8" y2="13" />
+        <line x1="16" y1="17" x2="8" y2="17" />
       </svg>
     ),
   },
   {
-    to: '/parties', label: 'Parties',
+    to: '/parties',
+    label: 'Parties',
     icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
-        <circle cx="9" cy="7" r="4"/>
-        <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
-        <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+      <svg
+        width="18"
+        height="18"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+      >
+        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+        <circle cx="9" cy="7" r="4" />
+        <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+        <path d="M16 3.13a4 4 0 0 1 0 7.75" />
       </svg>
     ),
   },
@@ -67,7 +106,14 @@ const navItems = [
     label: 'Personal Khata',
     partyLabel: 'Personal Khata',
     icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <svg
+        width="18"
+        height="18"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+      >
         <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
         <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
         <line x1="8" y1="7" x2="16" y2="7" />
@@ -80,9 +126,16 @@ const navItems = [
     label: 'Payments',
     partyLabel: 'My Payments',
     icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <rect x="1" y="4" width="22" height="16" rx="2" ry="2"/>
-        <line x1="1" y1="10" x2="23" y2="10"/>
+      <svg
+        width="18"
+        height="18"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+      >
+        <rect x="1" y="4" width="22" height="16" rx="2" ry="2" />
+        <line x1="1" y1="10" x2="23" y2="10" />
       </svg>
     ),
   },
@@ -90,12 +143,19 @@ const navItems = [
     to: '/review-lots',
     label: 'Review Lots',
     icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-        <polyline points="14 2 14 8 20 8"/>
-        <path d="M12 13h4"/>
-        <path d="M12 17h4"/>
-        <circle cx="8" cy="15" r="2"/>
+      <svg
+        width="18"
+        height="18"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+      >
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+        <polyline points="14 2 14 8 20 8" />
+        <path d="M12 13h4" />
+        <path d="M12 17h4" />
+        <circle cx="8" cy="15" r="2" />
       </svg>
     ),
   },
@@ -104,25 +164,42 @@ const navItems = [
     label: 'Rate Calculations',
     partyLabel: 'Rate Calculator',
     icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/>
-        <line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/>
+      <svg
+        width="18"
+        height="18"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+      >
+        <line x1="4" y1="9" x2="20" y2="9" />
+        <line x1="4" y1="15" x2="20" y2="15" />
+        <line x1="10" y1="3" x2="8" y2="21" />
+        <line x1="16" y1="3" x2="14" y2="21" />
       </svg>
     ),
   },
   {
-    to: '/users', label: 'Users / Approvals',
+    to: '/users',
+    label: 'Users / Approvals',
     icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
-        <circle cx="8.5" cy="7" r="4"/>
-        <polyline points="17 11 19 13 23 9"/>
+      <svg
+        width="18"
+        height="18"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+      >
+        <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+        <circle cx="8.5" cy="7" r="4" />
+        <polyline points="17 11 19 13 23 9" />
       </svg>
     ),
   },
 ];
 
-export default function Sidebar({ sidebarOpen, setSidebarOpen }) {
+export default function Sidebar({ sidebarOpen: _sidebarOpen, setSidebarOpen }) {
   const { user, isAdmin, isSuperAdmin, logout, isParty } = useAuth();
   const { reportingLots, reportingPartyEdits, notificationUnreadCount, notifications } = useApp();
   const [logoutModalOpen, setLogoutModalOpen] = useState(false);
@@ -131,15 +208,18 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen }) {
   const reviewLotsCount = useMemo(
     () =>
       (Array.isArray(reportingLots) ? reportingLots : []).filter(
-        (l) => String(l?.status || '').toLowerCase().trim() === 'pending approval',
+        (l) =>
+          String(l?.status || '')
+            .toLowerCase()
+            .trim() === 'pending approval'
       ).length,
-    [reportingLots],
+    [reportingLots]
   );
 
   /** Party-initiated bill-change requests awaiting admin — shown as a badge on "Party Ledger". */
   const billRevisionCount = useMemo(
     () => countPendingBillRevisionRequests(reportingLots, reportingPartyEdits),
-    [reportingLots, reportingPartyEdits],
+    [reportingLots, reportingPartyEdits]
   );
 
   /** Party: unread lot_rejected notifications (fallback to total unread). */
@@ -147,7 +227,7 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen }) {
     if (!isParty) return 0;
     const list = Array.isArray(notifications) ? notifications : [];
     const rejectedUnread = list.filter(
-      (n) => !n.readAt && String(n.type || '') === 'lot_rejected',
+      (n) => !n.readAt && String(n.type || '') === 'lot_rejected'
     ).length;
     return rejectedUnread || Number(notificationUnreadCount) || 0;
   }, [isParty, notifications, notificationUnreadCount]);
@@ -170,211 +250,244 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen }) {
     if (isAdmin) {
       return true;
     }
-    return ['/', '/party-ledger', '/payments', '/personal-khata', '/rate-calculations'].includes(item.to);
+    return ['/', '/party-ledger', '/payments', '/personal-khata', '/rate-calculations'].includes(
+      item.to
+    );
   });
 
   return (
     <>
       <aside className="app-sidebar">
-      <div className="app-sidebar-close">
-        <button
-          type="button"
-          aria-label="Close menu"
-          onClick={() => setSidebarOpen(false)}
+        <div className="app-sidebar-close">
+          <button type="button" aria-label="Close menu" onClick={() => setSidebarOpen(false)}>
+            ×
+          </button>
+        </div>
+
+        {/* Logo */}
+        <div
+          style={{ padding: '24px 20px 20px', borderBottom: '1px solid rgba(255,255,255,0.07)' }}
         >
-          ×
-        </button>
-      </div>
-
-      {/* Logo */}
-      <div style={{ padding: '24px 20px 20px', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
-        <div style={{ fontFamily: "'Playfair Display', serif", fontSize: 20, fontWeight: 600, color: '#fff', lineHeight: 1.2 }}>
-          Seam & Grace
-        </div>
-        <div style={{ fontSize: 11, color: '#64748b', marginTop: 3, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-          Grace in every stitch
-        </div>
-      </div>
-
-      {/* Nav */}
-      <nav style={{ padding: '14px 10px', flex: 1 }}>
-        {visibleNavItems.map(item => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            end={item.exact}
-            onClick={handleNavClick}
-            style={({ isActive }) => ({
-              display: 'flex',
-              alignItems: 'center',
-              gap: 11,
-              padding: '10px 12px',
-              borderRadius: 9,
-              marginBottom: 3,
-              textDecoration: 'none',
-              fontSize: 13.5,
-              fontWeight: isActive ? 600 : 400,
-              color: isActive ? '#fff' : '#94a3b8',
-              background: isActive ? 'rgba(59,130,246,0.18)' : 'transparent',
-              transition: 'all 0.15s',
-              borderLeft: isActive ? '3px solid #3b82f6' : '3px solid transparent',
-            })}
+          <div
+            style={{
+              fontFamily: "'Playfair Display', serif",
+              fontSize: 20,
+              fontWeight: 600,
+              color: '#fff',
+              lineHeight: 1.2,
+            }}
           >
-            <span style={{ opacity: 0.85 }}>{item.icon}</span>
-            <span>{!isAdmin && !isSuperAdmin && item.partyLabel ? item.partyLabel : item.label}</span>
-            {item.to === '/review-lots' && isAdmin && reviewLotsCount > 0 && (
-              <span
-                title={`${reviewLotsCount} lot${reviewLotsCount === 1 ? '' : 's'} awaiting review`}
-                style={{
-                  marginLeft: 'auto',
-                  background: '#ef4444',
-                  color: '#fff',
-                  fontSize: 11,
-                  fontWeight: 700,
-                  lineHeight: 1,
-                  borderRadius: 999,
-                  padding: '3px 7px',
-                  minWidth: 18,
-                  textAlign: 'center',
-                }}
-              >
-                {reviewLotsCount > 99 ? '99+' : reviewLotsCount}
-              </span>
-            )}
-            {item.to === '/party-ledger' && isAdmin && billRevisionCount > 0 && (
-              <span
-                title={`${billRevisionCount} bill change request${billRevisionCount === 1 ? '' : 's'} pending`}
-                style={{
-                  marginLeft: 'auto',
-                  background: '#f59e0b',
-                  color: '#fff',
-                  fontSize: 11,
-                  fontWeight: 700,
-                  lineHeight: 1,
-                  borderRadius: 999,
-                  padding: '3px 7px',
-                  minWidth: 18,
-                  textAlign: 'center',
-                }}
-              >
-                {billRevisionCount > 99 ? '99+' : billRevisionCount}
-              </span>
-            )}
-            {item.to === '/party-ledger' && isParty && partyRejectedUnread > 0 && (
-              <span
-                title={`${partyRejectedUnread} unread notification${partyRejectedUnread === 1 ? '' : 's'}`}
-                style={{
-                  marginLeft: 'auto',
-                  background: '#ef4444',
-                  color: '#fff',
-                  fontSize: 11,
-                  fontWeight: 700,
-                  lineHeight: 1,
-                  borderRadius: 999,
-                  padding: '3px 7px',
-                  minWidth: 18,
-                  textAlign: 'center',
-                }}
-              >
-                {partyRejectedUnread > 99 ? '99+' : partyRejectedUnread}
-              </span>
-            )}
-          </NavLink>
-        ))}
-      </nav>
-
-      {/* Footer */}
-      <div style={{ padding: '14px 18px', borderTop: '1px solid rgba(255,255,255,0.07)', fontSize: 11, color: '#64748b' }}>
-        {user && (
-          <div style={{ marginBottom: 12 }}>
-            <div style={{ color: '#e2e8f0', fontSize: 12, fontWeight: 700 }}>{user.name}</div>
-            {user.email ? (
-              <div
-                style={{
-                  marginTop: 4,
-                  fontSize: 11,
-                  color: '#94a3b8',
-                  fontWeight: 500,
-                  lineHeight: 1.35,
-                  wordBreak: 'break-all',
-                }}
-                title={user.email}
-              >
-                {user.email}
-              </div>
-            ) : user.phone ? (
-              <div
-                style={{
-                  marginTop: 4,
-                  fontSize: 11,
-                  color: '#94a3b8',
-                  fontWeight: 500,
-                  lineHeight: 1.35,
-                }}
-                title={user.phone}
-              >
-                {user.phone}
-              </div>
-            ) : null}
-            <div style={{ marginTop: 4, textTransform: 'capitalize' }}>
-              {isParty
-                ? (user.partyName ? String(user.partyName) : 'Party account')
-                : `${String(user.role || '').replace('_', ' ')}${user.partyName ? ` · ${user.partyName}` : ''}`}
-            </div>
-            <button
-              type="button"
-              onClick={() => setLogoutModalOpen(true)}
-              style={{
-                marginTop: 10,
-                width: '100%',
-                padding: '7px 10px',
-                borderRadius: 8,
-                border: '1px solid rgba(255,255,255,0.12)',
-                background: 'rgba(255,255,255,0.06)',
-                color: '#cbd5e1',
-                cursor: 'pointer',
-                fontSize: 12,
-              }}
-            >
-              Logout
-            </button>
+            Seam & Grace
           </div>
-        )}
-        © 2026 Seam & Grace
-      </div>
-    </aside>
+          <div
+            style={{
+              fontSize: 11,
+              color: '#64748b',
+              marginTop: 3,
+              letterSpacing: '0.08em',
+              textTransform: 'uppercase',
+            }}
+          >
+            Grace in every stitch
+          </div>
+        </div>
 
-    {logoutModalOpen &&
-      typeof document !== 'undefined' &&
-      createPortal(
-        <Modal
-          overlayClassName="modal-overlay-global"
-          title="Log out?"
-          onClose={() => setLogoutModalOpen(false)}
-          footer={(
-            <>
-              <button type="button" className="btn btn-ghost" onClick={() => setLogoutModalOpen(false)}>
-                Cancel
-              </button>
+        {/* Nav */}
+        <nav style={{ padding: '14px 10px', flex: 1 }}>
+          {visibleNavItems.map((item) => (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              end={item.exact}
+              onClick={handleNavClick}
+              style={({ isActive }) => ({
+                display: 'flex',
+                alignItems: 'center',
+                gap: 11,
+                padding: '10px 12px',
+                borderRadius: 9,
+                marginBottom: 3,
+                textDecoration: 'none',
+                fontSize: 13.5,
+                fontWeight: isActive ? 600 : 400,
+                color: isActive ? '#fff' : '#94a3b8',
+                background: isActive ? 'rgba(59,130,246,0.18)' : 'transparent',
+                transition: 'all 0.15s',
+                borderLeft: isActive ? '3px solid #3b82f6' : '3px solid transparent',
+              })}
+            >
+              <span style={{ opacity: 0.85 }}>{item.icon}</span>
+              <span>
+                {!isAdmin && !isSuperAdmin && item.partyLabel ? item.partyLabel : item.label}
+              </span>
+              {item.to === '/review-lots' && isAdmin && reviewLotsCount > 0 && (
+                <span
+                  title={`${reviewLotsCount} lot${reviewLotsCount === 1 ? '' : 's'} awaiting review`}
+                  style={{
+                    marginLeft: 'auto',
+                    background: '#ef4444',
+                    color: '#fff',
+                    fontSize: 11,
+                    fontWeight: 700,
+                    lineHeight: 1,
+                    borderRadius: 999,
+                    padding: '3px 7px',
+                    minWidth: 18,
+                    textAlign: 'center',
+                  }}
+                >
+                  {reviewLotsCount > 99 ? '99+' : reviewLotsCount}
+                </span>
+              )}
+              {item.to === '/party-ledger' && isAdmin && billRevisionCount > 0 && (
+                <span
+                  title={`${billRevisionCount} bill change request${billRevisionCount === 1 ? '' : 's'} pending`}
+                  style={{
+                    marginLeft: 'auto',
+                    background: '#f59e0b',
+                    color: '#fff',
+                    fontSize: 11,
+                    fontWeight: 700,
+                    lineHeight: 1,
+                    borderRadius: 999,
+                    padding: '3px 7px',
+                    minWidth: 18,
+                    textAlign: 'center',
+                  }}
+                >
+                  {billRevisionCount > 99 ? '99+' : billRevisionCount}
+                </span>
+              )}
+              {item.to === '/party-ledger' && isParty && partyRejectedUnread > 0 && (
+                <span
+                  title={`${partyRejectedUnread} unread notification${partyRejectedUnread === 1 ? '' : 's'}`}
+                  style={{
+                    marginLeft: 'auto',
+                    background: '#ef4444',
+                    color: '#fff',
+                    fontSize: 11,
+                    fontWeight: 700,
+                    lineHeight: 1,
+                    borderRadius: 999,
+                    padding: '3px 7px',
+                    minWidth: 18,
+                    textAlign: 'center',
+                  }}
+                >
+                  {partyRejectedUnread > 99 ? '99+' : partyRejectedUnread}
+                </span>
+              )}
+            </NavLink>
+          ))}
+        </nav>
+
+        {/* Footer */}
+        <div
+          style={{
+            padding: '14px 18px',
+            borderTop: '1px solid rgba(255,255,255,0.07)',
+            fontSize: 11,
+            color: '#64748b',
+          }}
+        >
+          {user && (
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ color: '#e2e8f0', fontSize: 12, fontWeight: 700 }}>{user.name}</div>
+              {user.email ? (
+                <div
+                  style={{
+                    marginTop: 4,
+                    fontSize: 11,
+                    color: '#94a3b8',
+                    fontWeight: 500,
+                    lineHeight: 1.35,
+                    wordBreak: 'break-all',
+                  }}
+                  title={user.email}
+                >
+                  {user.email}
+                </div>
+              ) : user.phone ? (
+                <div
+                  style={{
+                    marginTop: 4,
+                    fontSize: 11,
+                    color: '#94a3b8',
+                    fontWeight: 500,
+                    lineHeight: 1.35,
+                  }}
+                  title={user.phone}
+                >
+                  {user.phone}
+                </div>
+              ) : null}
+              <div style={{ marginTop: 4, textTransform: 'capitalize' }}>
+                {isParty
+                  ? user.partyName
+                    ? String(user.partyName)
+                    : 'Party account'
+                  : `${String(user.role || '').replace('_', ' ')}${user.partyName ? ` · ${user.partyName}` : ''}`}
+              </div>
               <button
                 type="button"
-                className="btn btn-primary"
-                onClick={() => {
-                  setLogoutModalOpen(false);
-                  logout();
+                onClick={() => setLogoutModalOpen(true)}
+                style={{
+                  marginTop: 10,
+                  width: '100%',
+                  padding: '7px 10px',
+                  borderRadius: 8,
+                  border: '1px solid rgba(255,255,255,0.12)',
+                  background: 'rgba(255,255,255,0.06)',
+                  color: '#cbd5e1',
+                  cursor: 'pointer',
+                  fontSize: 12,
                 }}
               >
-                Log out
+                Logout
               </button>
-            </>
+            </div>
           )}
-        >
-          <p style={{ margin: 0, fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.55 }}>
-            Are you sure you want to logout?
-          </p>
-        </Modal>,
-        document.body,
-      )}
+          © 2026 Seam & Grace
+        </div>
+      </aside>
+
+      {logoutModalOpen &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <Modal
+            overlayClassName="modal-overlay-global"
+            title="Log out?"
+            onClose={() => setLogoutModalOpen(false)}
+            footer={
+              <>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  onClick={() => setLogoutModalOpen(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={() => {
+                    setLogoutModalOpen(false);
+                    logout();
+                  }}
+                >
+                  Log out
+                </button>
+              </>
+            }
+          >
+            <p
+              style={{ margin: 0, fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.55 }}
+            >
+              Are you sure you want to logout?
+            </p>
+          </Modal>,
+          document.body
+        )}
     </>
   );
 }

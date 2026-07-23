@@ -67,7 +67,7 @@ export async function readPhoneFromClipboard() {
   const phone = extractPhoneFromText(text);
   if (!phone) {
     const err = new Error(
-      'No phone number found in clipboard. In Contacts: open the person → Copy phone number, then tap Paste here.',
+      'No phone number found in clipboard. In Contacts: open the person → Copy phone number, then tap Paste here.'
     );
     err.code = 'EMPTY';
     throw err;
@@ -122,13 +122,7 @@ export async function pickDeviceContact() {
   const nameRaw = Array.isArray(c.name) ? c.name[0] : c.name;
   const name = String(nameRaw || '').trim();
   const telList = Array.isArray(c.tel) ? c.tel : c.tel ? [c.tel] : [];
-  const phones = [
-    ...new Set(
-      telList
-        .map((t) => normalizePhoneDigits(t))
-        .filter(Boolean),
-    ),
-  ];
+  const phones = [...new Set(telList.map((t) => normalizePhoneDigits(t)).filter(Boolean))];
 
   return { name, phones };
 }

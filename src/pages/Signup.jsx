@@ -55,7 +55,7 @@ export default function Signup() {
       }
     }
     if (form.role === 'party' && !String(form.adminEmail || '').trim()) {
-      setError('Enter your business administrator\'s email so they can approve your account.');
+      setError("Enter your business administrator's email so they can approve your account.");
       return;
     }
     setIsSubmitting(true);
@@ -83,12 +83,12 @@ export default function Signup() {
 
       if (u?.role === 'party' && u?.status === 'pending') {
         setMessage(
-          `${baseMsg || 'Account created and waiting for approval.'} You can log in after your business administrator approves your account.`,
+          `${baseMsg || 'Account created and waiting for approval.'} You can log in after your business administrator approves your account.`
         );
       } else if (u?.role === 'admin' && u?.status === 'pending') {
         setMessage(
-          baseMsg
-          || 'Your administrator account was created. You cannot sign in until the platform super administrator verifies and approves you.',
+          baseMsg ||
+            'Your administrator account was created. You cannot sign in until the platform super administrator verifies and approves you.'
         );
       } else if (u?.role === 'admin' && u?.status === 'approved') {
         setMessage(baseMsg || 'Organization administrator created — you can sign in.');
@@ -97,7 +97,13 @@ export default function Signup() {
       }
 
       setForm({
-        name: '', email: '', phone: '', password: '', role: 'party', partyName: '', adminEmail: '',
+        name: '',
+        email: '',
+        phone: '',
+        password: '',
+        role: 'party',
+        partyName: '',
+        adminEmail: '',
       });
     } catch (err) {
       setError(formatApiError(err, 'Unable to create account'));
@@ -114,25 +120,34 @@ export default function Signup() {
       subtitle="Party users join an existing organization with their business administrator’s email. Additional business administrators can register and are activated after platform verification."
       sideTitle="Super administrator verifies each new organization admin. Each approved admin can run their own workspaces and approve their party users."
       sideText="Use a real email you control — disposable and test addresses are blocked. Party users are approved only by the business admin they selected."
-      footer={<>Already have an account? <Link className="auth-inline-link" to="/login">Login</Link></>}
+      footer={
+        <>
+          Already have an account?{' '}
+          <Link className="auth-inline-link" to="/login">
+            Login
+          </Link>
+        </>
+      }
     >
       <form className="auth-form" onSubmit={handleSubmit}>
-        {error && (
-          <div className="alert alert-warning">
-            {error}
-          </div>
-        )}
+        {error && <div className="alert alert-warning">{error}</div>}
 
-        {message && (
-          <div className="alert alert-success">
-            {message}
-          </div>
-        )}
+        {message && <div className="alert alert-success">{message}</div>}
 
         <fieldset className="auth-label" style={{ border: 'none', padding: 0, margin: 0 }}>
-          <legend className="auth-label-text" style={{ marginBottom: 8 }}>Account type</legend>
+          <legend className="auth-label-text" style={{ marginBottom: 8 }}>
+            Account type
+          </legend>
           <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontWeight: 500 }}>
+            <label
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 8,
+                cursor: 'pointer',
+                fontWeight: 500,
+              }}
+            >
               <input
                 type="radio"
                 name="role"
@@ -141,7 +156,15 @@ export default function Signup() {
               />
               Party
             </label>
-            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontWeight: 500 }}>
+            <label
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 8,
+                cursor: 'pointer',
+                fontWeight: 500,
+              }}
+            >
               <input
                 type="radio"
                 name="role"
@@ -151,8 +174,17 @@ export default function Signup() {
               Business administrator
             </label>
           </div>
-          <p style={{ fontSize: 12, color: 'var(--text-muted, #64748b)', marginTop: 8, marginBottom: 0 }}>
-            When a platform super administrator is set up, each new business administrator must be verified before they can sign in. Multiple approved administrators can exist; party users pick which one they belong to.
+          <p
+            style={{
+              fontSize: 12,
+              color: 'var(--text-muted, #64748b)',
+              marginTop: 8,
+              marginBottom: 0,
+            }}
+          >
+            When a platform super administrator is set up, each new business administrator must be
+            verified before they can sign in. Multiple approved administrators can exist; party
+            users pick which one they belong to.
           </p>
         </fieldset>
 
@@ -231,7 +263,12 @@ export default function Signup() {
           </>
         )}
 
-        <button className="btn btn-primary" type="submit" disabled={isSubmitting} style={{ width: '100%', justifyContent: 'center' }}>
+        <button
+          className="btn btn-primary"
+          type="submit"
+          disabled={isSubmitting}
+          style={{ width: '100%', justifyContent: 'center' }}
+        >
           {isSubmitting ? 'Creating account...' : 'Sign Up'}
         </button>
       </form>

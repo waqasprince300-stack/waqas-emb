@@ -46,16 +46,22 @@ export default function BusinessOwnerSwitcher({ compact = false }) {
   /** Main app admin manages workspaces; party users never see this. */
   if (!isAdmin) return null;
 
-  const activeOwner = businessOwners.find((owner) => String(owner.id || owner._id) === String(activeBusinessOwnerId));
+  const activeOwner = businessOwners.find(
+    (owner) => String(owner.id || owner._id) === String(activeBusinessOwnerId)
+  );
 
-  const compactSelectValue = viewAllWorkspaces ? ADMIN_ALL_WORKSPACES_ID : String(activeBusinessOwnerId || '');
+  const compactSelectValue = viewAllWorkspaces
+    ? ADMIN_ALL_WORKSPACES_ID
+    : String(activeBusinessOwnerId || '');
 
   const displayOwnerName = viewAllWorkspaces
     ? 'All workspaces'
-    : (activeOwner?.name || 'Select business owner');
+    : activeOwner?.name || 'Select business owner';
 
   const canRemoveWorkspace =
-    !viewAllWorkspaces && Boolean(String(activeBusinessOwnerId || '').trim()) && businessOwners.length > 0;
+    !viewAllWorkspaces &&
+    Boolean(String(activeBusinessOwnerId || '').trim()) &&
+    businessOwners.length > 0;
 
   const resetRemoveModal = () => {
     setRemoveModalOpen(false);
@@ -132,7 +138,15 @@ export default function BusinessOwnerSwitcher({ compact = false }) {
   return (
     <>
       {compact ? (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', flex: '1 1 auto' }}>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            flexWrap: 'wrap',
+            flex: '1 1 auto',
+          }}
+        >
           <select
             className="form-select"
             style={{
@@ -177,7 +191,11 @@ export default function BusinessOwnerSwitcher({ compact = false }) {
             className="btn btn-danger"
             type="button"
             disabled={!canRemoveWorkspace || removeSaving}
-            title={!canRemoveWorkspace ? 'Select a single workspace to remove it' : 'Remove this workspace'}
+            title={
+              !canRemoveWorkspace
+                ? 'Select a single workspace to remove it'
+                : 'Remove this workspace'
+            }
             onClick={() => openRemoveModal()}
             style={{
               fontWeight: 600,
@@ -205,7 +223,15 @@ export default function BusinessOwnerSwitcher({ compact = false }) {
           }}
         >
           <div>
-            <div style={{ fontSize: 10, color: 'var(--primary)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em' }}>
+            <div
+              style={{
+                fontSize: 10,
+                color: 'var(--primary)',
+                fontWeight: 700,
+                textTransform: 'uppercase',
+                letterSpacing: '0.07em',
+              }}
+            >
               Active business owner
             </div>
             <div
@@ -246,7 +272,11 @@ export default function BusinessOwnerSwitcher({ compact = false }) {
               className="btn btn-danger"
               type="button"
               disabled={!canRemoveWorkspace || removeSaving}
-              title={!canRemoveWorkspace ? 'Select a single workspace to remove it' : 'Remove this workspace'}
+              title={
+                !canRemoveWorkspace
+                  ? 'Select a single workspace to remove it'
+                  : 'Remove this workspace'
+              }
               onClick={() => openRemoveModal()}
               style={{ opacity: canRemoveWorkspace ? 1 : 0.5 }}
             >
@@ -268,14 +298,21 @@ export default function BusinessOwnerSwitcher({ compact = false }) {
           onFormSubmit={() => {
             void handleCreate();
           }}
-          footer={(
+          footer={
             <>
-              <button type="button" className="btn btn-ghost" disabled={saving} onClick={() => setModalOpen(false)}>Cancel</button>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                disabled={saving}
+                onClick={() => setModalOpen(false)}
+              >
+                Cancel
+              </button>
               <button type="submit" className="btn btn-primary" disabled={saving}>
                 {saving ? 'Creating...' : 'Create Owner'}
               </button>
             </>
-          )}
+          }
         >
           {error && <div className="alert alert-warning">{error}</div>}
           <FormGroup label="Business Owner Name *">
@@ -291,7 +328,9 @@ export default function BusinessOwnerSwitcher({ compact = false }) {
             <input
               className="form-input"
               value={form.phone}
-              onChange={(event) => setForm((current) => ({ ...current, phone: event.target.value }))}
+              onChange={(event) =>
+                setForm((current) => ({ ...current, phone: event.target.value }))
+              }
               placeholder="Optional"
             />
           </FormGroup>
@@ -300,7 +339,9 @@ export default function BusinessOwnerSwitcher({ compact = false }) {
               className="form-textarea"
               rows={3}
               value={form.address}
-              onChange={(event) => setForm((current) => ({ ...current, address: event.target.value }))}
+              onChange={(event) =>
+                setForm((current) => ({ ...current, address: event.target.value }))
+              }
               placeholder="Optional"
             />
           </FormGroup>
@@ -314,28 +355,44 @@ export default function BusinessOwnerSwitcher({ compact = false }) {
             if (!removeSaving) resetRemoveModal();
           }}
           wide={removeForceStep}
-          footer={(
+          footer={
             <>
-              <button type="button" className="btn btn-ghost" disabled={removeSaving} onClick={() => resetRemoveModal()}>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                disabled={removeSaving}
+                onClick={() => resetRemoveModal()}
+              >
                 Cancel
               </button>
               {removeForceStep ? (
-                <button type="button" className="btn btn-danger" disabled={removeSaving} onClick={() => void handleRemoveForce()}>
+                <button
+                  type="button"
+                  className="btn btn-danger"
+                  disabled={removeSaving}
+                  onClick={() => void handleRemoveForce()}
+                >
                   {removeSaving ? 'Deleting…' : 'Delete workspace and all data'}
                 </button>
               ) : (
-                <button type="button" className="btn btn-danger" disabled={removeSaving} onClick={() => void handleRemoveTry()}>
+                <button
+                  type="button"
+                  className="btn btn-danger"
+                  disabled={removeSaving}
+                  onClick={() => void handleRemoveTry()}
+                >
                   {removeSaving ? 'Working…' : 'Remove workspace'}
                 </button>
               )}
             </>
-          )}
+          }
         >
           {removeError && <div className="alert alert-warning">{removeError}</div>}
           {removeForceStep ? (
             <>
               <p style={{ marginTop: 0 }}>
-                This workspace still has related records. Deleting it will permanently remove the items below and disable party logins that belong only to this workspace.
+                This workspace still has related records. Deleting it will permanently remove the
+                items below and disable party logins that belong only to this workspace.
               </p>
               {nonzeroCountLines(removeCounts).length > 0 ? (
                 <ul style={{ margin: '12px 0', paddingLeft: 20 }}>
@@ -344,13 +401,16 @@ export default function BusinessOwnerSwitcher({ compact = false }) {
                   ))}
                 </ul>
               ) : (
-                <p className="alert alert-warning">Unable to load detail counts; you can still confirm deletion.</p>
+                <p className="alert alert-warning">
+                  Unable to load detail counts; you can still confirm deletion.
+                </p>
               )}
             </>
           ) : (
             <p style={{ marginTop: 0 }}>
-              Remove <strong>{activeOwner?.name || 'this workspace'}</strong>? Empty workspaces are removed immediately.
-              If there are still lots, parties, or payments, you will be asked to confirm a full delete.
+              Remove <strong>{activeOwner?.name || 'this workspace'}</strong>? Empty workspaces are
+              removed immediately. If there are still lots, parties, or payments, you will be asked
+              to confirm a full delete.
             </p>
           )}
         </Modal>

@@ -50,11 +50,7 @@ export default function NotificationBell() {
   const wrapRef = useRef(null);
   const panelRef = useRef(null);
 
-  const show =
-    isAuthenticated &&
-    !isSuperAdmin &&
-    !isPersonalKhata &&
-    (isAdmin || isParty);
+  const show = isAuthenticated && !isSuperAdmin && !isPersonalKhata && (isAdmin || isParty);
 
   useEffect(() => {
     if (!show || !open) return undefined;
@@ -126,7 +122,14 @@ export default function NotificationBell() {
           cursor: 'pointer',
         }}
       >
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <svg
+          width="18"
+          height="18"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+        >
           <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
           <path d="M13.73 21a2 2 0 0 1-3.46 0" />
         </svg>
@@ -208,7 +211,9 @@ export default function NotificationBell() {
             <div style={{ overflowY: 'auto', flex: 1 }}>
               {visibleList.length === 0 ? (
                 <p style={{ padding: 16, margin: 0, fontSize: 13, color: '#64748b' }}>
-                  {list.length === 0 ? 'No notifications yet.' : 'All caught up — no unread notifications.'}
+                  {list.length === 0
+                    ? 'No notifications yet.'
+                    : 'All caught up — no unread notifications.'}
                 </p>
               ) : (
                 visibleList.map((n) => (
@@ -237,9 +242,7 @@ export default function NotificationBell() {
                     >
                       {n.title}
                     </div>
-                    <div style={{ fontSize: 12, color: '#475569', lineHeight: 1.4 }}>
-                      {n.body}
-                    </div>
+                    <div style={{ fontSize: 12, color: '#475569', lineHeight: 1.4 }}>{n.body}</div>
                     <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 6 }}>
                       {formatWhen(n.createdAt)}
                     </div>
@@ -248,7 +251,7 @@ export default function NotificationBell() {
               )}
             </div>
           </div>,
-          document.body,
+          document.body
         )}
     </div>
   );
@@ -312,7 +315,9 @@ export function LotNotificationListener() {
               : action === 'payment_recorded'
                 ? 'The business recorded a payment for your account. Open My Payments to review.'
                 : 'A party submitted a lot for completion approval.';
-    const linkPath = String(pendingLotNotice.linkPath || '').trim() || (action === 'payment_recorded' ? '/payments' : '');
+    const linkPath =
+      String(pendingLotNotice.linkPath || '').trim() ||
+      (action === 'payment_recorded' ? '/payments' : '');
 
     Swal.fire({
       toast: true,
@@ -337,14 +342,7 @@ export function LotNotificationListener() {
         navigate(linkPath);
       }
     });
-  }, [
-    pendingLotNotice,
-    isAdmin,
-    isParty,
-    navigate,
-    clearPendingLotNotice,
-    refreshNotifications,
-  ]);
+  }, [pendingLotNotice, isAdmin, isParty, navigate, clearPendingLotNotice, refreshNotifications]);
 
   return null;
 }

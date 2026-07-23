@@ -64,7 +64,7 @@ export default function LazyReceiptThumb({
           observer.disconnect();
         }
       },
-      { rootMargin: '200px' },
+      { rootMargin: '200px' }
     );
     observer.observe(el);
     return () => observer.disconnect();
@@ -152,7 +152,16 @@ export default function LazyReceiptThumb({
         clearTimeout(handle);
       }
     };
-  }, [lotId, receiptProp, businessOwnerId, billExists, inView, isParty, patchLotReceipt, ledgerReceiptsVersion]);
+  }, [
+    lotId,
+    receiptProp,
+    businessOwnerId,
+    billExists,
+    inView,
+    isParty,
+    patchLotReceipt,
+    ledgerReceiptsVersion,
+  ]);
 
   if (kind !== 'none') {
     return <ReceiptThumb receipt={receipt} lotLabel={lotLabel} onOpen={onOpen} size={size} />;

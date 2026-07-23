@@ -1,8 +1,8 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Modal } from "./UI";
-import Loader from "./Loader";
-import { fileToFinalizedImage } from "../utils/imageCompress";
-import { receiptPreviewKind } from "./receipt/ReceiptThumb";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Modal } from './UI';
+import Loader from './Loader';
+import { fileToFinalizedImage } from '../utils/imageCompress';
+import { receiptPreviewKind } from './receipt/ReceiptThumb';
 
 function filesFromClipboardData(clipboardData) {
   const files = [];
@@ -10,8 +10,8 @@ function filesFromClipboardData(clipboardData) {
   if (items) {
     for (let i = 0; i < items.length; i += 1) {
       const item = items[i];
-      if (!item || item.kind !== "file") continue;
-      if (!String(item.type || "").startsWith("image/")) continue;
+      if (!item || item.kind !== 'file') continue;
+      if (!String(item.type || '').startsWith('image/')) continue;
       const file = item.getAsFile();
       if (file) files.push(file);
     }
@@ -19,7 +19,7 @@ function filesFromClipboardData(clipboardData) {
   if (!files.length && clipboardData?.files?.length) {
     for (let i = 0; i < clipboardData.files.length; i += 1) {
       const file = clipboardData.files[i];
-      if (file && String(file.type || "").startsWith("image/")) {
+      if (file && String(file.type || '').startsWith('image/')) {
         files.push(file);
       }
     }
@@ -31,32 +31,28 @@ function filesFromClipboardData(clipboardData) {
 async function filesFromClipboardApi() {
   if (!navigator.clipboard?.read) {
     throw new Error(
-      "This browser cannot read the clipboard. Use Add slip and pick from Gallery, or save the WhatsApp image first.",
+      'This browser cannot read the clipboard. Use Add slip and pick from Gallery, or save the WhatsApp image first.'
     );
   }
   const items = await navigator.clipboard.read();
   const files = [];
   for (const item of items) {
     const types = Array.isArray(item.types) ? item.types : [];
-    const imageType = types.find((t) => String(t).startsWith("image/"));
+    const imageType = types.find((t) => String(t).startsWith('image/'));
     if (!imageType) continue;
     // eslint-disable-next-line no-await-in-loop
     const blob = await item.getType(imageType);
     if (!blob) continue;
-    const ext = imageType.includes("png")
-      ? "png"
-      : imageType.includes("webp")
-        ? "webp"
-        : "jpg";
+    const ext = imageType.includes('png') ? 'png' : imageType.includes('webp') ? 'webp' : 'jpg';
     files.push(
       new File([blob], `clipboard-slip.${ext}`, {
         type: blob.type || imageType,
-      }),
+      })
     );
   }
   if (!files.length) {
     throw new Error(
-      "No image in clipboard. In WhatsApp: long-press the slip → Copy, then tap Paste here.",
+      'No image in clipboard. In WhatsApp: long-press the slip → Copy, then tap Paste here.'
     );
   }
   return files;
@@ -79,16 +75,16 @@ export default function ImageUploader({
   onChange,
   max = 6,
   disabled = false,
-  addLabel = "Add picture",
+  addLabel = 'Add picture',
   thumbSize = 72,
 }) {
   const inputRef = useRef(null);
   const rootRef = useRef(null);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState('');
   const [preview, setPreview] = useState(null);
 
-  const images = Array.isArray(value) ? value.filter(Boolean) : [];
+  const images = useMemo(() => (Array.isArray(value) ? value.filter(Boolean) : []), [value]);
   const canAddMore = images.length < max;
   const canPaste = !disabled && (canAddMore || max === 1);
 
@@ -98,7 +94,7 @@ export default function ImageUploader({
       if (!list.length || disabled) return;
       const base = replace && max === 1 ? [] : images;
       if (!replace && base.length >= max) return;
-      setError("");
+      setError('');
       setBusy(true);
       try {
         const room = Math.max(0, max - base.length);
@@ -111,17 +107,17 @@ export default function ImageUploader({
         }
         if (finalized.length) onChange([...base, ...finalized]);
       } catch (err) {
-        setError(err?.message || "Could not add this picture.");
+        setError(err?.message || 'Could not add this picture.');
       } finally {
         setBusy(false);
       }
     },
-    [disabled, images, max, onChange],
+    [disabled, images, max, onChange]
   );
 
   const handlePick = async (e) => {
     const files = Array.from(e.target.files || []);
-    if (inputRef.current) inputRef.current.value = "";
+    if (inputRef.current) inputRef.current.value = '';
     await addFiles(files);
   };
 
@@ -130,7 +126,7 @@ export default function ImageUploader({
       if (!files?.length) return;
       void addFiles(files, { replace: max === 1 && images.length >= 1 });
     },
-    [addFiles, images.length, max],
+    [addFiles, images.length, max]
   );
 
   const handlePasteEvent = useCallback(
@@ -142,12 +138,12 @@ export default function ImageUploader({
       e.stopPropagation();
       pasteClipboardFiles(files);
     },
-    [busy, canPaste, pasteClipboardFiles],
+    [busy, canPaste, pasteClipboardFiles]
   );
 
   const handlePasteButton = async () => {
     if (!canPaste || busy) return;
-    setError("");
+    setError('');
     setBusy(true);
     try {
       const files = await filesFromClipboardApi();
@@ -155,13 +151,11 @@ export default function ImageUploader({
       pasteClipboardFiles(files);
     } catch (err) {
       setBusy(false);
-      const name = err?.name || "";
-      if (name === "NotAllowedError") {
-        setError(
-          "Clipboard permission denied. Allow paste when asked, or use Add slip → Gallery.",
-        );
+      const name = err?.name || '';
+      if (name === 'NotAllowedError') {
+        setError('Clipboard permission denied. Allow paste when asked, or use Add slip → Gallery.');
       } else {
-        setError(err?.message || "Could not paste from clipboard.");
+        setError(err?.message || 'Could not paste from clipboard.');
       }
     }
   };
@@ -176,14 +170,14 @@ export default function ImageUploader({
       const root = rootRef.current;
       const active = document.activeElement;
       if (active && root && !root.contains(active)) {
-        const otherUploader = active.closest?.("[data-image-uploader]");
+        const otherUploader = active.closest?.('[data-image-uploader]');
         if (otherUploader && otherUploader !== root) return;
       }
       e.preventDefault();
       pasteClipboardFiles(files);
     };
-    document.addEventListener("paste", onPaste);
-    return () => document.removeEventListener("paste", onPaste);
+    document.addEventListener('paste', onPaste);
+    return () => document.removeEventListener('paste', onPaste);
   }, [busy, canPaste, pasteClipboardFiles]);
 
   const removeAt = (idx) => {
@@ -200,15 +194,15 @@ export default function ImageUploader({
     width: thumbSize,
     height: thumbSize,
     borderRadius: 10,
-    border: "1px dashed #C7D2FE",
-    background: "#F8FAFF",
-    cursor: busy ? "wait" : "pointer",
-    color: "#4338ca",
+    border: '1px dashed #C7D2FE',
+    background: '#F8FAFF',
+    cursor: busy ? 'wait' : 'pointer',
+    color: '#4338ca',
     fontSize: 12,
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    justifyContent: "center",
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
     gap: 4,
   };
 
@@ -218,15 +212,15 @@ export default function ImageUploader({
       data-image-uploader
       tabIndex={0}
       onPaste={handlePasteEvent}
-      style={{ outline: "none" }}
+      style={{ outline: 'none' }}
       aria-label={`${addLabel}. You can also paste an image from the clipboard.`}
     >
       <div
         style={{
-          display: "flex",
-          flexWrap: "wrap",
+          display: 'flex',
+          flexWrap: 'wrap',
           gap: 10,
-          alignItems: "center",
+          alignItems: 'center',
         }}
       >
         {images.map((src, idx) => {
@@ -235,14 +229,14 @@ export default function ImageUploader({
             <div
               key={idx}
               style={{
-                position: "relative",
+                position: 'relative',
                 width: thumbSize,
                 height: thumbSize,
                 borderRadius: 10,
-                border: "1px solid #E5E7EB",
-                overflow: "hidden",
-                background: "#f8fafc",
-                boxShadow: "0 1px 2px rgba(15,23,42,0.06)",
+                border: '1px solid #E5E7EB',
+                overflow: 'hidden',
+                background: '#f8fafc',
+                boxShadow: '0 1px 2px rgba(15,23,42,0.06)',
               }}
             >
               <button
@@ -251,26 +245,26 @@ export default function ImageUploader({
                 title="View picture"
                 style={{
                   padding: 0,
-                  border: "none",
-                  background: "transparent",
-                  cursor: "pointer",
-                  width: "100%",
-                  height: "100%",
+                  border: 'none',
+                  background: 'transparent',
+                  cursor: 'pointer',
+                  width: '100%',
+                  height: '100%',
                   lineHeight: 0,
                 }}
               >
-                {kind === "pdf" ? (
+                {kind === 'pdf' ? (
                   <span
                     style={{
-                      display: "flex",
-                      width: "100%",
-                      height: "100%",
-                      alignItems: "center",
-                      justifyContent: "center",
+                      display: 'flex',
+                      width: '100%',
+                      height: '100%',
+                      alignItems: 'center',
+                      justifyContent: 'center',
                       fontSize: 13,
                       fontWeight: 700,
-                      color: "#b91c1c",
-                      background: "#FEF2F2",
+                      color: '#b91c1c',
+                      background: '#FEF2F2',
                     }}
                   >
                     PDF
@@ -279,7 +273,7 @@ export default function ImageUploader({
                   <img
                     src={src}
                     alt=""
-                    style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                   />
                 )}
               </button>
@@ -290,18 +284,18 @@ export default function ImageUploader({
                   aria-label="Remove picture"
                   title="Remove picture"
                   style={{
-                    position: "absolute",
+                    position: 'absolute',
                     top: 2,
                     right: 2,
                     width: 20,
                     height: 20,
-                    borderRadius: "50%",
-                    border: "none",
-                    background: "rgba(17,24,39,0.75)",
-                    color: "#fff",
+                    borderRadius: '50%',
+                    border: 'none',
+                    background: 'rgba(17,24,39,0.75)',
+                    color: '#fff',
                     fontSize: 13,
-                    lineHeight: "20px",
-                    cursor: "pointer",
+                    lineHeight: '20px',
+                    cursor: 'pointer',
                     padding: 0,
                   }}
                 >
@@ -328,7 +322,7 @@ export default function ImageUploader({
             ) : (
               <>
                 <span style={{ fontSize: 22, lineHeight: 1 }}>+</span>
-                <span style={{ fontSize: 10, textAlign: "center", padding: "0 4px" }}>
+                <span style={{ fontSize: 10, textAlign: 'center', padding: '0 4px' }}>
                   {addLabel}
                 </span>
               </>
@@ -344,9 +338,9 @@ export default function ImageUploader({
             title="Paste image copied from WhatsApp or clipboard"
             style={{
               ...tileBtnStyle,
-              borderColor: "#86efac",
-              background: "#f0fdf4",
-              color: "#166534",
+              borderColor: '#86efac',
+              background: '#f0fdf4',
+              color: '#166534',
             }}
           >
             {busy ? (
@@ -356,9 +350,7 @@ export default function ImageUploader({
                 <span style={{ fontSize: 18, lineHeight: 1 }} aria-hidden>
                   ⎘
                 </span>
-                <span style={{ fontSize: 10, textAlign: "center", padding: "0 4px" }}>
-                  Paste
-                </span>
+                <span style={{ fontSize: 10, textAlign: 'center', padding: '0 4px' }}>Paste</span>
               </>
             )}
           </button>
@@ -371,37 +363,35 @@ export default function ImageUploader({
         accept="image/*,.pdf,application/pdf"
         multiple={max > 1}
         onChange={handlePick}
-        style={{ display: "none" }}
+        style={{ display: 'none' }}
       />
 
-      <div style={{ marginTop: 4, fontSize: 11, color: "var(--text-muted)", lineHeight: 1.45 }}>
+      <div style={{ marginTop: 4, fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.45 }}>
         {images.length}/{max} pictures
-        {max > 1 ? " · JPG, PNG ya PDF" : ""}
+        {max > 1 ? ' · JPG, PNG ya PDF' : ''}
         {!disabled ? (
           <>
             <br />
-            Phone: WhatsApp pe slip long-press → Copy → yahan <strong>Paste</strong>.
-            {" "}Warna <strong>{addLabel}</strong> se Gallery.
+            Phone: WhatsApp pe slip long-press → Copy → yahan <strong>Paste</strong>. Warna{' '}
+            <strong>{addLabel}</strong> se Gallery.
             <br />
             Computer: Ctrl+V / Cmd+V, ya Paste button.
           </>
         ) : null}
       </div>
 
-      {error && (
-        <div style={{ marginTop: 4, fontSize: 11, color: "#dc2626" }}>{error}</div>
-      )}
+      {error && <div style={{ marginTop: 4, fontSize: 11, color: '#dc2626' }}>{error}</div>}
 
       {preview && (
         <Modal title="Picture" onClose={() => setPreview(null)}>
-          {preview.kind === "pdf" ? (
+          {preview.kind === 'pdf' ? (
             <iframe
               src={preview.src}
               title="PDF"
               style={{
-                width: "100%",
-                height: "70vh",
-                border: "1px solid var(--border)",
+                width: '100%',
+                height: '70vh',
+                border: '1px solid var(--border)',
                 borderRadius: 8,
               }}
             />
@@ -409,7 +399,7 @@ export default function ImageUploader({
             <img
               src={preview.src}
               alt=""
-              style={{ maxWidth: "100%", borderRadius: 8, display: "block", margin: "0 auto" }}
+              style={{ maxWidth: '100%', borderRadius: 8, display: 'block', margin: '0 auto' }}
             />
           )}
         </Modal>

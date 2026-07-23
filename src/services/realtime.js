@@ -19,7 +19,7 @@ const readToken = () => {
 const deriveSocketBase = () => {
   const base = String(
     process.env.REACT_APP_API_BASE_URL ||
-      (process.env.NODE_ENV === 'development' ? 'http://localhost:3001/api' : ''),
+      (process.env.NODE_ENV === 'development' ? 'http://localhost:3001/api' : '')
   )
     .replace(/\/$/, '')
     .replace(/\/api$/i, '');

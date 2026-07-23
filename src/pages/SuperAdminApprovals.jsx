@@ -70,7 +70,7 @@ export default function SuperAdminApprovals() {
 
   const pendingCount = useMemo(
     () => admins.filter((a) => String(a.status || '').toLowerCase() === 'pending').length,
-    [admins],
+    [admins]
   );
 
   const approve = async (row) => {
@@ -130,7 +130,14 @@ export default function SuperAdminApprovals() {
 
   if (loading) {
     return (
-      <div style={{ minHeight: '70vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div
+        style={{
+          minHeight: '70vh',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
         <LoaderDashboard height={30} width={30} />
       </div>
     );
@@ -142,11 +149,15 @@ export default function SuperAdminApprovals() {
         <div>
           <div className="page-title">Verify organization administrators</div>
           <div className="page-subtitle">
-            New business administrators can sign up, but cannot use the app until you approve them. Approved and
-            rejected requests stay listed for your records.
+            New business administrators can sign up, but cannot use the app until you approve them.
+            Approved and rejected requests stay listed for your records.
           </div>
         </div>
-        <button type="button" className="btn btn-ghost" onClick={() => load({ showPageLoader: true })}>
+        <button
+          type="button"
+          className="btn btn-ghost"
+          onClick={() => load({ showPageLoader: true })}
+        >
           Refresh
         </button>
       </div>
@@ -191,8 +202,12 @@ export default function SuperAdminApprovals() {
                   const busy = savingId === id;
                   const st = String(row.status || '').toLowerCase();
                   const pending = st === 'pending';
-                  const approvedAt = row.approvedAt ? formatDisplayDateTime(row.approvedAt, '') : '';
-                  const rejectedAt = row.rejectedAt ? formatDisplayDateTime(row.rejectedAt, '') : '';
+                  const approvedAt = row.approvedAt
+                    ? formatDisplayDateTime(row.approvedAt, '')
+                    : '';
+                  const rejectedAt = row.rejectedAt
+                    ? formatDisplayDateTime(row.rejectedAt, '')
+                    : '';
                   const resolved = approvedAt || rejectedAt || '—';
                   return (
                     <tr key={id}>
@@ -201,7 +216,9 @@ export default function SuperAdminApprovals() {
                       <td style={statusStyle(row.status)}>{statusLabel(row.status)}</td>
                       <td>{formatDisplayDateTime(row.createdAt)}</td>
                       <td>{resolved}</td>
-                      <td style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{verifierLabel(row)}</td>
+                      <td style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                        {verifierLabel(row)}
+                      </td>
                       <td>
                         {pending ? (
                           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>

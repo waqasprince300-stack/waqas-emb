@@ -13,9 +13,7 @@ export function hasPendingBillRevisionRequest(partyEdit) {
 }
 
 export function lotIsPartyAssigned(lot) {
-  return Boolean(
-    String(lot?.partyId || '').trim() || String(lot?.partyName || '').trim(),
-  );
+  return Boolean(String(lot?.partyId || '').trim() || String(lot?.partyName || '').trim());
 }
 
 /** Pending bill-change requests tied to visible party-assigned lots (not orphan party-edit rows). */
@@ -23,8 +21,6 @@ export function countPendingBillRevisionRequests(lots, partyEdits) {
   const lotList = Array.isArray(lots) ? lots : [];
   const edits = partyEdits || {};
   return lotList.filter(
-    (lot) =>
-      lotIsPartyAssigned(lot) &&
-      hasPendingBillRevisionRequest(partyEditForLot(edits, lot)),
+    (lot) => lotIsPartyAssigned(lot) && hasPendingBillRevisionRequest(partyEditForLot(edits, lot))
   ).length;
 }

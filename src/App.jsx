@@ -46,9 +46,8 @@ function Layout({ children, sidebarOpen, setSidebarOpen }) {
   }, [location.pathname, setSidebarOpen]);
 
   useEffect(() => {
-    document.body.style.overflow = sidebarOpen && window.matchMedia('(max-width: 768px)').matches
-      ? 'hidden'
-      : '';
+    document.body.style.overflow =
+      sidebarOpen && window.matchMedia('(max-width: 768px)').matches ? 'hidden' : '';
     return () => {
       document.body.style.overflow = '';
     };
@@ -72,7 +71,15 @@ function Layout({ children, sidebarOpen, setSidebarOpen }) {
         aria-label={sidebarOpen ? 'Close menu' : 'Open menu'}
         onClick={() => setSidebarOpen(!sidebarOpen)}
       >
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+        <svg
+          width="20"
+          height="20"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          aria-hidden
+        >
           {sidebarOpen ? (
             <path d="M6 18L18 6M6 6l12 12" />
           ) : (
@@ -85,18 +92,28 @@ function Layout({ children, sidebarOpen, setSidebarOpen }) {
         </svg>
       </button>
 
-      <div className="app-top-actions" style={{ position: 'fixed', top: 12, right: 16, zIndex: 120 }}>
+      <div
+        className="app-top-actions"
+        style={{ position: 'fixed', top: 12, right: 16, zIndex: 120 }}
+      >
         <NotificationBell />
       </div>
 
       <main className={`app-main${isKhataRoute ? ' app-main--khata' : ''}`}>
         <div className="app-main-inner">
           <Suspense
-            fallback={(
-              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
+            fallback={
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  minHeight: '60vh',
+                }}
+              >
                 <LoaderDashboard height={30} width={30} />
               </div>
-            )}
+            }
           >
             {children}
           </Suspense>
@@ -254,7 +271,15 @@ function BackgroundRefreshIndicator() {
         pointerEvents: 'none',
       }}
     >
-      <span style={{ width: 8, height: 8, borderRadius: 999, background: '#38bdf8', display: 'inline-block' }} />
+      <span
+        style={{
+          width: 8,
+          height: 8,
+          borderRadius: 999,
+          background: '#38bdf8',
+          display: 'inline-block',
+        }}
+      />
       Updating…
     </div>
   );
@@ -265,130 +290,143 @@ function AppRoutes() {
 
   return (
     <SuperAdminShell>
-    <RouteChangeRefresher />
-    <BootstrapErrorBanner />
-    <BackgroundRefreshIndicator />
-    <LotNotificationListener />
-    <Suspense
-      fallback={(
-        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
-          <LoaderDashboard height={30} width={30} />
-        </div>
-      )}
-    >
-    <Routes>
-      <Route path="/login" element={<Login />} />
-      <Route path="/signup" element={<Signup />} />
-      <Route path="/personal-khata/account" element={<PersonalKhataAccount />} />
-      <Route path="/forgot-password" element={<ForgotPassword />} />
-      <Route path="/reset-password/:token" element={<ResetPassword />} />
-      <Route
-        path="/"
-        element={(
-          <RequireAuth>
-            <Layout sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen}>
-              <Dashboard />
-            </Layout>
-          </RequireAuth>
-        )}
-      />
-      <Route
-        path="/ghausia"
-        element={(
-          <RequireAuth adminOnly>
-            <Layout sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen}>
-              <GhausiaCollection />
-            </Layout>
-          </RequireAuth>
-        )}
-      />
-      <Route
-        path="/party-ledger"
-        element={(
-          <RequireAuth>
-            <Layout sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen}>
-              <PartyLedger />
-            </Layout>
-          </RequireAuth>
-        )}
-      />
-      <Route
-        path="/parties"
-        element={(
-          <RequireAuth adminOnly>
-            <Layout sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen}>
-              <Parties />
-            </Layout>
-          </RequireAuth>
-        )}
-      />
-      <Route
-        path="/payments"
-        element={(
-          <RequireAuth>
-            <Layout sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen}>
-              <Payments />
-            </Layout>
-          </RequireAuth>
-        )}
-      />
-      <Route
-        path="/rate-calculations"
-        element={(
-          <RequireAuth>
-            <Layout sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen}>
-              <RateCalculations />
-            </Layout>
-          </RequireAuth>
-        )}
-      />
-      <Route
-        path="/users"
-        element={(
-          <RequireAuth adminOnly>
-            <Layout sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen}>
-              <UserApprovals />
-            </Layout>
-          </RequireAuth>
-        )}
-      />
-      <Route
-        path="/review-lots"
-        element={(
-          <RequireAuth adminOnly>
-            <Layout sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen}>
-              <ReviewLots />
-            </Layout>
-          </RequireAuth>
-        )}
-      />
-      <Route
-        path="/super-admin/pending-admins"
-        element={(
-          <RequireSuperAdminAuth>
-            <Layout sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen}>
-              <SuperAdminApprovals />
-            </Layout>
-          </RequireSuperAdminAuth>
-        )}
-      />
-      <Route path="/personal-khata/shared" element={<PersonalKhataShared />} />
-      <Route path="/personal-khata/upgrade" element={<UpgradeAccount />} />
-      <Route
-        path="/personal-khata"
-        element={(
-          <PersonalKhataAccessibleRoute sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
-        )}
-      />
-      <Route
-        path="/personal-khata/contact/:contactId"
-        element={(
-          <PersonalKhataAccessibleRoute sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
-        )}
-      />
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
-    </Suspense>
+      <RouteChangeRefresher />
+      <BootstrapErrorBanner />
+      <BackgroundRefreshIndicator />
+      <LotNotificationListener />
+      <Suspense
+        fallback={
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
+              minHeight: '100vh',
+            }}
+          >
+            <LoaderDashboard height={30} width={30} />
+          </div>
+        }
+      >
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route path="/signup" element={<Signup />} />
+          <Route path="/personal-khata/account" element={<PersonalKhataAccount />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password/:token" element={<ResetPassword />} />
+          <Route
+            path="/"
+            element={
+              <RequireAuth>
+                <Layout sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen}>
+                  <Dashboard />
+                </Layout>
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/ghausia"
+            element={
+              <RequireAuth adminOnly>
+                <Layout sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen}>
+                  <GhausiaCollection />
+                </Layout>
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/party-ledger"
+            element={
+              <RequireAuth>
+                <Layout sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen}>
+                  <PartyLedger />
+                </Layout>
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/parties"
+            element={
+              <RequireAuth adminOnly>
+                <Layout sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen}>
+                  <Parties />
+                </Layout>
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/payments"
+            element={
+              <RequireAuth>
+                <Layout sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen}>
+                  <Payments />
+                </Layout>
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/rate-calculations"
+            element={
+              <RequireAuth>
+                <Layout sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen}>
+                  <RateCalculations />
+                </Layout>
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/users"
+            element={
+              <RequireAuth adminOnly>
+                <Layout sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen}>
+                  <UserApprovals />
+                </Layout>
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/review-lots"
+            element={
+              <RequireAuth adminOnly>
+                <Layout sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen}>
+                  <ReviewLots />
+                </Layout>
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/super-admin/pending-admins"
+            element={
+              <RequireSuperAdminAuth>
+                <Layout sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen}>
+                  <SuperAdminApprovals />
+                </Layout>
+              </RequireSuperAdminAuth>
+            }
+          />
+          <Route path="/personal-khata/shared" element={<PersonalKhataShared />} />
+          <Route path="/personal-khata/upgrade" element={<UpgradeAccount />} />
+          <Route
+            path="/personal-khata"
+            element={
+              <PersonalKhataAccessibleRoute
+                sidebarOpen={sidebarOpen}
+                setSidebarOpen={setSidebarOpen}
+              />
+            }
+          />
+          <Route
+            path="/personal-khata/contact/:contactId"
+            element={
+              <PersonalKhataAccessibleRoute
+                sidebarOpen={sidebarOpen}
+                setSidebarOpen={setSidebarOpen}
+              />
+            }
+          />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </Suspense>
     </SuperAdminShell>
   );
 }

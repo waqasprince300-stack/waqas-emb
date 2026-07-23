@@ -13,7 +13,8 @@ import {
 const brandLogoSrc = `${process.env.PUBLIC_URL || ''}/seam-grace-logo.png`;
 
 export default function PersonalKhataAccount() {
-  const { isAuthenticated, user, login, signup, refreshSession, verifyLoginOtp, resendLoginOtp } = useAuth();
+  const { isAuthenticated, user, login, signup, refreshSession, verifyLoginOtp, resendLoginOtp } =
+    useAuth();
   const navigate = useNavigate();
   const [mode, setMode] = useState('signin');
   const [idMethod, setIdMethod] = useState('email');
@@ -146,8 +147,8 @@ export default function PersonalKhataAccount() {
       const baseMsg = payload.message;
       if (u?.status === 'pending') {
         setMessage(
-          baseMsg
-            || 'Account created. You can sign in once it is approved — if your administrator enabled instant access for Personal Khata, try signing in now.',
+          baseMsg ||
+            'Account created. You can sign in once it is approved — if your administrator enabled instant access for Personal Khata, try signing in now.'
         );
       } else {
         setMessage(baseMsg || 'Account created. You can sign in.');
@@ -176,12 +177,18 @@ export default function PersonalKhataAccount() {
           ? 'Sign in with email or phone and password.'
           : 'Name, email or phone, and password — then sign in on any browser to manage your ledger.'
       }
-      footer={(
+      footer={
         <>
           <button
             type="button"
             className="auth-inline-link"
-            style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', font: 'inherit' }}
+            style={{
+              background: 'none',
+              border: 'none',
+              padding: 0,
+              cursor: 'pointer',
+              font: 'inherit',
+            }}
             onClick={() => {
               setMode(mode === 'signin' ? 'register' : 'signin');
               setError('');
@@ -195,7 +202,7 @@ export default function PersonalKhataAccount() {
             Business login
           </Link>
         </>
-      )}
+      }
     >
       {otpStage ? (
         <OtpVerify
@@ -210,132 +217,148 @@ export default function PersonalKhataAccount() {
           submitLabel="Verify & continue"
           onSubmit={handleVerifyOtp}
           onResend={handleResendOtp}
-          onBack={() => { setOtpStage(false); setOtpError(''); }}
+          onBack={() => {
+            setOtpStage(false);
+            setOtpError('');
+          }}
         />
       ) : (
-      <>
-      <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', alignSelf: 'center' }}>Sign in with</span>
-        <button
-          type="button"
-          className={idMethod === 'email' ? 'btn btn-primary btn-sm' : 'btn btn-ghost btn-sm'}
-          onClick={() => { setIdMethod('email'); setError(''); }}
-        >
-          Email
-        </button>
-        <button
-          type="button"
-          className={idMethod === 'phone' ? 'btn btn-primary btn-sm' : 'btn btn-ghost btn-sm'}
-          onClick={() => { setIdMethod('phone'); setError(''); }}
-        >
-          Phone
-        </button>
-      </div>
-
-      <form className="auth-form" onSubmit={mode === 'signin' ? runSignIn : runRegister}>
-        {message && (
-          <div className="alert alert-success">
-            {message}
+        <>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+            <span
+              style={{
+                fontSize: 13,
+                fontWeight: 600,
+                color: 'var(--text-secondary)',
+                alignSelf: 'center',
+              }}
+            >
+              Sign in with
+            </span>
+            <button
+              type="button"
+              className={idMethod === 'email' ? 'btn btn-primary btn-sm' : 'btn btn-ghost btn-sm'}
+              onClick={() => {
+                setIdMethod('email');
+                setError('');
+              }}
+            >
+              Email
+            </button>
+            <button
+              type="button"
+              className={idMethod === 'phone' ? 'btn btn-primary btn-sm' : 'btn btn-ghost btn-sm'}
+              onClick={() => {
+                setIdMethod('phone');
+                setError('');
+              }}
+            >
+              Phone
+            </button>
           </div>
-        )}
-        {error && (
-          <div className="alert alert-warning">
-            {error}
-          </div>
-        )}
 
-        {mode === 'register' && (
-          <label className="auth-label">
-            <span className="auth-label-text">Full name</span>
-            <input
-              className="form-input"
-              value={form.name}
-              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-              placeholder="Your name"
-              autoComplete="name"
-            />
-          </label>
-        )}
+          <form className="auth-form" onSubmit={mode === 'signin' ? runSignIn : runRegister}>
+            {message && <div className="alert alert-success">{message}</div>}
+            {error && <div className="alert alert-warning">{error}</div>}
 
-        {idMethod === 'email' ? (
-          <label className="auth-label">
-            <span className="auth-label-text">Email</span>
-            <input
-              className="form-input"
-              type="email"
-              value={form.email}
-              onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-              placeholder="you@example.com"
-              autoComplete="email"
-              autoFocus
-            />
-          </label>
-        ) : (
-          <label className="auth-label">
-            <span className="auth-label-text">Mobile number</span>
-            <input
-              className="form-input"
-              type="tel"
-              inputMode="tel"
-              value={form.phone}
-              onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
-              placeholder="e.g. 03001234567 or +923001234567"
-              autoComplete="tel"
-              autoFocus
-            />
-          </label>
-        )}
+            {mode === 'register' && (
+              <label className="auth-label">
+                <span className="auth-label-text">Full name</span>
+                <input
+                  className="form-input"
+                  value={form.name}
+                  onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                  placeholder="Your name"
+                  autoComplete="name"
+                />
+              </label>
+            )}
 
-        <label className="auth-label">
-          <span className="auth-label-text">Password</span>
-          <PasswordField
-            name="password"
-            placeholder={mode === 'register' ? 'At least 8 characters' : 'Password'}
-            value={form.password}
-            onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
-            required
-            autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
-          />
-        </label>
+            {idMethod === 'email' ? (
+              <label className="auth-label">
+                <span className="auth-label-text">Email</span>
+                <input
+                  className="form-input"
+                  type="email"
+                  value={form.email}
+                  onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+                  placeholder="you@example.com"
+                  autoComplete="email"
+                  autoFocus
+                />
+              </label>
+            ) : (
+              <label className="auth-label">
+                <span className="auth-label-text">Mobile number</span>
+                <input
+                  className="form-input"
+                  type="tel"
+                  inputMode="tel"
+                  value={form.phone}
+                  onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
+                  placeholder="e.g. 03001234567 or +923001234567"
+                  autoComplete="tel"
+                  autoFocus
+                />
+              </label>
+            )}
 
-        {mode === 'register' && (
-          <label className="auth-label">
-            <span className="auth-label-text">Confirm password</span>
-            <PasswordField
-              name="confirmPassword"
-              placeholder="Repeat password"
-              value={form.confirmPassword}
-              onChange={(e) => setForm((f) => ({ ...f, confirmPassword: e.target.value }))}
-              required
-              autoComplete="new-password"
-            />
-          </label>
-        )}
+            <label className="auth-label">
+              <span className="auth-label-text">Password</span>
+              <PasswordField
+                name="password"
+                placeholder={mode === 'register' ? 'At least 8 characters' : 'Password'}
+                value={form.password}
+                onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
+                required
+                autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
+              />
+            </label>
 
-        {mode === 'signin' && idMethod === 'email' && (
-          <p style={{ margin: '-4px 0 8px', fontSize: 12.5 }}>
-            <Link className="auth-inline-link" to="/forgot-password">
-              Forgot password?
-            </Link>
+            {mode === 'register' && (
+              <label className="auth-label">
+                <span className="auth-label-text">Confirm password</span>
+                <PasswordField
+                  name="confirmPassword"
+                  placeholder="Repeat password"
+                  value={form.confirmPassword}
+                  onChange={(e) => setForm((f) => ({ ...f, confirmPassword: e.target.value }))}
+                  required
+                  autoComplete="new-password"
+                />
+              </label>
+            )}
+
+            {mode === 'signin' && idMethod === 'email' && (
+              <p style={{ margin: '-4px 0 8px', fontSize: 12.5 }}>
+                <Link className="auth-inline-link" to="/forgot-password">
+                  Forgot password?
+                </Link>
+              </p>
+            )}
+
+            <button
+              className="btn btn-primary"
+              type="submit"
+              disabled={isSubmitting}
+              style={{ width: '100%', justifyContent: 'center' }}
+            >
+              {isSubmitting
+                ? 'Please wait…'
+                : mode === 'signin'
+                  ? 'Sign in to Personal Khata'
+                  : 'Create Personal Khata account'}
+            </button>
+          </form>
+
+          <p style={{ marginTop: 16, fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.45 }}>
+            <strong>Note:</strong> Server must support role{' '}
+            <code style={{ fontSize: 11 }}>personal_khata</code>, optional field{' '}
+            <code style={{ fontSize: 11 }}>phone</code>, and login with either{' '}
+            <code style={{ fontSize: 11 }}>email</code> or{' '}
+            <code style={{ fontSize: 11 }}>phone</code>. See README for API details.
           </p>
-        )}
-
-        <button
-          className="btn btn-primary"
-          type="submit"
-          disabled={isSubmitting}
-          style={{ width: '100%', justifyContent: 'center' }}
-        >
-          {isSubmitting ? 'Please wait…' : mode === 'signin' ? 'Sign in to Personal Khata' : 'Create Personal Khata account'}
-        </button>
-      </form>
-
-      <p style={{ marginTop: 16, fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.45 }}>
-        <strong>Note:</strong> Server must support role <code style={{ fontSize: 11 }}>personal_khata</code>, optional field{' '}
-        <code style={{ fontSize: 11 }}>phone</code>, and login with either <code style={{ fontSize: 11 }}>email</code> or{' '}
-        <code style={{ fontSize: 11 }}>phone</code>. See README for API details.
-      </p>
-      </>
+        </>
       )}
     </AuthCard>
   );

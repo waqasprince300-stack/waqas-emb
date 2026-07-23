@@ -76,7 +76,8 @@ export default function OtpVerify({
           className="alert"
           style={{ background: '#fff7ed', border: '1px solid #fed7aa', color: '#9a3412' }}
         >
-          <strong>Testing mode:</strong> your code is <code style={{ fontWeight: 700 }}>{devCode}</code>
+          <strong>Testing mode:</strong> your code is{' '}
+          <code style={{ fontWeight: 700 }}>{devCode}</code>
           {deliveryNote ? <div style={{ marginTop: 4, fontSize: 12 }}>{deliveryNote}</div> : null}
         </div>
       )}
@@ -112,7 +113,13 @@ export default function OtpVerify({
         <button
           type="button"
           className="auth-inline-link"
-          style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', font: 'inherit' }}
+          style={{
+            background: 'none',
+            border: 'none',
+            padding: 0,
+            cursor: 'pointer',
+            font: 'inherit',
+          }}
           onClick={() => doResend(channel)}
           disabled={cooldown > 0 || resending}
         >
@@ -124,7 +131,13 @@ export default function OtpVerify({
             key={c}
             type="button"
             className="auth-inline-link"
-            style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', font: 'inherit' }}
+            style={{
+              background: 'none',
+              border: 'none',
+              padding: 0,
+              cursor: 'pointer',
+              font: 'inherit',
+            }}
             onClick={() => doResend(c)}
             disabled={resending}
           >
@@ -136,7 +149,14 @@ export default function OtpVerify({
           <button
             type="button"
             className="auth-inline-link"
-            style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', font: 'inherit', marginLeft: 'auto' }}
+            style={{
+              background: 'none',
+              border: 'none',
+              padding: 0,
+              cursor: 'pointer',
+              font: 'inherit',
+              marginLeft: 'auto',
+            }}
             onClick={onBack}
           >
             Back

@@ -163,16 +163,20 @@ export default function UserApprovals() {
   }, [users]);
 
   const sortedUsers = useMemo(
-    () =>
-      [...users].sort((a, b) =>
-        compareRowsByUpdatedNewestFirst(a, b, 'user'),
-      ),
-    [users],
+    () => [...users].sort((a, b) => compareRowsByUpdatedNewestFirst(a, b, 'user')),
+    [users]
   );
 
   if (loading) {
     return (
-      <div style={{ minHeight: '70vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div
+        style={{
+          minHeight: '70vh',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
         <LoaderDashboard height={30} width={30} />
       </div>
     );
@@ -187,7 +191,9 @@ export default function UserApprovals() {
             Approve party users, switch their linked party, or disable / re-enable access.
           </div>
         </div>
-        <button className="btn btn-ghost" onClick={loadUsers}>Refresh</button>
+        <button className="btn btn-ghost" onClick={loadUsers}>
+          Refresh
+        </button>
       </div>
 
       {error && <div className="alert alert-warning">{error}</div>}
@@ -218,7 +224,9 @@ export default function UserApprovals() {
             <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>
               {card.label}
             </div>
-            <div style={{ fontSize: 26, fontWeight: 800, color: card.color, marginTop: 4 }}>{card.value}</div>
+            <div style={{ fontSize: 26, fontWeight: 800, color: card.color, marginTop: 4 }}>
+              {card.value}
+            </div>
           </div>
         ))}
       </div>
@@ -285,7 +293,14 @@ export default function UserApprovals() {
                           value={form.partyId}
                           disabled={!canEditParty || isSaving}
                           onChange={(event) => setFormValue(id, 'partyId', event.target.value)}
-                          style={partyChanged ? { borderColor: '#6366f1', boxShadow: '0 0 0 2px rgba(99,102,241,0.15)' } : undefined}
+                          style={
+                            partyChanged
+                              ? {
+                                  borderColor: '#6366f1',
+                                  boxShadow: '0 0 0 2px rgba(99,102,241,0.15)',
+                                }
+                              : undefined
+                          }
                         >
                           <option value="">Select party</option>
                           {parties.map((party) => (

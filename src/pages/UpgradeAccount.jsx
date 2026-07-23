@@ -72,7 +72,14 @@ export default function UpgradeAccount() {
       subtitle="Turn your Personal Khata login into a business administrator or party account. Your khata data stays linked to the same account."
       sideTitle="Keep your khata — gain the full workspace."
       sideText="Upgrading keeps your existing Personal Khata data and ledger. Admin and party accounts unlock lots, parties, payments, and reporting."
-      footer={<>Back to <Link className="auth-inline-link" to="/personal-khata">Personal Khata</Link></>}
+      footer={
+        <>
+          Back to{' '}
+          <Link className="auth-inline-link" to="/personal-khata">
+            Personal Khata
+          </Link>
+        </>
+      }
     >
       {pendingMsg ? (
         <div>
@@ -81,7 +88,10 @@ export default function UpgradeAccount() {
             type="button"
             className="btn btn-primary"
             style={{ width: '100%', justifyContent: 'center', marginTop: 12 }}
-            onClick={() => { logout(); navigate('/login', { replace: true }); }}
+            onClick={() => {
+              logout();
+              navigate('/login', { replace: true });
+            }}
           >
             Sign out
           </button>
@@ -91,9 +101,19 @@ export default function UpgradeAccount() {
           {error && <div className="alert alert-warning">{error}</div>}
 
           <fieldset className="auth-label" style={{ border: 'none', padding: 0, margin: 0 }}>
-            <legend className="auth-label-text" style={{ marginBottom: 8 }}>Upgrade to</legend>
+            <legend className="auth-label-text" style={{ marginBottom: 8 }}>
+              Upgrade to
+            </legend>
             <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontWeight: 500 }}>
+              <label
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  cursor: 'pointer',
+                  fontWeight: 500,
+                }}
+              >
                 <input
                   type="radio"
                   name="targetRole"
@@ -102,7 +122,15 @@ export default function UpgradeAccount() {
                 />
                 Business administrator
               </label>
-              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontWeight: 500 }}>
+              <label
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  cursor: 'pointer',
+                  fontWeight: 500,
+                }}
+              >
                 <input
                   type="radio"
                   name="targetRole"
@@ -112,8 +140,17 @@ export default function UpgradeAccount() {
                 Party
               </label>
             </div>
-            <p style={{ fontSize: 12, color: 'var(--text-muted, #64748b)', marginTop: 8, marginBottom: 0 }}>
-              Admins may need platform super-administrator approval; party accounts need their business administrator’s approval. While pending you cannot sign in, but your khata data is safe.
+            <p
+              style={{
+                fontSize: 12,
+                color: 'var(--text-muted, #64748b)',
+                marginTop: 8,
+                marginBottom: 0,
+              }}
+            >
+              Admins may need platform super-administrator approval; party accounts need their
+              business administrator’s approval. While pending you cannot sign in, but your khata
+              data is safe.
             </p>
           </fieldset>
 
@@ -156,7 +193,12 @@ export default function UpgradeAccount() {
             </>
           )}
 
-          <button className="btn btn-primary" type="submit" disabled={isSubmitting} style={{ width: '100%', justifyContent: 'center' }}>
+          <button
+            className="btn btn-primary"
+            type="submit"
+            disabled={isSubmitting}
+            style={{ width: '100%', justifyContent: 'center' }}
+          >
             {isSubmitting ? 'Submitting…' : 'Upgrade account'}
           </button>
         </form>

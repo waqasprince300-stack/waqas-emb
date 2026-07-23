@@ -8,12 +8,18 @@ import {
 export function isOwnerBillSettlement(payment) {
   return (
     String(payment?.type || '').trim() === 'Paid' &&
-    String(payment?.party || '').toLowerCase().trim() === 'owner'
+    String(payment?.party || '')
+      .toLowerCase()
+      .trim() === 'owner'
   );
 }
 
 export function isOwnerParty(payment) {
-  return String(payment?.party || '').toLowerCase().trim() === 'owner';
+  return (
+    String(payment?.party || '')
+      .toLowerCase()
+      .trim() === 'owner'
+  );
 }
 
 /**
@@ -32,18 +38,13 @@ export function adminPaymentPartyLabel(payment, businessOwners) {
   if (!isOwnerParty(payment)) {
     return String(payment?.party || '').trim() || '—';
   }
-  const bid = normalizedBusinessOwnerId(
-    payment?.businessOwnerId?._id ?? payment?.businessOwnerId,
-  );
+  const bid = normalizedBusinessOwnerId(payment?.businessOwnerId?._id ?? payment?.businessOwnerId);
   if (bid) {
     const nm = businessOwnerRegistryMap(businessOwners).get(bid);
     if (nm) return nm;
   }
   // Populated object on the payment itself
-  if (
-    payment?.businessOwnerId != null &&
-    typeof payment.businessOwnerId === 'object'
-  ) {
+  if (payment?.businessOwnerId != null && typeof payment.businessOwnerId === 'object') {
     const embedded = ownerDisplayNameFromRow(payment.businessOwnerId);
     if (embedded) return embedded;
   }

@@ -1,12 +1,19 @@
-import React, { createContext, useContext, useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useRef,
+  useMemo,
+  useCallback,
+} from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { apiService } from '../services/api';
 import { connectRealtime, disconnectRealtime, onDataChanged } from '../services/realtime';
 import { useAuth } from './AuthContext';
-import {
-  normalizedBusinessOwnerId,
-  workspaceLabelEmbeddedInLot,
-} from '../utils/businessWorkspace';
+import { normalizedBusinessOwnerId, workspaceLabelEmbeddedInLot } from '../utils/businessWorkspace';
+
+/* eslint-disable react-hooks/exhaustive-deps */
 
 const AppContext = createContext(null);
 
@@ -35,13 +42,14 @@ const normalizeLotData = (lot) => {
   const quantity = Number(lot.quantity ?? lot.pieces ?? 0);
   const pieces = Number(lot.pieces ?? lot.quantity ?? 0);
   const partyId = lot.partyId != null && lot.partyId !== '' ? String(lot.partyId) : '';
-  const status = typeof lot.status === 'string'
-    ? lot.status
-      .split(' ')
-      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-      .join(' ')
-      .toLowerCase()
-    : 'pending';
+  const status =
+    typeof lot.status === 'string'
+      ? lot.status
+          .split(' ')
+          .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+          .join(' ')
+          .toLowerCase()
+      : 'pending';
 
   return {
     ...lot,
@@ -63,7 +71,9 @@ const normalizeLotData = (lot) => {
     partyId,
     partyName: lot.partyName || '',
     businessOwnerId: businessOwnerIdToString(lot.businessOwnerId),
-    allotDate: normalizeDateString(lot.allotDate || lot.receivedDate || lot.createdAt || lot.updatedAt),
+    allotDate: normalizeDateString(
+      lot.allotDate || lot.receivedDate || lot.createdAt || lot.updatedAt
+    ),
     dispatchDate: normalizeDateString(lot.dispatchDate),
     receivedBackDate: normalizeDateString(lot.receivedBackDate),
     receivedDate: normalizeDateString(lot.receivedDate),
@@ -137,9 +147,7 @@ const mergePartyEditsFromRemote = (remotePartyEdits, prev = {}) => {
     const existing = prev[lotId];
     const remoteReceipt = remote.receipt;
     const keptReceipt =
-      remoteReceipt != null && remoteReceipt !== ''
-        ? remoteReceipt
-        : (existing?.receipt ?? '');
+      remoteReceipt != null && remoteReceipt !== '' ? remoteReceipt : (existing?.receipt ?? '');
 
     // Lot pictures are excluded from list payloads; keep the hydrated copy when the remote omits them.
     const remoteHasLotImagesArray = Array.isArray(remote.lotImages);
@@ -161,9 +169,7 @@ const mergePartyEditsFromRemote = (remotePartyEdits, prev = {}) => {
       receipt: keptReceipt,
       lotImagesCount,
       hasLotImages:
-        remote.hasLotImages === true ||
-        lotImagesCount > 0 ||
-        existing?.hasLotImages === true,
+        remote.hasLotImages === true || lotImagesCount > 0 || existing?.hasLotImages === true,
       hasReceipt:
         remote.hasReceipt === true ||
         (typeof keptReceipt === 'string' && keptReceipt.trim() !== '') ||
@@ -280,7 +286,11 @@ export function AppProvider({ children }) {
     try {
       const updated = await apiService.markNotificationRead(id);
       setNotifications((prev) =>
-        prev.map((n) => (String(n.id || n._id) === String(id) ? { ...n, ...updated, readAt: updated.readAt || new Date().toISOString() } : n)),
+        prev.map((n) =>
+          String(n.id || n._id) === String(id)
+            ? { ...n, ...updated, readAt: updated.readAt || new Date().toISOString() }
+            : n
+        )
       );
       setNotificationUnreadCount((c) => Math.max(0, c - 1));
     } catch (err) {
@@ -322,11 +332,12 @@ export function AppProvider({ children }) {
         const incomingLotImages = Array.isArray(row.lotImages) ? row.lotImages : undefined;
         if (!incomingReceipt && incomingLotImages === undefined) return;
         const existing = next[lotId] || { lotId };
-        const lotImagesCount = incomingLotImages !== undefined
-          ? incomingLotImages.length
-          : (Number.isFinite(Number(row.lotImagesCount))
-            ? Number(row.lotImagesCount)
-            : existing.lotImagesCount);
+        const lotImagesCount =
+          incomingLotImages !== undefined
+            ? incomingLotImages.length
+            : Number.isFinite(Number(row.lotImagesCount))
+              ? Number(row.lotImagesCount)
+              : existing.lotImagesCount;
         next[lotId] = {
           ...existing,
           ...(incomingReceipt ? { receipt: incomingReceipt, hasReceipt: true } : {}),
@@ -348,43 +359,46 @@ export function AppProvider({ children }) {
    * Uses the existing bulk partyEdits API (works on production). Per-lot lazy fetch
    * is preferred when the server supports GET /partyEdits/lot/:id.
    */
-  const loadLedgerReceipts = useCallback(async (opts = {}) => {
-    if (!isAuthenticated) return;
-    if (user?.role !== 'admin' && user?.role !== 'party') return;
+  const loadLedgerReceipts = useCallback(
+    async (opts = {}) => {
+      if (!isAuthenticated) return;
+      if (user?.role !== 'admin' && user?.role !== 'party') return;
 
-    if (opts.force) {
-      ledgerReceiptsLoadRef.current = null;
-    } else if (ledgerReceiptsLoadRef.current) {
-      return ledgerReceiptsLoadRef.current;
-    }
-
-    const task = (async () => {
-      try {
-        if (user?.role === 'admin') {
-          const reporting = await apiService.getPartyEdits({
-            scope: 'all',
-            includeReceipts: true,
-          });
-          mergeReceiptRows(setAdminReportingPartyEdits, reporting);
-        } else {
-          const cross = await apiService.getPartyEdits({
-            skipTenantHeader: true,
-            partyScope: 'all',
-            includeReceipts: true,
-          });
-          mergeReceiptRows(setPartyCrossPartyEdits, cross);
-        }
-        setLedgerReceiptsVersion((v) => v + 1);
-      } catch (error) {
-        console.warn('Ledger receipt load failed', error);
+      if (opts.force) {
         ledgerReceiptsLoadRef.current = null;
-        throw error;
+      } else if (ledgerReceiptsLoadRef.current) {
+        return ledgerReceiptsLoadRef.current;
       }
-    })();
 
-    ledgerReceiptsLoadRef.current = task;
-    return task;
-  }, [isAuthenticated, mergeReceiptRows, user?.role]);
+      const task = (async () => {
+        try {
+          if (user?.role === 'admin') {
+            const reporting = await apiService.getPartyEdits({
+              scope: 'all',
+              includeReceipts: true,
+            });
+            mergeReceiptRows(setAdminReportingPartyEdits, reporting);
+          } else {
+            const cross = await apiService.getPartyEdits({
+              skipTenantHeader: true,
+              partyScope: 'all',
+              includeReceipts: true,
+            });
+            mergeReceiptRows(setPartyCrossPartyEdits, cross);
+          }
+          setLedgerReceiptsVersion((v) => v + 1);
+        } catch (error) {
+          console.warn('Ledger receipt load failed', error);
+          ledgerReceiptsLoadRef.current = null;
+          throw error;
+        }
+      })();
+
+      ledgerReceiptsLoadRef.current = task;
+      return task;
+    },
+    [isAuthenticated, mergeReceiptRows, user?.role]
+  );
 
   /** Drop a single lot's cached bill image so the thumbnail re-fetches it (e.g. bill replaced). */
   const invalidateLotReceipt = useCallback((lotId) => {
@@ -401,38 +415,44 @@ export function AppProvider({ children }) {
   }, []);
 
   /** Cache a single lot receipt after lazy fetch (avoids bulk hydration). */
-  const patchLotReceipt = useCallback((lotId, receipt) => {
-    if (!lotId || !receipt) return;
-    const merge = (prev) => {
-      const existing = prev[lotId];
-      if (existing?.receipt === receipt) return prev;
-      return { ...prev, [lotId]: { ...(existing || { lotId }), receipt, hasReceipt: true } };
-    };
-    setPartyEdits(merge);
-    if (user?.role === 'admin') setAdminReportingPartyEdits(merge);
-    if (user?.role === 'party') setPartyCrossPartyEdits(merge);
-  }, [user?.role]);
+  const patchLotReceipt = useCallback(
+    (lotId, receipt) => {
+      if (!lotId || !receipt) return;
+      const merge = (prev) => {
+        const existing = prev[lotId];
+        if (existing?.receipt === receipt) return prev;
+        return { ...prev, [lotId]: { ...(existing || { lotId }), receipt, hasReceipt: true } };
+      };
+      setPartyEdits(merge);
+      if (user?.role === 'admin') setAdminReportingPartyEdits(merge);
+      if (user?.role === 'party') setPartyCrossPartyEdits(merge);
+    },
+    [user?.role]
+  );
 
   /** Cache lot pictures (and count) after lazy fetch for the pictures modal. */
-  const patchLotImages = useCallback((lotId, lotImages) => {
-    if (!lotId || !Array.isArray(lotImages)) return;
-    const count = lotImages.length;
-    const merge = (prev) => {
-      const existing = prev[lotId] || { lotId };
-      return {
-        ...prev,
-        [lotId]: {
-          ...existing,
-          lotImages,
-          lotImagesCount: count,
-          hasLotImages: count > 0,
-        },
+  const patchLotImages = useCallback(
+    (lotId, lotImages) => {
+      if (!lotId || !Array.isArray(lotImages)) return;
+      const count = lotImages.length;
+      const merge = (prev) => {
+        const existing = prev[lotId] || { lotId };
+        return {
+          ...prev,
+          [lotId]: {
+            ...existing,
+            lotImages,
+            lotImagesCount: count,
+            hasLotImages: count > 0,
+          },
+        };
       };
-    };
-    setPartyEdits(merge);
-    if (user?.role === 'admin') setAdminReportingPartyEdits(merge);
-    if (user?.role === 'party') setPartyCrossPartyEdits(merge);
-  }, [user?.role]);
+      setPartyEdits(merge);
+      if (user?.role === 'admin') setAdminReportingPartyEdits(merge);
+      if (user?.role === 'party') setPartyCrossPartyEdits(merge);
+    },
+    [user?.role]
+  );
 
   /** Track a write request so background/realtime refreshes pause until it settles. */
   const trackWrite = useCallback((promise) => {
@@ -447,7 +467,7 @@ export function AppProvider({ children }) {
    *  overwrite correct optimistic state mid-save (prevents flicker + duplicate entries). */
   const isRefreshSuppressed = useCallback(
     () => pendingWritesRef.current > 0 || Date.now() - lastWriteAtRef.current < WRITE_SETTLE_MS,
-    [],
+    []
   );
 
   const runLightBootstrapRefresh = useCallback(async () => {
@@ -464,7 +484,13 @@ export function AppProvider({ children }) {
       // A single full bootstrap already contains parties + reporting/partyCross + scoped rows.
       // Avoid the extra "minimal" round-trip here so navigation refreshes hit the DB once, not twice.
       const full = await queryClient.fetchQuery({
-        queryKey: ['bootstrap', user?._id, user?.role, isAdminUser ? String(activeBusinessOwnerId || '') : 'party', 'full'],
+        queryKey: [
+          'bootstrap',
+          user?._id,
+          user?.role,
+          isAdminUser ? String(activeBusinessOwnerId || '') : 'party',
+          'full',
+        ],
         queryFn: () => apiService.getBootstrap({ ...partyOpts }),
         staleTime: 0,
       });
@@ -519,45 +545,48 @@ export function AppProvider({ children }) {
    * Background refresh of all app data (no full-screen loader). Used on page navigation so each
    * page shows the latest server state without a manual browser reload. Throttled to avoid spam.
    */
-  const refreshData = useCallback((opts = {}) => {
-    if (!isAuthenticated) return;
-    if (user?.role === 'super_admin' || user?.role === 'personal_khata') return;
-    // Don't refetch while a save is in flight/settling — would race optimistic state.
-    if (isRefreshSuppressed() && !opts.force) return;
-    const now = Date.now();
-    if (now - lastRefreshRef.current < 800 && !opts.force) return;
-    lastRefreshRef.current = now;
+  const refreshData = useCallback(
+    (opts = {}) => {
+      if (!isAuthenticated) return;
+      if (user?.role === 'super_admin' || user?.role === 'personal_khata') return;
+      // Don't refetch while a save is in flight/settling — would race optimistic state.
+      if (isRefreshSuppressed() && !opts.force) return;
+      const now = Date.now();
+      if (now - lastRefreshRef.current < 800 && !opts.force) return;
+      lastRefreshRef.current = now;
 
-    if (opts.force) {
-      lastFullBootstrapRef.current = 0;
-    }
+      if (opts.force) {
+        lastFullBootstrapRef.current = 0;
+      }
 
-    // Skip rapid navigation refetches: if we refreshed in the last 10s, the data is fresh enough.
-    // This stops the "bar bar API call" churn when the user hops between pages quickly.
-    if (
-      hasLoadedOnceRef.current
-      && !opts.force
-      && now - lastAnyRefreshRef.current < NAV_REFRESH_MIN_INTERVAL_MS
-    ) {
-      return;
-    }
+      // Skip rapid navigation refetches: if we refreshed in the last 10s, the data is fresh enough.
+      // This stops the "bar bar API call" churn when the user hops between pages quickly.
+      if (
+        hasLoadedOnceRef.current &&
+        !opts.force &&
+        now - lastAnyRefreshRef.current < NAV_REFRESH_MIN_INTERVAL_MS
+      ) {
+        return;
+      }
 
-    if (
-      hasLoadedOnceRef.current
-      && !opts.force
-      && now - lastFullBootstrapRef.current < FULL_REFRESH_INTERVAL_MS
-    ) {
+      if (
+        hasLoadedOnceRef.current &&
+        !opts.force &&
+        now - lastFullBootstrapRef.current < FULL_REFRESH_INTERVAL_MS
+      ) {
+        lastAnyRefreshRef.current = now;
+        void runLightBootstrapRefresh();
+        return;
+      }
+
+      lastFullBootstrapRef.current = now;
       lastAnyRefreshRef.current = now;
-      void runLightBootstrapRefresh();
-      return;
-    }
-
-    lastFullBootstrapRef.current = now;
-    lastAnyRefreshRef.current = now;
-    isBackgroundRefreshRef.current = true;
-    queryClient.invalidateQueries({ queryKey: ['bootstrap'] });
-    setRefreshTick((t) => t + 1);
-  }, [isAuthenticated, isRefreshSuppressed, user?.role, queryClient, runLightBootstrapRefresh]);
+      isBackgroundRefreshRef.current = true;
+      queryClient.invalidateQueries({ queryKey: ['bootstrap'] });
+      setRefreshTick((t) => t + 1);
+    },
+    [isAuthenticated, isRefreshSuppressed, user?.role, queryClient, runLightBootstrapRefresh]
+  );
 
   const selectBusinessOwner = (id) => {
     const nextId = String(id || '');
@@ -566,7 +595,9 @@ export function AppProvider({ children }) {
     }
     try {
       localStorage.removeItem(WORKSPACE_VIEW_ALL_KEY);
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
     // Keep React Query's per-workspace cache so revisiting a workspace is instant (cache-first);
     // the loader below refreshes it in the background. Don't wipe the cache on a plain switch.
     workspaceSwitchRef.current = true;
@@ -578,7 +609,9 @@ export function AppProvider({ children }) {
   const selectAllWorkspacesView = () => {
     try {
       localStorage.setItem(WORKSPACE_VIEW_ALL_KEY, '1');
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
     setViewAllWorkspaces(true);
   };
 
@@ -612,7 +645,9 @@ export function AppProvider({ children }) {
       clearAllData();
       try {
         localStorage.removeItem(WORKSPACE_VIEW_ALL_KEY);
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
       setViewAllWorkspaces(false);
       markLoaded();
       return;
@@ -622,7 +657,13 @@ export function AppProvider({ children }) {
     /** Party JWT is cross-workspace — never reuse admin cached `x-business-owner-id` from localStorage. */
     const partyOpts = isAdminUser ? {} : { skipTenantHeader: true };
 
-    const fullBootstrapKey = ['bootstrap', user?._id, user?.role, isAdminUser ? String(activeBusinessOwnerId || '') : 'party', 'full'];
+    const fullBootstrapKey = [
+      'bootstrap',
+      user?._id,
+      user?.role,
+      isAdminUser ? String(activeBusinessOwnerId || '') : 'party',
+      'full',
+    ];
 
     const applyFullPayload = (full) => {
       if (Array.isArray(full?.parties)) setParties(full.parties.map(normalizeParty));
@@ -678,25 +719,29 @@ export function AppProvider({ children }) {
 
           if (isAdminUser) {
             const remoteOwners = normalizeOwners(minimal?.businessOwners);
-              setBusinessOwners(remoteOwners);
-              if (remoteOwners.length === 0) {
-                try {
-                  localStorage.removeItem(BUSINESS_OWNER_KEY);
-                  localStorage.removeItem(WORKSPACE_VIEW_ALL_KEY);
-                } catch { /* ignore */ }
-                setViewAllWorkspaces(false);
-                setActiveBusinessOwnerId('');
+            setBusinessOwners(remoteOwners);
+            if (remoteOwners.length === 0) {
+              try {
+                localStorage.removeItem(BUSINESS_OWNER_KEY);
+                localStorage.removeItem(WORKSPACE_VIEW_ALL_KEY);
+              } catch {
+                /* ignore */
+              }
+              setViewAllWorkspaces(false);
+              setActiveBusinessOwnerId('');
               clearAllData();
               markLoaded(true);
-                return;
-              }
-              const selectedExists = remoteOwners.some((owner) => String(owner.id || owner._id) === String(activeBusinessOwnerId));
-              const nextOwner = selectedExists
-                ? activeBusinessOwnerId
-                : String(remoteOwners[0]?.id || remoteOwners[0]?._id || '');
-              if (nextOwner && nextOwner !== activeBusinessOwnerId) {
-                localStorage.setItem(BUSINESS_OWNER_KEY, nextOwner);
-                setActiveBusinessOwnerId(nextOwner);
+              return;
+            }
+            const selectedExists = remoteOwners.some(
+              (owner) => String(owner.id || owner._id) === String(activeBusinessOwnerId)
+            );
+            const nextOwner = selectedExists
+              ? activeBusinessOwnerId
+              : String(remoteOwners[0]?.id || remoteOwners[0]?._id || '');
+            if (nextOwner && nextOwner !== activeBusinessOwnerId) {
+              localStorage.setItem(BUSINESS_OWNER_KEY, nextOwner);
+              setActiveBusinessOwnerId(nextOwner);
               return; // effect re-runs with the resolved workspace; minimal comes from cache
             }
             applyReporting(minimal?.reporting);
@@ -792,7 +837,14 @@ export function AppProvider({ children }) {
       if (lotId) pendingLotIds.add(lotId);
 
       const action = payload && payload.action != null ? String(payload.action) : '';
-      if (action === 'lot_rejected' || action === 'lot_pending_review' || action === 'bill_revision_request' || action === 'bill_revision_approved' || action === 'bill_revision_rejected' || action === 'payment_recorded') {
+      if (
+        action === 'lot_rejected' ||
+        action === 'lot_pending_review' ||
+        action === 'bill_revision_request' ||
+        action === 'bill_revision_approved' ||
+        action === 'bill_revision_rejected' ||
+        action === 'payment_recorded'
+      ) {
         setPendingLotNotice({
           action,
           lotId: lotId || (payload.paymentId != null ? String(payload.paymentId) : ''),
@@ -831,7 +883,14 @@ export function AppProvider({ children }) {
       unsubscribe();
       if (timer) clearTimeout(timer);
     };
-  }, [isAuthenticated, user?.role, runLightBootstrapRefresh, invalidateLotReceipt, isRefreshSuppressed, refreshNotifications]);
+  }, [
+    isAuthenticated,
+    user?.role,
+    runLightBootstrapRefresh,
+    invalidateLotReceipt,
+    isRefreshSuppressed,
+    refreshNotifications,
+  ]);
 
   // Tear down the socket entirely when the user signs out.
   useEffect(() => {
@@ -867,7 +926,9 @@ export function AppProvider({ children }) {
     setAdminReportingLots((arr) => arr.filter((l) => String(l.businessOwnerId ?? '') !== idStr));
     setParties((arr) => arr.filter((p) => String(p.businessOwnerId ?? '') !== idStr));
     setPayments((arr) => arr.filter((p) => String(p.businessOwnerId ?? '') !== idStr));
-    setAdminReportingPayments((arr) => arr.filter((p) => String(p.businessOwnerId ?? '') !== idStr));
+    setAdminReportingPayments((arr) =>
+      arr.filter((p) => String(p.businessOwnerId ?? '') !== idStr)
+    );
     setPartyEdits((prev) => {
       if (removedLotIds.size === 0) return prev;
       const next = { ...prev };
@@ -886,7 +947,9 @@ export function AppProvider({ children }) {
         try {
           localStorage.removeItem(BUSINESS_OWNER_KEY);
           localStorage.removeItem(WORKSPACE_VIEW_ALL_KEY);
-        } catch { /* ignore */ }
+        } catch {
+          /* ignore */
+        }
         setViewAllWorkspaces(false);
         setActiveBusinessOwnerId('');
         setParties(INITIAL_PARTIES);
@@ -904,26 +967,28 @@ export function AppProvider({ children }) {
 
   const addParty = async (p) => {
     const created = normalizeParty(await apiService.createParty(p));
-    setParties(arr => [...arr, created]);
+    setParties((arr) => [...arr, created]);
     return created;
   };
 
   const updateParty = async (id, p) => {
     const updated = normalizeParty(await apiService.updateParty(id, p));
     const idStr = String(id);
-    setParties(arr => arr.map(x => String(x.id) === idStr ? updated : x));
+    setParties((arr) => arr.map((x) => (String(x.id) === idStr ? updated : x)));
     return updated;
   };
 
   const deleteParty = async (id) => {
     await apiService.deleteParty(id);
     const idStr = String(id);
-    setParties(arr => arr.filter(x => String(x.id) !== idStr));
+    setParties((arr) => arr.filter((x) => String(x.id) !== idStr));
   };
 
   const addLot = async (lot, opts = {}) => {
     const { businessOwnerId } = opts;
-    const created = normalizeLotData(await trackWrite(apiService.createGhausiaLot(lot, businessOwnerId)));
+    const created = normalizeLotData(
+      await trackWrite(apiService.createGhausiaLot(lot, businessOwnerId))
+    );
     setGhausiaLots((arr) => [...arr, created]);
     if (user?.role === 'admin') {
       setAdminReportingLots((arr) => [...arr, created]);
@@ -933,7 +998,9 @@ export function AppProvider({ children }) {
 
   const updateLot = async (id, patch, opts = {}) => {
     const { businessOwnerId } = opts;
-    const updated = normalizeLotData(await trackWrite(apiService.updateGhausiaLot(id, patch, businessOwnerId)));
+    const updated = normalizeLotData(
+      await trackWrite(apiService.updateGhausiaLot(id, patch, businessOwnerId))
+    );
     const idStr = String(id);
     setGhausiaLots((arr) => {
       const has = arr.some((x) => String(x.id) === idStr);
@@ -981,11 +1048,13 @@ export function AppProvider({ children }) {
 
   const approveLotCompletion = async (lotId, opts = {}) => {
     const { businessOwnerId, ownerBillingChoice, ownerBillAmount, resolvedBusinessBill } = opts;
-    const raw = await trackWrite(apiService.approveLotCompletion(lotId, {
-      businessOwnerId,
-      ownerBillingChoice,
-      ownerBillAmount,
-    }));
+    const raw = await trackWrite(
+      apiService.approveLotCompletion(lotId, {
+        businessOwnerId,
+        ownerBillingChoice,
+        ownerBillAmount,
+      })
+    );
 
     const unwrapLot = (payload) => {
       if (!payload || typeof payload !== 'object') return payload;
@@ -995,10 +1064,7 @@ export function AppProvider({ children }) {
     };
 
     let body = unwrapLot(raw);
-    if (
-      resolvedBusinessBill != null &&
-      Number.isFinite(Number(resolvedBusinessBill))
-    ) {
+    if (resolvedBusinessBill != null && Number.isFinite(Number(resolvedBusinessBill))) {
       const amt = Number(resolvedBusinessBill);
       if (body && typeof body === 'object') {
         body = { ...body, billAmount: amt, totalAmount: amt };
@@ -1029,7 +1095,9 @@ export function AppProvider({ children }) {
 
   const rejectLotCompletion = async (lotId, rejectionNote, opts = {}) => {
     const { businessOwnerId } = opts;
-    const raw = await trackWrite(apiService.rejectLotCompletion(lotId, rejectionNote, businessOwnerId));
+    const raw = await trackWrite(
+      apiService.rejectLotCompletion(lotId, rejectionNote, businessOwnerId)
+    );
     const normalized = mergeLotAcrossCollections(raw);
     const idStr = String(lotId);
     const mergePe = (prev) => ({
@@ -1049,11 +1117,16 @@ export function AppProvider({ children }) {
   const updatePartyEdit = async (lotId, data, opts = {}) => {
     const { businessOwnerId } = opts;
     try {
-      const result = await trackWrite(apiService.upsertPartyEditByLotId(lotId, data, businessOwnerId));
+      const result = await trackWrite(
+        apiService.upsertPartyEditByLotId(lotId, data, businessOwnerId)
+      );
       const imgs = Array.isArray(result.lotImages) ? result.lotImages : undefined;
-      const lotImagesCount = imgs !== undefined
-        ? imgs.length
-        : (Number.isFinite(Number(result.lotImagesCount)) ? Number(result.lotImagesCount) : undefined);
+      const lotImagesCount =
+        imgs !== undefined
+          ? imgs.length
+          : Number.isFinite(Number(result.lotImagesCount))
+            ? Number(result.lotImagesCount)
+            : undefined;
       const normalizedEdit = {
         ...result,
         completeDate: result.completeDate ? normalizeDateString(result.completeDate) : '',
@@ -1078,7 +1151,9 @@ export function AppProvider({ children }) {
 
   const addPayment = async (p, opts = {}) => {
     const { businessOwnerId } = opts;
-    const payment = await trackWrite(apiService.createPayment({ ...p, amount: Number(p.amount) }, businessOwnerId));
+    const payment = await trackWrite(
+      apiService.createPayment({ ...p, amount: Number(p.amount) }, businessOwnerId)
+    );
     setPayments((arr) => [...arr, payment]);
     if (user?.role === 'admin') {
       setAdminReportingPayments((arr) => [...arr, payment]);
@@ -1117,14 +1192,34 @@ export function AppProvider({ children }) {
   const reportingPayments = user?.role === 'admin' ? adminReportingPayments : payments;
   const reportingPartyEdits = user?.role === 'admin' ? adminReportingPartyEdits : partyEdits;
 
-  const contextValue = useMemo(() => ({
-      parties, addParty, updateParty, deleteParty,
-      ghausiaLots, addLot, updateLot, deleteLot,
-      approveLotCompletion, rejectLotCompletion,
-    partyEdits, updatePartyEdit, patchLotReceipt, patchLotImages, loadLedgerReceipts, ledgerReceiptsVersion,
-      payments, addPayment, deletePayment,
-      reportingLots, reportingPayments, reportingPartyEdits,
-      partyCrossLots, partyCrossPartyEdits, partyCrossPayments,
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const contextValue = useMemo(
+    () => ({
+      parties,
+      addParty,
+      updateParty,
+      deleteParty,
+      ghausiaLots,
+      addLot,
+      updateLot,
+      deleteLot,
+      approveLotCompletion,
+      rejectLotCompletion,
+      partyEdits,
+      updatePartyEdit,
+      patchLotReceipt,
+      patchLotImages,
+      loadLedgerReceipts,
+      ledgerReceiptsVersion,
+      payments,
+      addPayment,
+      deletePayment,
+      reportingLots,
+      reportingPayments,
+      reportingPartyEdits,
+      partyCrossLots,
+      partyCrossPartyEdits,
+      partyCrossPayments,
       businessOwners,
       activeBusinessOwnerId,
       selectBusinessOwner,
@@ -1132,52 +1227,73 @@ export function AppProvider({ children }) {
       viewAllWorkspaces,
       createBusinessOwner,
       deleteBusinessOwner,
-      getPartyById, getPartyName,
+      getPartyById,
+      getPartyName,
       initialDataLoading,
-    initialDataPhase,
-    scopedDataLoading,
-    backgroundRefreshing,
-    bootstrapLoadError,
-    refreshData,
-    notifications,
-    notificationUnreadCount,
-    refreshNotifications,
-    markNotificationRead,
-    markAllNotificationsRead,
-    pendingLotNotice,
-    clearPendingLotNotice,
-  }), [
-    parties, addParty, updateParty, deleteParty,
-    ghausiaLots, addLot, updateLot, deleteLot,
-    approveLotCompletion, rejectLotCompletion,
-    partyEdits, updatePartyEdit, patchLotReceipt, patchLotImages, loadLedgerReceipts, ledgerReceiptsVersion,
-    payments, addPayment, deletePayment,
-    reportingLots, reportingPayments, reportingPartyEdits,
-    partyCrossLots, partyCrossPartyEdits, partyCrossPayments,
-    businessOwners,
-    activeBusinessOwnerId,
-    viewAllWorkspaces,
-    initialDataLoading,
-    initialDataPhase,
-    scopedDataLoading,
-    backgroundRefreshing,
-    bootstrapLoadError,
-    refreshData,
-    getPartyById, getPartyName,
-    notifications,
-    notificationUnreadCount,
-    refreshNotifications,
-    markNotificationRead,
-    markAllNotificationsRead,
-    pendingLotNotice,
-    clearPendingLotNotice,
-  ]);
-
-  return (
-    <AppContext.Provider value={contextValue}>
-      {children}
-    </AppContext.Provider>
+      initialDataPhase,
+      scopedDataLoading,
+      backgroundRefreshing,
+      bootstrapLoadError,
+      refreshData,
+      notifications,
+      notificationUnreadCount,
+      refreshNotifications,
+      markNotificationRead,
+      markAllNotificationsRead,
+      pendingLotNotice,
+      clearPendingLotNotice,
+    }),
+    [
+      parties,
+      addParty,
+      updateParty,
+      deleteParty,
+      ghausiaLots,
+      addLot,
+      updateLot,
+      deleteLot,
+      approveLotCompletion,
+      rejectLotCompletion,
+      partyEdits,
+      updatePartyEdit,
+      patchLotReceipt,
+      patchLotImages,
+      loadLedgerReceipts,
+      ledgerReceiptsVersion,
+      payments,
+      addPayment,
+      deletePayment,
+      reportingLots,
+      reportingPayments,
+      reportingPartyEdits,
+      partyCrossLots,
+      partyCrossPartyEdits,
+      partyCrossPayments,
+      businessOwners,
+      activeBusinessOwnerId,
+      viewAllWorkspaces,
+      createBusinessOwner,
+      deleteBusinessOwner,
+      selectBusinessOwner,
+      initialDataLoading,
+      initialDataPhase,
+      scopedDataLoading,
+      backgroundRefreshing,
+      bootstrapLoadError,
+      refreshData,
+      getPartyById,
+      getPartyName,
+      notifications,
+      notificationUnreadCount,
+      refreshNotifications,
+      markNotificationRead,
+      markAllNotificationsRead,
+      pendingLotNotice,
+      clearPendingLotNotice,
+    ]
   );
+
+  return <AppContext.Provider value={contextValue}>{children}</AppContext.Provider>;
 }
 
 export const useApp = () => useContext(AppContext);

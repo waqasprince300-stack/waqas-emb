@@ -51,12 +51,17 @@ function uniquePush(list, value, max = MAX_PER_FIELD) {
   const v = String(value ?? '').trim();
   if (!v) return list;
   const lower = v.toLowerCase();
-  const next = [v, ...(Array.isArray(list) ? list : []).filter((x) => String(x).trim().toLowerCase() !== lower)];
+  const next = [
+    v,
+    ...(Array.isArray(list) ? list : []).filter((x) => String(x).trim().toLowerCase() !== lower),
+  ];
   return next.slice(0, max);
 }
 
 export function filterSuggestions(values, query, limit = MAX_SUGGESTIONS) {
-  const q = String(query || '').trim().toLowerCase();
+  const q = String(query || '')
+    .trim()
+    .toLowerCase();
   const seen = new Set();
   const out = [];
   for (const raw of values) {
@@ -93,15 +98,13 @@ function descriptionsFromRows(rows) {
 function scopedRows(rows, collectionId) {
   const cid = String(collectionId || '').trim();
   if (!cid) return Array.isArray(rows) ? rows : [];
-  return (Array.isArray(rows) ? rows : []).filter(
-    (l) => String(l.businessOwnerId ?? '') === cid,
-  );
+  return (Array.isArray(rows) ? rows : []).filter((l) => String(l.businessOwnerId ?? '') === cid);
 }
 
 export function getLotNumberSuggestions(collectionId, query, existingLots) {
   const mem = readRaw();
   const cid = String(collectionId || '').trim();
-  const fromMem = cid ? (mem.byCollection[cid]?.lotNumbers || []) : [];
+  const fromMem = cid ? mem.byCollection[cid]?.lotNumbers || [] : [];
   const fromLots = lotNumbersFromRows(scopedRows(existingLots, cid));
   return filterSuggestions([...fromMem, ...fromLots], query);
 }
@@ -155,11 +158,13 @@ export function getAllMachineHeads() {
   const { custom } = getMachineHeadConfig();
   const all = [...BASE_MACHINE_HEADS, ...custom];
   const seen = new Set();
-  return all.filter((n) => {
-    if (seen.has(n)) return false;
-    seen.add(n);
-    return true;
-  }).sort((a, b) => a - b);
+  return all
+    .filter((n) => {
+      if (seen.has(n)) return false;
+      seen.add(n);
+      return true;
+    })
+    .sort((a, b) => a - b);
 }
 
 export function addCustomMachineHead(value) {
@@ -171,7 +176,9 @@ export function addCustomMachineHead(value) {
   }
   const custom = mem.global.machineHeads.custom || [];
   if (!custom.includes(n)) {
-    mem.global.machineHeads.custom = uniquePush(custom.map(String), String(n), 20).map((x) => Number(x));
+    mem.global.machineHeads.custom = uniquePush(custom.map(String), String(n), 20).map((x) =>
+      Number(x)
+    );
   }
   writeRaw(mem);
   return getMachineHeadConfig();
@@ -237,13 +244,14 @@ export function getColorSuggestions(query) {
 }
 
 /** Save field values after a successful lot save (single or bulk). */
-export function rememberLotFormSave(form, { collectionId, bulkLotNumbers } = {}) {
+export function rememberLotFormSave(form, { collectionId: _collectionId, bulkLotNumbers: _bulkLotNumbers } = {}) {
   const mem = readRaw();
-  const cid = String(collectionId || form.saveBusinessOwnerId || '').trim();
+  const _cid = String(_collectionId || form.saveBusinessOwnerId || '').trim();
 
-  const finalType = form.itemType === '__custom' ? form.customFabric : (form.fabric || form.itemType);
+  const finalType = form.itemType === '__custom' ? form.customFabric : form.fabric || form.itemType;
   if (finalType) mem.global.itemTypes = uniquePush(mem.global.itemTypes, finalType);
-  if (form.customFabric) mem.global.customFabrics = uniquePush(mem.global.customFabrics, form.customFabric);
+  if (form.customFabric)
+    mem.global.customFabrics = uniquePush(mem.global.customFabrics, form.customFabric);
 
   if (form.pieces !== '' && form.pieces != null) {
     mem.global.pieces = uniquePush(mem.global.pieces, String(form.pieces));

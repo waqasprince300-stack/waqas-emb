@@ -20,7 +20,9 @@ import App from './App';
     const loc = window.location;
     if (loc.protocol !== 'https:') return;
     const host = loc.hostname;
-    const configured = String(process.env.REACT_APP_CANONICAL_HOST || '').trim().toLowerCase();
+    const configured = String(process.env.REACT_APP_CANONICAL_HOST || '')
+      .trim()
+      .toLowerCase();
     const target = configured || (host.startsWith('www.') ? host.slice(4) : '');
     if (!target || target === host) return;
     loc.replace(`${loc.protocol}//${target}${loc.pathname}${loc.search}${loc.hash}`);

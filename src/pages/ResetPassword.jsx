@@ -44,7 +44,10 @@ export default function ResetPassword() {
       }
       navigate('/login', {
         replace: true,
-        state: { message: payload.message || 'Password updated. You can sign in when your account is approved.' },
+        state: {
+          message:
+            payload.message || 'Password updated. You can sign in when your account is approved.',
+        },
       });
     } catch (err) {
       setError(formatApiError(err, 'Unable to reset password'));
@@ -61,14 +64,17 @@ export default function ResetPassword() {
       subtitle="Choose a fresh password with at least 8 characters."
       sideTitle="Secure your account and get back to production tracking."
       sideText="After reset, use your new password to sign in and continue from where you left off."
-      footer={<>Back to <Link className="auth-inline-link" to="/login">login</Link></>}
+      footer={
+        <>
+          Back to{' '}
+          <Link className="auth-inline-link" to="/login">
+            login
+          </Link>
+        </>
+      }
     >
       <form className="auth-form" onSubmit={handleSubmit}>
-        {error && (
-          <div className="alert alert-warning">
-            {error}
-          </div>
-        )}
+        {error && <div className="alert alert-warning">{error}</div>}
 
         <label className="auth-label">
           <span className="auth-label-text">New Password</span>
@@ -97,7 +103,12 @@ export default function ResetPassword() {
           />
         </label>
 
-        <button className="btn btn-primary" type="submit" disabled={isSubmitting} style={{ width: '100%', justifyContent: 'center' }}>
+        <button
+          className="btn btn-primary"
+          type="submit"
+          disabled={isSubmitting}
+          style={{ width: '100%', justifyContent: 'center' }}
+        >
           {isSubmitting ? 'Resetting...' : 'Reset Password'}
         </button>
       </form>

@@ -5,10 +5,8 @@
 // same-origin relative "/api" when unset.
 const API_BASE_URL = String(
   process.env.REACT_APP_API_BASE_URL ||
-    (process.env.NODE_ENV === "development"
-      ? "http://localhost:3001/api"
-      : ""),
-).replace(/\/$/, "");
+    (process.env.NODE_ENV === 'development' ? 'http://localhost:3001/api' : '')
+).replace(/\/$/, '');
 
 /** Network-level request timeout (ms). Transient failures auto-retry once for safe GET reads. */
 const REQUEST_TIMEOUT_MS = Number(process.env.REACT_APP_API_TIMEOUT_MS) || 45_000;
@@ -35,9 +33,7 @@ const readBusinessOwnerId = () => {
 };
 
 function metaPartySkipTenant(filtersOrOpts = {}) {
-  return filtersOrOpts?.skipTenantHeader === true
-    ? { skipBusinessOwnerHeader: true }
-    : {};
+  return filtersOrOpts?.skipTenantHeader === true ? { skipBusinessOwnerHeader: true } : {};
 }
 /** Paths where 401 means wrong credentials / signup issues, not “session expired”. */
 function isPublicAuthEndpoint(endpoint) {
@@ -111,19 +107,17 @@ class ApiService {
         const response = await fetch(url, config);
         clearTimeout(timeoutId);
         if (!response.ok) {
-          if (
-            response.status === 401 &&
-            token &&
-            !isPublicAuthEndpoint(endpoint)
-          ) {
+          if (response.status === 401 && token && !isPublicAuthEndpoint(endpoint)) {
             notifySessionExpired();
           }
           let errBody = null;
           let detail = '';
           try {
             errBody = await response.json();
-            detail = errBody.message || errBody.error || (typeof errBody === 'string' ? errBody : '');
-            if (errBody.error && errBody.error !== detail) detail = `${detail} ${errBody.error}`.trim();
+            detail =
+              errBody.message || errBody.error || (typeof errBody === 'string' ? errBody : '');
+            if (errBody.error && errBody.error !== detail)
+              detail = `${detail} ${errBody.error}`.trim();
           } catch {
             errBody = null;
           }
@@ -137,12 +131,18 @@ class ApiService {
             detail = String(detail.message || JSON.stringify(detail));
           }
           // Retry once on transient server errors for idempotent reads (Atlas/network hiccups).
-          if (isIdempotent && attempt < maxAttempts && (response.status === 502 || response.status === 503 || response.status === 504)) {
+          if (
+            isIdempotent &&
+            attempt < maxAttempts &&
+            (response.status === 502 || response.status === 503 || response.status === 504)
+          ) {
             lastError = new Error(`HTTP ${response.status}`);
             await new Promise((r) => setTimeout(r, 600 * attempt));
             continue;
           }
-          const err = new Error(detail ? `HTTP ${response.status}: ${detail}` : `HTTP error! status: ${response.status}`);
+          const err = new Error(
+            detail ? `HTTP ${response.status}: ${detail}` : `HTTP error! status: ${response.status}`
+          );
           err.status = response.status;
           if (errBody && typeof errBody === 'object') err.body = errBody;
           throw err;
@@ -170,7 +170,9 @@ class ApiService {
           continue;
         }
         if (error?.name === 'AbortError') {
-          const timeoutErr = new Error('Request timed out. Please check your connection and try again.');
+          const timeoutErr = new Error(
+            'Request timed out. Please check your connection and try again.'
+          );
           timeoutErr.status = 0;
           console.error('API request timed out:', url);
           throw timeoutErr;
@@ -348,10 +350,14 @@ class ApiService {
   }
 
   async savePersonalKhata(payload) {
-    return this.request('/personal-khata', {
-      method: 'PUT',
-      body: JSON.stringify(payload ?? {}),
-    }, { skipBusinessOwnerHeader: true });
+    return this.request(
+      '/personal-khata',
+      {
+        method: 'PUT',
+        body: JSON.stringify(payload ?? {}),
+      },
+      { skipBusinessOwnerHeader: true }
+    );
   }
 
   // Business Owners
@@ -361,7 +367,7 @@ class ApiService {
 
   /** Resolve one workspace owner by id — used when party JWT cannot list all owners. */
   async getBusinessOwner(id) {
-    const idStr = String(id ?? "").trim();
+    const idStr = String(id ?? '').trim();
     const safe = encodeURIComponent(idStr);
     return this.request(`/businessOwners/${safe}`, {}, { businessOwnerId: idStr });
   }
@@ -463,43 +469,67 @@ class ApiService {
   }
 
   async createGhausiaLot(data, businessOwnerId) {
-    return this.request('/ghausiaLots', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    }, { businessOwnerId });
+    return this.request(
+      '/ghausiaLots',
+      {
+        method: 'POST',
+        body: JSON.stringify(data),
+      },
+      { businessOwnerId }
+    );
   }
 
   async updateGhausiaLot(id, data, businessOwnerId) {
-    return this.request(`/ghausiaLots/${id}`, {
-      method: 'PATCH',
-      body: JSON.stringify(data),
-    }, { businessOwnerId });
+    return this.request(
+      `/ghausiaLots/${id}`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      },
+      { businessOwnerId }
+    );
   }
 
   async approveLotCompletion(id, opts = {}) {
     const { businessOwnerId, ownerBillingChoice, ownerBillAmount } = opts || {};
     const body = {};
     if (ownerBillingChoice) body.ownerBillingChoice = ownerBillingChoice;
-    if (ownerBillAmount != null && ownerBillAmount !== '' && Number.isFinite(Number(ownerBillAmount))) {
+    if (
+      ownerBillAmount != null &&
+      ownerBillAmount !== '' &&
+      Number.isFinite(Number(ownerBillAmount))
+    ) {
       body.ownerBillAmount = Number(ownerBillAmount);
     }
-    return this.request(`/ghausiaLots/${id}/approve-completion`, {
-      method: 'POST',
-      body: JSON.stringify(body),
-    }, { businessOwnerId });
+    return this.request(
+      `/ghausiaLots/${id}/approve-completion`,
+      {
+        method: 'POST',
+        body: JSON.stringify(body),
+      },
+      { businessOwnerId }
+    );
   }
 
   async rejectLotCompletion(id, rejectionNote, businessOwnerId) {
-    return this.request(`/ghausiaLots/${id}/reject-completion`, {
-      method: 'POST',
-      body: JSON.stringify({ rejectionNote }),
-    }, { businessOwnerId });
+    return this.request(
+      `/ghausiaLots/${id}/reject-completion`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ rejectionNote }),
+      },
+      { businessOwnerId }
+    );
   }
 
   async deleteGhausiaLot(id, businessOwnerId) {
-    return this.request(`/ghausiaLots/${id}`, {
-      method: 'DELETE',
-    }, { businessOwnerId });
+    return this.request(
+      `/ghausiaLots/${id}`,
+      {
+        method: 'DELETE',
+      },
+      { businessOwnerId }
+    );
   }
 
   // Party Edits
@@ -522,7 +552,7 @@ class ApiService {
     return this.request(
       `/partyEdits/lot/${lotId}${q ? `?${q}` : ''}`,
       {},
-      { businessOwnerId: biz || undefined, ...metaPartySkipTenant(opts) },
+      { businessOwnerId: biz || undefined, ...metaPartySkipTenant(opts) }
     );
   }
 
@@ -541,10 +571,14 @@ class ApiService {
   }
 
   async upsertPartyEditByLotId(lotId, data, businessOwnerId) {
-    return this.request(`/partyEdits/lot/${lotId}`, {
-      method: 'PUT',
-      body: JSON.stringify(data),
-    }, { businessOwnerId });
+    return this.request(
+      `/partyEdits/lot/${lotId}`,
+      {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      },
+      { businessOwnerId }
+    );
   }
 
   // Party Ledger
@@ -584,15 +618,19 @@ class ApiService {
       {
         businessOwnerId: biz || undefined,
         ...metaPartySkipTenant(opts),
-      },
+      }
     );
   }
 
   async createPayment(data, businessOwnerId) {
-    return this.request('/payments', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    }, { businessOwnerId });
+    return this.request(
+      '/payments',
+      {
+        method: 'POST',
+        body: JSON.stringify(data),
+      },
+      { businessOwnerId }
+    );
   }
 
   async updatePayment(id, data) {
@@ -608,7 +646,7 @@ class ApiService {
       {
         method: 'DELETE',
       },
-      { businessOwnerId },
+      { businessOwnerId }
     );
   }
 

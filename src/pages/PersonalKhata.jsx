@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowDownLeft,
   ArrowUpRight,
-  Briefcase,
+  Briefcase as _Briefcase,
   Camera,
   ChevronLeft,
   Eye,
@@ -28,10 +28,7 @@ import {
   runningBalances,
   buildContactShareSnapshot,
 } from '../utils/personalKhataStorage';
-import {
-  buildContactLedgerPdf,
-  downloadContactLedgerPdf,
-} from '../utils/personalKhataPdf';
+import { buildContactLedgerPdf, downloadContactLedgerPdf } from '../utils/personalKhataPdf';
 import { buildKhataShareUrl } from '../utils/personalKhataShare';
 import {
   extractPhoneFromText,
@@ -157,9 +154,7 @@ export default function PersonalKhata({ standalone = false } = {}) {
   // Every logged-in account (admin / party / personal_khata) gets its own server-synced
   // khata, keyed by user id, so it shows the same data on any device. Anonymous = local only.
   const khataStorageScope =
-    isAuthenticated && user?.status === 'approved'
-      ? String(user.id || user._id || '').trim()
-      : '';
+    isAuthenticated && user?.status === 'approved' ? String(user.id || user._id || '').trim() : '';
   const khataEmbedded = isAuthenticated && !standalone;
   const { contactId } = useParams();
   const navigate = useNavigate();
@@ -174,7 +169,6 @@ export default function PersonalKhata({ standalone = false } = {}) {
   const [bizModalOpen, setBizModalOpen] = useState(false);
   const [formBizName, setFormBizName] = useState('');
   const [search, setSearch] = useState('');
-
 
   const [entryModal, setEntryModal] = useState(null);
   const [contactModal, setContactModal] = useState(false);
@@ -376,7 +370,7 @@ export default function PersonalKhata({ standalone = false } = {}) {
 
   const active = useMemo(
     () => contacts.find((c) => c.id === contactId) || null,
-    [contacts, contactId],
+    [contacts, contactId]
   );
 
   const filteredContacts = useMemo(() => {
@@ -424,15 +418,31 @@ export default function PersonalKhata({ standalone = false } = {}) {
     if (sortedContactList.length === 0) {
       return (
         <div className="pk-empty">
-          <div className="pk-empty-icon"><UserPlus size={24} /></div>
-          <p>No contacts yet.<br />Tap Add to start your ledger.</p>
+          <div className="pk-empty-icon">
+            <UserPlus size={24} />
+          </div>
+          <p>
+            No contacts yet.
+            <br />
+            Tap Add to start your ledger.
+          </p>
         </div>
       );
     }
     return sortedContactList.map((c) => {
       const { net } = contactBalance(c.id, entries);
-      const accent = net > 0 ? 'pk-contact-accent--in' : net < 0 ? 'pk-contact-accent--out' : 'pk-contact-accent--zero';
-      const amtClass = net > 0 ? 'pk-contact-amt-val--in' : net < 0 ? 'pk-contact-amt-val--out' : 'pk-contact-amt-val--zero';
+      const accent =
+        net > 0
+          ? 'pk-contact-accent--in'
+          : net < 0
+            ? 'pk-contact-accent--out'
+            : 'pk-contact-accent--zero';
+      const amtClass =
+        net > 0
+          ? 'pk-contact-amt-val--in'
+          : net < 0
+            ? 'pk-contact-amt-val--out'
+            : 'pk-contact-amt-val--zero';
       return (
         <Link
           key={c.id}
@@ -451,9 +461,7 @@ export default function PersonalKhata({ standalone = false } = {}) {
             <div className={`pk-contact-amt-val ${amtClass}`}>
               {net === 0 ? '₨0' : `${net > 0 ? '' : '−'}${fmtMoney(net)}`}
             </div>
-            <div className="pk-contact-amt-tag">
-              {net > 0 ? 'Get' : net < 0 ? 'Give' : 'Clear'}
-            </div>
+            <div className="pk-contact-amt-tag">{net > 0 ? 'Get' : net < 0 ? 'Give' : 'Clear'}</div>
           </div>
           <button
             type="button"
@@ -523,12 +531,12 @@ export default function PersonalKhata({ standalone = false } = {}) {
 
       let phone = picked.phones[0] || '';
       if (picked.phones.length > 1) {
-        const inputOptions = Object.fromEntries(
-          picked.phones.map((p) => [p, p]),
-        );
+        const inputOptions = Object.fromEntries(picked.phones.map((p) => [p, p]));
         const choice = await Swal.fire({
           title: 'Select number',
-          text: picked.name ? `${picked.name} has more than one number` : 'Choose which number to save',
+          text: picked.name
+            ? `${picked.name} has more than one number`
+            : 'Choose which number to save',
           input: 'radio',
           inputOptions,
           inputValue: picked.phones[0],
@@ -581,7 +589,11 @@ export default function PersonalKhata({ standalone = false } = {}) {
     }
     const businessId = activeBusinessId || businesses[0]?.id;
     if (!businessId) {
-      Swal.fire({ icon: 'info', title: 'Please wait', text: 'Your ledger is still loading. Try again in a moment.' });
+      Swal.fire({
+        icon: 'info',
+        title: 'Please wait',
+        text: 'Your ledger is still loading. Try again in a moment.',
+      });
       return;
     }
     const row = {
@@ -618,10 +630,7 @@ export default function PersonalKhata({ standalone = false } = {}) {
       Swal.fire({ icon: 'warning', title: 'Amount', text: 'Enter a valid amount.' });
       return;
     }
-    const description = [
-      formCategory ? `[${formCategory}]` : '',
-      formDesc.trim(),
-    ]
+    const description = [formCategory ? `[${formCategory}]` : '', formDesc.trim()]
       .filter(Boolean)
       .join(' ')
       .trim();
@@ -646,9 +655,7 @@ export default function PersonalKhata({ standalone = false } = {}) {
       createdAt: ts,
       updatedAt: ts,
     };
-    const nextContacts = contacts.map((c) =>
-      c.id === cid ? { ...c, updatedAt: ts } : c,
-    );
+    const nextContacts = contacts.map((c) => (c.id === cid ? { ...c, updatedAt: ts } : c));
     setContacts(nextContacts);
     setEntries([row, ...entries]);
     setEntryModal(null);
@@ -738,7 +745,7 @@ export default function PersonalKhata({ standalone = false } = {}) {
     async (contactId) => {
       const snap = buildContactShareSnapshot(
         { businesses, activeBusinessId, contacts, entries },
-        contactId,
+        contactId
       );
       if (!snap) {
         await Swal.fire({
@@ -760,9 +767,7 @@ export default function PersonalKhata({ standalone = false } = {}) {
       try {
         await navigator.clipboard.writeText(url);
         const extra =
-          warning === 'long_url'
-            ? ' The URL is long — test on WhatsApp or desktop if needed.'
-            : '';
+          warning === 'long_url' ? ' The URL is long — test on WhatsApp or desktop if needed.' : '';
         await Swal.fire({
           toast: true,
           icon: 'success',
@@ -780,7 +785,7 @@ export default function PersonalKhata({ standalone = false } = {}) {
         });
       }
     },
-    [businesses, activeBusinessId, contacts, entries],
+    [businesses, activeBusinessId, contacts, entries]
   );
 
   useEffect(() => {
@@ -792,93 +797,96 @@ export default function PersonalKhata({ standalone = false } = {}) {
     }
   }, [contactId, khataHydrated, activeBusinessId, contacts, navigate]);
 
-  const pdfPreviewLayer =
-    pdfPreviewUrl ? (
+  const pdfPreviewLayer = pdfPreviewUrl ? (
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 250,
+        background: 'rgba(15,23,42,0.55)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 12,
+      }}
+      role="dialog"
+      aria-modal="true"
+      aria-label="PDF preview"
+      onClick={closePdfPreview}
+    >
       <div
         style={{
-          position: 'fixed',
-          inset: 0,
-          zIndex: 250,
-          background: 'rgba(15,23,42,0.55)',
+          width: '100%',
+          maxWidth: 920,
+          height: 'min(92vh, 900px)',
+          background: '#fff',
+          borderRadius: 16,
+          overflow: 'hidden',
           display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: 12,
+          flexDirection: 'column',
+          boxShadow: '0 25px 80px rgba(0,0,0,0.35)',
         }}
-        role="dialog"
-        aria-modal="true"
-        aria-label="PDF preview"
-        onClick={closePdfPreview}
+        onClick={(ev) => ev.stopPropagation()}
       >
         <div
           style={{
-            width: '100%',
-            maxWidth: 920,
-            height: 'min(92vh, 900px)',
-            background: '#fff',
-            borderRadius: 16,
-            overflow: 'hidden',
+            flexShrink: 0,
             display: 'flex',
-            flexDirection: 'column',
-            boxShadow: '0 25px 80px rgba(0,0,0,0.35)',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 10,
+            flexWrap: 'wrap',
+            padding: '10px 14px',
+            background: '#1e293b',
+            color: '#fff',
           }}
-          onClick={(ev) => ev.stopPropagation()}
         >
-          <div
-            style={{
-              flexShrink: 0,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: 10,
-              flexWrap: 'wrap',
-              padding: '10px 14px',
-              background: '#1e293b',
-              color: '#fff',
-            }}
-          >
-            <span style={{ fontWeight: 800, fontSize: 14 }}>{pdfPreviewTitle}</span>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-              <button
-                type="button"
-                onClick={() => window.open(pdfPreviewUrl, '_blank', 'noopener,noreferrer')}
-                style={{
-                  border: 'none',
-                  background: 'rgba(255,255,255,0.18)',
-                  color: '#fff',
-                  borderRadius: 10,
-                  padding: '8px 12px',
-                  fontWeight: 700,
-                  fontSize: 12,
-                  cursor: 'pointer',
-                }}
-              >
-                Nayi tab
-              </button>
-              <button
-                type="button"
-                onClick={closePdfPreview}
-                style={{
-                  border: 'none',
-                  background: 'rgba(255,255,255,0.22)',
-                  color: '#fff',
-                  borderRadius: 10,
-                  padding: '8px 14px',
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 6,
-                }}
-              >
-                <X size={18} aria-hidden /> Close
-              </button>
-            </div>
+          <span style={{ fontWeight: 800, fontSize: 14 }}>{pdfPreviewTitle}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              onClick={() => window.open(pdfPreviewUrl, '_blank', 'noopener,noreferrer')}
+              style={{
+                border: 'none',
+                background: 'rgba(255,255,255,0.18)',
+                color: '#fff',
+                borderRadius: 10,
+                padding: '8px 12px',
+                fontWeight: 700,
+                fontSize: 12,
+                cursor: 'pointer',
+              }}
+            >
+              Nayi tab
+            </button>
+            <button
+              type="button"
+              onClick={closePdfPreview}
+              style={{
+                border: 'none',
+                background: 'rgba(255,255,255,0.22)',
+                color: '#fff',
+                borderRadius: 10,
+                padding: '8px 14px',
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+              }}
+            >
+              <X size={18} aria-hidden /> Close
+            </button>
           </div>
-          <iframe title={pdfPreviewTitle} src={pdfPreviewUrl} style={{ flex: 1, width: '100%', border: 'none', minHeight: 0 }} />
         </div>
+        <iframe
+          title={pdfPreviewTitle}
+          src={pdfPreviewUrl}
+          style={{ flex: 1, width: '100%', border: 'none', minHeight: 0 }}
+        />
       </div>
-    ) : null;
+    </div>
+  ) : null;
 
   if (khataStorageScope && !khataHydrated) {
     return (
@@ -913,227 +921,658 @@ export default function PersonalKhata({ standalone = false } = {}) {
               aria-label="Search contacts"
             />
           </div>
-          <div className="pk-shell-master-list">
-            {renderContactList(active.id)}
-          </div>
+          <div className="pk-shell-master-list">{renderContactList(active.id)}</div>
         </aside>
-      <div className={`pk-wrap${standalone ? ' pk-standalone-view' : ' pk-wrap-embedded'}`}>
-        <div className="pk-hero">
-          <Link to="/personal-khata" className="pk-back">
-            <ChevronLeft size={18} /> Back
-          </Link>
-          <div className="pk-headrow">
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div className="pk-avatar">{initials(active.name)}</div>
-              <div>
-                <div style={{ fontSize: 20, fontWeight: 800, letterSpacing: '-0.02em' }}>
-                  {active.name}
+        <div className={`pk-wrap${standalone ? ' pk-standalone-view' : ' pk-wrap-embedded'}`}>
+          <div className="pk-hero">
+            <Link to="/personal-khata" className="pk-back">
+              <ChevronLeft size={18} /> Back
+            </Link>
+            <div className="pk-headrow">
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div className="pk-avatar">{initials(active.name)}</div>
+                <div>
+                  <div style={{ fontSize: 20, fontWeight: 800, letterSpacing: '-0.02em' }}>
+                    {active.name}
+                  </div>
+                  {active.phone ? (
+                    <div style={{ opacity: 0.88, fontSize: 13, marginTop: 2 }}>{active.phone}</div>
+                  ) : null}
                 </div>
-                {active.phone ? (
-                  <div style={{ opacity: 0.88, fontSize: 13, marginTop: 2 }}>{active.phone}</div>
-                ) : null}
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  aria-label="Copy share link for this contact"
+                  title="Read-only link for this person’s ledger"
+                  style={{
+                    background: 'rgba(255,255,255,0.22)',
+                    border: 'none',
+                    borderRadius: 12,
+                    padding: 10,
+                    cursor: 'pointer',
+                    color: '#fff',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                  onClick={() => {
+                    void copyContactShareLink(active.id);
+                  }}
+                >
+                  <Share2 size={22} strokeWidth={2.25} aria-hidden />
+                </button>
+                <button
+                  type="button"
+                  aria-label="Preview PDF in browser"
+                  title="Preview in browser"
+                  style={{
+                    background: 'rgba(255,255,255,0.22)',
+                    border: 'none',
+                    borderRadius: 12,
+                    padding: 10,
+                    cursor: 'pointer',
+                    color: '#fff',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                  onClick={() => {
+                    try {
+                      const doc = buildContactLedgerPdf(active, entries);
+                      openPdfPreview(doc, `${active.name} — ledger`);
+                    } catch (e) {
+                      Swal.fire({ icon: 'error', text: String(e?.message || e) });
+                    }
+                  }}
+                >
+                  <Eye size={22} strokeWidth={2.25} />
+                </button>
+                <button
+                  type="button"
+                  aria-label="Download PDF"
+                  title="Download PDF"
+                  style={{
+                    background: 'rgba(255,255,255,0.22)',
+                    border: 'none',
+                    borderRadius: 12,
+                    padding: 10,
+                    cursor: 'pointer',
+                    color: '#fff',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                  onClick={() => {
+                    try {
+                      downloadContactLedgerPdf(active, entries);
+                      Swal.fire({
+                        toast: true,
+                        icon: 'success',
+                        title: 'PDF downloaded',
+                        position: 'top-end',
+                        timer: 1800,
+                        showConfirmButton: false,
+                      });
+                    } catch (e) {
+                      Swal.fire({ icon: 'error', text: String(e?.message || e) });
+                    }
+                  }}
+                >
+                  <FileDown size={22} strokeWidth={2.25} />
+                </button>
               </div>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-              <button
-                type="button"
-                aria-label="Copy share link for this contact"
-                title="Read-only link for this person’s ledger"
-                style={{
-                  background: 'rgba(255,255,255,0.22)',
-                  border: 'none',
-                  borderRadius: 12,
-                  padding: 10,
-                  cursor: 'pointer',
-                  color: '#fff',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-                onClick={() => {
-                  void copyContactShareLink(active.id);
-                }}
-              >
-                <Share2 size={22} strokeWidth={2.25} aria-hidden />
-              </button>
-              <button
-                type="button"
-                aria-label="Preview PDF in browser"
-                title="Preview in browser"
-                style={{
-                  background: 'rgba(255,255,255,0.22)',
-                  border: 'none',
-                  borderRadius: 12,
-                  padding: 10,
-                  cursor: 'pointer',
-                  color: '#fff',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-                onClick={() => {
-                  try {
-                    const doc = buildContactLedgerPdf(active, entries);
-                    openPdfPreview(doc, `${active.name} — ledger`);
-                  } catch (e) {
-                    Swal.fire({ icon: 'error', text: String(e?.message || e) });
-                  }
-                }}
-              >
-                <Eye size={22} strokeWidth={2.25} />
-              </button>
-              <button
-                type="button"
-                aria-label="Download PDF"
-                title="Download PDF"
-                style={{
-                  background: 'rgba(255,255,255,0.22)',
-                  border: 'none',
-                  borderRadius: 12,
-                  padding: 10,
-                  cursor: 'pointer',
-                  color: '#fff',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-                onClick={() => {
-                  try {
-                    downloadContactLedgerPdf(active, entries);
-                    Swal.fire({
-                      toast: true,
-                      icon: 'success',
-                      title: 'PDF downloaded',
-                      position: 'top-end',
-                      timer: 1800,
-                      showConfirmButton: false,
-                    });
-                  } catch (e) {
-                    Swal.fire({ icon: 'error', text: String(e?.message || e) });
-                  }
-                }}
-              >
-                <FileDown size={22} strokeWidth={2.25} />
-              </button>
+
+            <div className="pk-balance-chip">
+              <div>
+                <div
+                  className={`pk-balance-amt ${net >= 0 ? 'pk-balance-amt--in' : 'pk-balance-amt--out'}`}
+                >
+                  {fmtMoney(net)}
+                </div>
+                <div className="pk-balance-lbl">
+                  {net > 0 ? 'They owe you' : net < 0 ? 'You owe them' : 'Settled up'}
+                </div>
+              </div>
+              <div style={{ color: net >= 0 ? '#dc2626' : '#059669' }}>
+                {net >= 0 ? <ArrowDownLeft size={28} /> : <ArrowUpRight size={28} />}
+              </div>
             </div>
           </div>
 
-          <div className="pk-balance-chip">
-            <div>
-              <div className={`pk-balance-amt ${net >= 0 ? 'pk-balance-amt--in' : 'pk-balance-amt--out'}`}>
-                {fmtMoney(net)}
+          <div className="pk-tx-card">
+            <div className="pk-tx-head">
+              <span>Time & note</span>
+              <span className="pk-tx-head-out">Paid out</span>
+              <span className="pk-tx-head-in">Received in</span>
+            </div>
+            {chronological.length === 0 ? (
+              <div style={{ padding: 40, textAlign: 'center', color: '#94a3b8', fontWeight: 600 }}>
+                No entries yet — add below
               </div>
-              <div className="pk-balance-lbl">
-                {net > 0 ? 'They owe you' : net < 0 ? 'You owe them' : 'Settled up'}
-              </div>
-            </div>
-            <div style={{ color: net >= 0 ? '#dc2626' : '#059669' }}>
-              {net >= 0 ? <ArrowDownLeft size={28} /> : <ArrowUpRight size={28} />}
-            </div>
-          </div>
-        </div>
-
-        <div className="pk-tx-card">
-          <div className="pk-tx-head">
-            <span>Time & note</span>
-            <span className="pk-tx-head-out">Paid out</span>
-            <span className="pk-tx-head-in">Received in</span>
-          </div>
-          {chronological.length === 0 ? (
-            <div style={{ padding: 40, textAlign: 'center', color: '#94a3b8', fontWeight: 600 }}>
-              No entries yet — add below
-            </div>
-          ) : (
-            chronological.map((e) => (
-              <div key={e.id} className="pk-tx-row">
-                <div className="pk-tx-main">
-                  <div className="pk-tx-time">{fmtWhen(e.updatedAt || e.createdAt)}</div>
-                  <div className="pk-tx-desc">{e.description}</div>
-                  <div className="pk-tx-row-actions">
-                    <span className="pk-pill">Bal. {fmtMoney(runMap.get(e.id) ?? 0)}</span>
-                    {e.billImage && /^data:image\//i.test(String(e.billImage)) ? (
+            ) : (
+              chronological.map((e) => (
+                <div key={e.id} className="pk-tx-row">
+                  <div className="pk-tx-main">
+                    <div className="pk-tx-time">{fmtWhen(e.updatedAt || e.createdAt)}</div>
+                    <div className="pk-tx-desc">{e.description}</div>
+                    <div className="pk-tx-row-actions">
+                      <span className="pk-pill">Bal. {fmtMoney(runMap.get(e.id) ?? 0)}</span>
+                      {e.billImage && /^data:image\//i.test(String(e.billImage)) ? (
+                        <button
+                          type="button"
+                          onClick={() => setBillLightboxSrc(e.billImage)}
+                          title="View bill"
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 5,
+                            padding: '5px 10px',
+                            borderRadius: 8,
+                            border: '1px solid #c7d2fe',
+                            background: '#eef2ff',
+                            color: '#3730a3',
+                            fontWeight: 700,
+                            fontSize: 11,
+                            cursor: 'pointer',
+                          }}
+                        >
+                          <ImageIcon size={13} strokeWidth={2.5} aria-hidden /> Bill
+                        </button>
+                      ) : null}
                       <button
                         type="button"
-                        onClick={() => setBillLightboxSrc(e.billImage)}
-                        title="View bill"
+                        aria-label="Delete entry"
+                        onClick={() => deleteEntry(e.id)}
                         style={{
+                          marginLeft: 'auto',
+                          border: 'none',
+                          background: '#f8fafc',
+                          color: '#94a3b8',
+                          cursor: 'pointer',
+                          padding: 6,
+                          borderRadius: 8,
                           display: 'inline-flex',
                           alignItems: 'center',
-                          gap: 5,
-                          padding: '5px 10px',
-                          borderRadius: 8,
-                          border: '1px solid #c7d2fe',
-                          background: '#eef2ff',
-                          color: '#3730a3',
-                          fontWeight: 700,
-                          fontSize: 11,
-                          cursor: 'pointer',
                         }}
                       >
-                        <ImageIcon size={13} strokeWidth={2.5} aria-hidden /> Bill
+                        <Trash2 size={15} />
                       </button>
-                    ) : null}
-                    <button
-                      type="button"
-                      aria-label="Delete entry"
-                      onClick={() => deleteEntry(e.id)}
-                      style={{
-                        marginLeft: 'auto',
-                        border: 'none',
-                        background: '#f8fafc',
-                        color: '#94a3b8',
-                        cursor: 'pointer',
-                        padding: 6,
-                        borderRadius: 8,
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                      }}
-                    >
-                      <Trash2 size={15} />
-                    </button>
+                    </div>
+                  </div>
+                  <div className={`pk-tx-out${e.type === 'given' ? '' : ' pk-tx-empty'}`}>
+                    {e.type === 'given' ? (
+                      <span className="pk-tx-amt-pill pk-tx-amt-pill-out">
+                        {fmtMoney(e.amount)}
+                      </span>
+                    ) : (
+                      '—'
+                    )}
+                  </div>
+                  <div className={`pk-tx-in${e.type === 'received' ? '' : ' pk-tx-empty'}`}>
+                    {e.type === 'received' ? (
+                      <span className="pk-tx-amt-pill pk-tx-amt-pill-in">{fmtMoney(e.amount)}</span>
+                    ) : (
+                      '—'
+                    )}
                   </div>
                 </div>
-                <div
-                  className={`pk-tx-out${e.type === 'given' ? '' : ' pk-tx-empty'}`}
-                >
-                  {e.type === 'given' ? (
-                    <span className="pk-tx-amt-pill pk-tx-amt-pill-out">{fmtMoney(e.amount)}</span>
-                  ) : (
-                    '—'
-                  )}
-                </div>
-                <div
-                  className={`pk-tx-in${e.type === 'received' ? '' : ' pk-tx-empty'}`}
-                >
-                  {e.type === 'received' ? (
-                    <span className="pk-tx-amt-pill pk-tx-amt-pill-in">{fmtMoney(e.amount)}</span>
-                  ) : (
-                    '—'
-                  )}
-                </div>
-              </div>
-            ))
-          )}
-        </div>
+              ))
+            )}
+          </div>
 
-        <div className={`pk-bottom${khataEmbedded ? ' pk-offset-sidebar' : ''}`}>
-          <div className="pk-bottom-inner">
+          <div className={`pk-bottom${khataEmbedded ? ' pk-offset-sidebar' : ''}`}>
+            <div className="pk-bottom-inner">
+              <button
+                type="button"
+                className="pk-btn-give"
+                onClick={() => openEntry('given', active.id)}
+              >
+                <ArrowUpRight size={18} aria-hidden /> Pay out
+              </button>
+              <button
+                type="button"
+                className="pk-btn-get"
+                onClick={() => openEntry('received', active.id)}
+              >
+                <ArrowDownLeft size={18} aria-hidden /> Receive
+              </button>
+            </div>
+          </div>
+
+          {entryModal && (
+            <EntryOverlay
+              type={entryModal}
+              contacts={scopedContacts}
+              formContactId={formContactId}
+              setFormContactId={setFormContactId}
+              formAmount={formAmount}
+              setFormAmount={setFormAmount}
+              formDesc={formDesc}
+              setFormDesc={setFormDesc}
+              formCategory={formCategory}
+              setFormCategory={setFormCategory}
+              formBillImage={formBillImage}
+              setFormBillImage={setFormBillImage}
+              onClose={() => setEntryModal(null)}
+              onSave={saveEntry}
+            />
+          )}
+
+          {billLightboxSrc ? (
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-label="Bill / receipt"
+              style={{
+                position: 'fixed',
+                inset: 0,
+                zIndex: 280,
+                background: 'rgba(15,23,42,0.78)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: 16,
+              }}
+              onClick={() => setBillLightboxSrc(null)}
+            >
+              <button
+                type="button"
+                aria-label="Close"
+                onClick={() => setBillLightboxSrc(null)}
+                style={{
+                  position: 'absolute',
+                  top: 12,
+                  right: 12,
+                  zIndex: 2,
+                  width: 44,
+                  height: 44,
+                  borderRadius: 999,
+                  border: 'none',
+                  background: 'rgba(255,255,255,0.95)',
+                  color: '#0f172a',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
+                }}
+              >
+                <X size={22} />
+              </button>
+              <img
+                src={billLightboxSrc}
+                alt="Bill"
+                style={{
+                  maxWidth: '100%',
+                  maxHeight: 'min(92vh, 900px)',
+                  width: 'auto',
+                  height: 'auto',
+                  objectFit: 'contain',
+                  borderRadius: 12,
+                  boxShadow: '0 12px 48px rgba(0,0,0,0.45)',
+                }}
+                onClick={(ev) => ev.stopPropagation()}
+              />
+            </div>
+          ) : null}
+
+          {pdfPreviewLayer}
+        </div>
+      </div>
+    );
+  }
+
+  if (contactId && !active) {
+    return (
+      <div style={{ padding: 24 }}>
+        <p>Contact not found.</p>
+        <Link to="/personal-khata">Ledger list</Link>
+      </div>
+    );
+  }
+
+  return (
+    <div className="pk-shell">
+      <div className={`pk-app${khataEmbedded ? ' pk-app-embedded' : ''}`}>
+        <header className="pk-header">
+          <div className="pk-header-row">
+            <div>
+              <h1 className="pk-header-title">Personal Khata</h1>
+              {!khataStorageScope && (
+                <p className="pk-header-sub">
+                  <Link to="/personal-khata/account">Sign in</Link> to sync on every device
+                </p>
+              )}
+              {khataStorageScope && user?.role === 'personal_khata' && (
+                <p className="pk-header-sub">
+                  Synced on every device · <Link to="/personal-khata/upgrade">Upgrade</Link>
+                </p>
+              )}
+              {khataStorageScope && user?.role !== 'personal_khata' && (
+                <p className="pk-header-sub">Synced on every device</p>
+              )}
+            </div>
+            <div className="pk-biz-pill">
+              <select
+                id="pk-biz-picker"
+                value={activeBusinessId}
+                onChange={(e) => setActiveBusinessId(e.target.value)}
+                aria-label="Business"
+              >
+                {businesses.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                className="pk-biz-pill-btn"
+                aria-label="New business"
+                title="Add business"
+                onClick={() => {
+                  setFormBizName('');
+                  setBizModalOpen(true);
+                }}
+              >
+                <Plus size={16} />
+              </button>
+              <button
+                type="button"
+                className="pk-biz-pill-btn pk-biz-pill-btn--danger"
+                aria-label="Delete business"
+                title={
+                  businesses.length <= 1 ? 'At least one business required' : 'Delete this business'
+                }
+                disabled={businesses.length <= 1}
+                onClick={() => void deleteActiveBusiness()}
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
+          </div>
+
+          <div className="pk-stats">
+            <div className="pk-stat">
+              <span className="pk-stat-label">You will get</span>
+              <span className="pk-stat-amt">{fmtMoney(totals.receivable)}</span>
+            </div>
+            <div className="pk-stat">
+              <span className="pk-stat-label">You will give</span>
+              <span className="pk-stat-amt">{fmtMoney(totals.payable)}</span>
+            </div>
+          </div>
+
+          <div className="pk-search-wrap">
+            <Search size={18} aria-hidden />
+            <input
+              placeholder="Search name or phone"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+        </header>
+
+        <section className="pk-panel">
+          <div className="pk-panel-head">
+            <span>Contacts ({sortedContactList.length})</span>
+            <button type="button" className="pk-panel-add" onClick={openAddContact}>
+              <UserPlus size={14} aria-hidden /> Add
+            </button>
+          </div>
+          {renderContactList()}
+        </section>
+
+        <div className={`pk-home-bar${khataEmbedded ? ' pk-home-bar-sidebar' : ''}`}>
+          <div className="pk-home-bar-inner">
             <button
               type="button"
-              className="pk-btn-give"
-              onClick={() => openEntry('given', active.id)}
+              className="pk-bar-btn pk-bar-btn-out"
+              onClick={() => (scopedContacts.length ? openEntry('given') : openAddContact())}
             >
-              <ArrowUpRight size={18} aria-hidden /> Pay out
+              <ArrowUpRight size={18} aria-hidden />
+              Paid out
             </button>
             <button
               type="button"
-              className="pk-btn-get"
-              onClick={() => openEntry('received', active.id)}
+              className="pk-bar-btn pk-bar-btn-in"
+              onClick={() => (scopedContacts.length ? openEntry('received') : openAddContact())}
             >
-              <ArrowDownLeft size={18} aria-hidden /> Receive
+              <ArrowDownLeft size={18} aria-hidden />
+              Received
             </button>
           </div>
         </div>
+
+        {contactModal && (
+          <div
+            style={{
+              position: 'fixed',
+              inset: 0,
+              background: 'rgba(15,23,42,0.45)',
+              zIndex: 100,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: 16,
+              overflowY: 'auto',
+            }}
+            role="dialog"
+            aria-modal="true"
+          >
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                saveContact();
+              }}
+              style={{
+                background: '#fff',
+                borderRadius: 24,
+                padding: 22,
+                width: '100%',
+                maxWidth: 420,
+                maxHeight: 'min(90vh, 640px)',
+                overflowY: 'auto',
+                boxShadow: '0 24px 80px rgba(0,0,0,0.2)',
+                margin: 'auto',
+              }}
+            >
+              <h2 style={{ margin: '0 0 6px', fontSize: 20, fontWeight: 900 }}>New contact</h2>
+              <p style={{ margin: '0 0 14px', color: '#64748b', fontSize: 13 }}>
+                Name required — phone optional
+              </p>
+
+              {deviceContactSupported ? (
+                <button
+                  type="button"
+                  className="pk-pick-contact-btn"
+                  disabled={pickingDeviceContact || pastingPhone}
+                  onClick={() => void pickFromPhoneContacts()}
+                >
+                  <ContactRound size={18} aria-hidden />
+                  {pickingDeviceContact ? 'Opening contacts…' : 'Pick from phone contacts'}
+                </button>
+              ) : (
+                <div className="pk-ios-contact-hint">
+                  <p>
+                    iPhone / Safari contacts list open nahi kar sakte (Apple limit). Asaan tariqa:{' '}
+                    <strong>Contacts</strong> → number <strong>Copy</strong> → neeche{' '}
+                    <strong>Paste number</strong>.
+                  </p>
+                  <button
+                    type="button"
+                    className="pk-pick-contact-btn pk-pick-contact-btn--paste"
+                    disabled={pickingDeviceContact || pastingPhone}
+                    onClick={() => void pastePhoneFromClipboard()}
+                  >
+                    {pastingPhone ? 'Pasting…' : 'Paste number from clipboard'}
+                  </button>
+                </div>
+              )}
+
+              <label
+                style={{
+                  display: 'block',
+                  fontSize: 12,
+                  fontWeight: 700,
+                  marginBottom: 6,
+                  color: '#475569',
+                }}
+              >
+                Name
+              </label>
+              <input
+                className="form-input"
+                style={{
+                  width: '100%',
+                  marginBottom: 14,
+                  padding: 12,
+                  borderRadius: 12,
+                  border: '1px solid #e2e8f0',
+                }}
+                value={formName}
+                onChange={(e) => setFormName(e.target.value)}
+                placeholder="Contact name"
+                autoComplete="name"
+                disabled={pickingDeviceContact || pastingPhone}
+              />
+              <label
+                style={{
+                  display: 'block',
+                  fontSize: 12,
+                  fontWeight: 700,
+                  marginBottom: 6,
+                  color: '#475569',
+                }}
+              >
+                Phone
+              </label>
+              <input
+                className="form-input"
+                style={{
+                  width: '100%',
+                  marginBottom: 20,
+                  padding: 12,
+                  borderRadius: 12,
+                  border: '1px solid #e2e8f0',
+                }}
+                value={formPhone}
+                onChange={(e) => setFormPhone(e.target.value)}
+                onPaste={(e) => {
+                  const text = e.clipboardData?.getData('text') || '';
+                  const phone = extractPhoneFromText(text);
+                  if (!phone) return;
+                  e.preventDefault();
+                  setFormPhone(phone);
+                }}
+                placeholder="03xx..."
+                type="tel"
+                inputMode="tel"
+                autoComplete="tel"
+                disabled={pickingDeviceContact || pastingPhone}
+              />
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  style={{ flex: 1 }}
+                  disabled={pickingDeviceContact || pastingPhone}
+                  onClick={() => setContactModal(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  style={{ flex: 1 }}
+                  disabled={pickingDeviceContact || pastingPhone}
+                >
+                  Save
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+
+        {bizModalOpen && (
+          <div
+            style={{
+              position: 'fixed',
+              inset: 0,
+              background: 'rgba(15,23,42,0.45)',
+              zIndex: 100,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: 16,
+              overflowY: 'auto',
+            }}
+            role="dialog"
+            aria-modal="true"
+          >
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                saveNewBusiness();
+              }}
+              style={{
+                background: '#fff',
+                borderRadius: 24,
+                padding: 22,
+                width: '100%',
+                maxWidth: 420,
+                maxHeight: 'min(90vh, 560px)',
+                overflowY: 'auto',
+                boxShadow: '0 24px 80px rgba(0,0,0,0.2)',
+                margin: 'auto',
+              }}
+            >
+              <h2 style={{ margin: '0 0 6px', fontSize: 20, fontWeight: 900 }}>New business</h2>
+              <p style={{ margin: '0 0 18px', color: '#64748b', fontSize: 13 }}>
+                Name for a separate shop or unit — entries stay in this ledger.
+              </p>
+              <label
+                style={{
+                  display: 'block',
+                  fontSize: 12,
+                  fontWeight: 700,
+                  marginBottom: 6,
+                  color: '#475569',
+                }}
+              >
+                Name
+              </label>
+              <input
+                className="form-input"
+                style={{
+                  width: '100%',
+                  marginBottom: 18,
+                  padding: 12,
+                  borderRadius: 12,
+                  border: '1px solid #e2e8f0',
+                }}
+                value={formBizName}
+                onChange={(e) => setFormBizName(e.target.value)}
+                placeholder="e.g. Cloth House Anarkali"
+              />
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  style={{ flex: 1 }}
+                  onClick={() => setBizModalOpen(false)}
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary" style={{ flex: 1 }}>
+                  Save business
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
 
         {entryModal && (
           <EntryOverlay
@@ -1154,411 +1593,34 @@ export default function PersonalKhata({ standalone = false } = {}) {
           />
         )}
 
-        {billLightboxSrc ? (
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-label="Bill / receipt"
-            style={{
-              position: 'fixed',
-              inset: 0,
-              zIndex: 280,
-              background: 'rgba(15,23,42,0.78)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: 16,
-            }}
-            onClick={() => setBillLightboxSrc(null)}
-          >
-            <button
-              type="button"
-              aria-label="Close"
-              onClick={() => setBillLightboxSrc(null)}
-              style={{
-                position: 'absolute',
-                top: 12,
-                right: 12,
-                zIndex: 2,
-                width: 44,
-                height: 44,
-                borderRadius: 999,
-                border: 'none',
-                background: 'rgba(255,255,255,0.95)',
-                color: '#0f172a',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
-              }}
-            >
-              <X size={22} />
-            </button>
-            <img
-              src={billLightboxSrc}
-              alt="Bill"
-              style={{
-                maxWidth: '100%',
-                maxHeight: 'min(92vh, 900px)',
-                width: 'auto',
-                height: 'auto',
-                objectFit: 'contain',
-                borderRadius: 12,
-                boxShadow: '0 12px 48px rgba(0,0,0,0.45)',
-              }}
-              onClick={(ev) => ev.stopPropagation()}
-            />
-          </div>
-        ) : null}
-
         {pdfPreviewLayer}
       </div>
-      </div>
-    );
-  }
-
-  if (contactId && !active) {
-    return (
-      <div style={{ padding: 24 }}>
-        <p>Contact not found.</p>
-        <Link to="/personal-khata">Ledger list</Link>
-      </div>
-    );
-  }
-
-  return (
-    <div className="pk-shell">
-    <div className={`pk-app${khataEmbedded ? ' pk-app-embedded' : ''}`}>
-      <header className="pk-header">
-        <div className="pk-header-row">
-          <div>
-            <h1 className="pk-header-title">Personal Khata</h1>
-            {!khataStorageScope && (
-              <p className="pk-header-sub">
-                <Link to="/personal-khata/account">Sign in</Link> to sync on every device
-              </p>
-            )}
-            {khataStorageScope && user?.role === 'personal_khata' && (
-              <p className="pk-header-sub">
-                Synced on every device · <Link to="/personal-khata/upgrade">Upgrade</Link>
-              </p>
-            )}
-            {khataStorageScope && user?.role !== 'personal_khata' && (
-              <p className="pk-header-sub">Synced on every device</p>
-            )}
+      <aside className="pk-shell-detail-empty" aria-label="Ledger detail">
+        <div className="pk-shell-detail-empty-inner">
+          <div className="pk-shell-detail-empty-icon" aria-hidden>
+            <UserPlus size={28} />
           </div>
-          <div className="pk-biz-pill">
-            <select
-              id="pk-biz-picker"
-              value={activeBusinessId}
-              onChange={(e) => setActiveBusinessId(e.target.value)}
-              aria-label="Business"
-            >
-              {businesses.map((b) => (
-                <option key={b.id} value={b.id}>{b.name}</option>
-              ))}
-            </select>
-            <button
-              type="button"
-              className="pk-biz-pill-btn"
-              aria-label="New business"
-              title="Add business"
-              onClick={() => {
-                setFormBizName('');
-                setBizModalOpen(true);
-              }}
-            >
-              <Plus size={16} />
-            </button>
-            <button
-              type="button"
-              className="pk-biz-pill-btn pk-biz-pill-btn--danger"
-              aria-label="Delete business"
-              title={businesses.length <= 1 ? 'At least one business required' : 'Delete this business'}
-              disabled={businesses.length <= 1}
-              onClick={() => void deleteActiveBusiness()}
-            >
-              <Trash2 size={14} />
-            </button>
-          </div>
+          <p className="pk-shell-detail-empty-title">Select a contact</p>
+          <p className="pk-shell-detail-empty-sub">
+            Open a person on the left to see balances and entries here.
+          </p>
         </div>
-
-        <div className="pk-stats">
-          <div className="pk-stat">
-            <span className="pk-stat-label">You will get</span>
-            <span className="pk-stat-amt">{fmtMoney(totals.receivable)}</span>
-          </div>
-          <div className="pk-stat">
-            <span className="pk-stat-label">You will give</span>
-            <span className="pk-stat-amt">{fmtMoney(totals.payable)}</span>
-          </div>
-        </div>
-
-        <div className="pk-search-wrap">
-          <Search size={18} aria-hidden />
-          <input
-            placeholder="Search name or phone"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </div>
-      </header>
-
-      <section className="pk-panel">
-        <div className="pk-panel-head">
-          <span>Contacts ({sortedContactList.length})</span>
-          <button type="button" className="pk-panel-add" onClick={openAddContact}>
-            <UserPlus size={14} aria-hidden /> Add
-          </button>
-        </div>
-        {renderContactList()}
-      </section>
-
-      <div className={`pk-home-bar${khataEmbedded ? ' pk-home-bar-sidebar' : ''}`}>
-        <div className="pk-home-bar-inner">
-          <button
-            type="button"
-            className="pk-bar-btn pk-bar-btn-out"
-            onClick={() => (scopedContacts.length ? openEntry('given') : openAddContact())}
-          >
-            <ArrowUpRight size={18} aria-hidden />
-            Paid out
-          </button>
-          <button
-            type="button"
-            className="pk-bar-btn pk-bar-btn-in"
-            onClick={() => (scopedContacts.length ? openEntry('received') : openAddContact())}
-          >
-            <ArrowDownLeft size={18} aria-hidden />
-            Received
-          </button>
-        </div>
-      </div>
-
-      {contactModal && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            background: 'rgba(15,23,42,0.45)',
-            zIndex: 100,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: 16,
-            overflowY: 'auto',
-          }}
-          role="dialog"
-          aria-modal="true"
-        >
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              saveContact();
-            }}
-            style={{
-              background: '#fff',
-              borderRadius: 24,
-              padding: 22,
-              width: '100%',
-              maxWidth: 420,
-              maxHeight: 'min(90vh, 640px)',
-              overflowY: 'auto',
-              boxShadow: '0 24px 80px rgba(0,0,0,0.2)',
-              margin: 'auto',
-            }}
-          >
-            <h2 style={{ margin: '0 0 6px', fontSize: 20, fontWeight: 900 }}>New contact</h2>
-            <p style={{ margin: '0 0 14px', color: '#64748b', fontSize: 13 }}>
-              Name required — phone optional
-            </p>
-
-            {deviceContactSupported ? (
-              <button
-                type="button"
-                className="pk-pick-contact-btn"
-                disabled={pickingDeviceContact || pastingPhone}
-                onClick={() => void pickFromPhoneContacts()}
-              >
-                <ContactRound size={18} aria-hidden />
-                {pickingDeviceContact ? 'Opening contacts…' : 'Pick from phone contacts'}
-              </button>
-            ) : (
-              <div className="pk-ios-contact-hint">
-                <p>
-                  iPhone / Safari contacts list open nahi kar sakte (Apple limit).
-                  {' '}Asaan tariqa: <strong>Contacts</strong> → number <strong>Copy</strong> → neeche{' '}
-                  <strong>Paste number</strong>.
-                </p>
-                <button
-                  type="button"
-                  className="pk-pick-contact-btn pk-pick-contact-btn--paste"
-                  disabled={pickingDeviceContact || pastingPhone}
-                  onClick={() => void pastePhoneFromClipboard()}
-                >
-                  {pastingPhone ? 'Pasting…' : 'Paste number from clipboard'}
-                </button>
-              </div>
-            )}
-
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 700, marginBottom: 6, color: '#475569' }}>
-              Name
-            </label>
-            <input
-              className="form-input"
-              style={{ width: '100%', marginBottom: 14, padding: 12, borderRadius: 12, border: '1px solid #e2e8f0' }}
-              value={formName}
-              onChange={(e) => setFormName(e.target.value)}
-              placeholder="Contact name"
-              autoComplete="name"
-              disabled={pickingDeviceContact || pastingPhone}
-            />
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 700, marginBottom: 6, color: '#475569' }}>
-              Phone
-            </label>
-            <input
-              className="form-input"
-              style={{ width: '100%', marginBottom: 20, padding: 12, borderRadius: 12, border: '1px solid #e2e8f0' }}
-              value={formPhone}
-              onChange={(e) => setFormPhone(e.target.value)}
-              onPaste={(e) => {
-                const text = e.clipboardData?.getData('text') || '';
-                const phone = extractPhoneFromText(text);
-                if (!phone) return;
-                e.preventDefault();
-                setFormPhone(phone);
-              }}
-              placeholder="03xx..."
-              type="tel"
-              inputMode="tel"
-              autoComplete="tel"
-              disabled={pickingDeviceContact || pastingPhone}
-            />
-            <div style={{ display: 'flex', gap: 10 }}>
-              <button
-                type="button"
-                className="btn btn-ghost"
-                style={{ flex: 1 }}
-                disabled={pickingDeviceContact || pastingPhone}
-                onClick={() => setContactModal(false)}
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                className="btn btn-primary"
-                style={{ flex: 1 }}
-                disabled={pickingDeviceContact || pastingPhone}
-              >
-                Save
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      {bizModalOpen && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            background: 'rgba(15,23,42,0.45)',
-            zIndex: 100,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: 16,
-            overflowY: 'auto',
-          }}
-          role="dialog"
-          aria-modal="true"
-        >
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              saveNewBusiness();
-            }}
-            style={{
-              background: '#fff',
-              borderRadius: 24,
-              padding: 22,
-              width: '100%',
-              maxWidth: 420,
-              maxHeight: 'min(90vh, 560px)',
-              overflowY: 'auto',
-              boxShadow: '0 24px 80px rgba(0,0,0,0.2)',
-              margin: 'auto',
-            }}
-          >
-            <h2 style={{ margin: '0 0 6px', fontSize: 20, fontWeight: 900 }}>New business</h2>
-            <p style={{ margin: '0 0 18px', color: '#64748b', fontSize: 13 }}>
-              Name for a separate shop or unit — entries stay in this ledger.
-            </p>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 700, marginBottom: 6, color: '#475569' }}>
-              Name
-            </label>
-            <input
-              className="form-input"
-              style={{ width: '100%', marginBottom: 18, padding: 12, borderRadius: 12, border: '1px solid #e2e8f0' }}
-              value={formBizName}
-              onChange={(e) => setFormBizName(e.target.value)}
-              placeholder="e.g. Cloth House Anarkali"
-            />
-            <div style={{ display: 'flex', gap: 10 }}>
-              <button
-                type="button"
-                className="btn btn-ghost"
-                style={{ flex: 1 }}
-                onClick={() => setBizModalOpen(false)}
-              >
-                Cancel
-              </button>
-              <button type="submit" className="btn btn-primary" style={{ flex: 1 }}>
-                Save business
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      {entryModal && (
-        <EntryOverlay
-          type={entryModal}
-          contacts={scopedContacts}
-          formContactId={formContactId}
-          setFormContactId={setFormContactId}
-          formAmount={formAmount}
-          setFormAmount={setFormAmount}
-          formDesc={formDesc}
-          setFormDesc={setFormDesc}
-          formCategory={formCategory}
-          setFormCategory={setFormCategory}
-          formBillImage={formBillImage}
-          setFormBillImage={setFormBillImage}
-          onClose={() => setEntryModal(null)}
-          onSave={saveEntry}
-        />
-      )}
-
-      {pdfPreviewLayer}
-    </div>
-    <aside className="pk-shell-detail-empty" aria-label="Ledger detail">
-      <div className="pk-shell-detail-empty-inner">
-        <div className="pk-shell-detail-empty-icon" aria-hidden>
-          <UserPlus size={28} />
-        </div>
-        <p className="pk-shell-detail-empty-title">Select a contact</p>
-        <p className="pk-shell-detail-empty-sub">
-          Open a person on the left to see balances and entries here.
-        </p>
-      </div>
-    </aside>
+      </aside>
     </div>
   );
 }
 
-const CAT_OPTIONS = ['Cash', 'Bank', 'JazzCash', 'EasyPaisa', 'Salary', 'Rent', 'Business', 'Personal', 'Other'];
+const CAT_OPTIONS = [
+  'Cash',
+  'Bank',
+  'JazzCash',
+  'EasyPaisa',
+  'Salary',
+  'Rent',
+  'Business',
+  'Personal',
+  'Other',
+];
 
 function EntryOverlay({
   type,
@@ -1636,28 +1698,38 @@ function EntryOverlay({
           margin: 'auto',
         }}
       >
-      <input
-        id="pk-khata-camera"
-        type="file"
-        accept="image/*"
-        capture="environment"
-        style={{ display: 'none' }}
-        onChange={handleImagePick}
-      />
-      <input
-        id="pk-khata-gallery"
-        type="file"
-        accept="image/*"
-        style={{ display: 'none' }}
-        onChange={handleImagePick}
-      />
-        <h2 style={{ margin: '0 0 4px', fontSize: 19, fontWeight: 900, color: '#0f172a' }}>{title}</h2>
+        <input
+          id="pk-khata-camera"
+          type="file"
+          accept="image/*"
+          capture="environment"
+          style={{ display: 'none' }}
+          onChange={handleImagePick}
+        />
+        <input
+          id="pk-khata-gallery"
+          type="file"
+          accept="image/*"
+          style={{ display: 'none' }}
+          onChange={handleImagePick}
+        />
+        <h2 style={{ margin: '0 0 4px', fontSize: 19, fontWeight: 900, color: '#0f172a' }}>
+          {title}
+        </h2>
         <p style={{ margin: '0 0 16px', fontSize: 12.5, color: '#64748b' }}>
-          In words, why this money was {type === 'given' ? 'paid out' : 'received'} — helps you remember later
-          rahega.
+          In words, why this money was {type === 'given' ? 'paid out' : 'received'} — helps you
+          remember later rahega.
         </p>
 
-        <label style={{ display: 'block', fontSize: 11, fontWeight: 800, color: '#475569', marginBottom: 6 }}>
+        <label
+          style={{
+            display: 'block',
+            fontSize: 11,
+            fontWeight: 800,
+            color: '#475569',
+            marginBottom: 6,
+          }}
+        >
           Contact
         </label>
         <select
@@ -1681,7 +1753,15 @@ function EntryOverlay({
           ))}
         </select>
 
-        <label style={{ display: 'block', fontSize: 11, fontWeight: 800, color: '#475569', marginBottom: 6 }}>
+        <label
+          style={{
+            display: 'block',
+            fontSize: 11,
+            fontWeight: 800,
+            color: '#475569',
+            marginBottom: 6,
+          }}
+        >
           Qism / channel
         </label>
         <select
@@ -1705,7 +1785,15 @@ function EntryOverlay({
           ))}
         </select>
 
-        <label style={{ display: 'block', fontSize: 11, fontWeight: 800, color: '#475569', marginBottom: 6 }}>
+        <label
+          style={{
+            display: 'block',
+            fontSize: 11,
+            fontWeight: 800,
+            color: '#475569',
+            marginBottom: 6,
+          }}
+        >
           Amount (PKR)
         </label>
         <input
@@ -1726,7 +1814,15 @@ function EntryOverlay({
           placeholder="0"
         />
 
-        <label style={{ display: 'block', fontSize: 11, fontWeight: 800, color: '#475569', marginBottom: 6 }}>
+        <label
+          style={{
+            display: 'block',
+            fontSize: 11,
+            fontWeight: 800,
+            color: '#475569',
+            marginBottom: 6,
+          }}
+        >
           Note / reason
         </label>
         <textarea
@@ -1746,7 +1842,15 @@ function EntryOverlay({
           placeholder="e.g. internet bill, JazzCash, commission, loan repayment..."
         />
 
-        <label style={{ display: 'block', fontSize: 11, fontWeight: 800, color: '#475569', marginBottom: 6 }}>
+        <label
+          style={{
+            display: 'block',
+            fontSize: 11,
+            fontWeight: 800,
+            color: '#475569',
+            marginBottom: 6,
+          }}
+        >
           Bill / receipt (optional)
         </label>
         <div style={{ display: 'flex', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>

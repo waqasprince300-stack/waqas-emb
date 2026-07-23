@@ -125,9 +125,16 @@ export default function Login() {
       }
       footer={
         <>
-          Need an account? <Link className="auth-inline-link" to="/signup">Create one</Link>
+          Need an account?{' '}
+          <Link className="auth-inline-link" to="/signup">
+            Create one
+          </Link>
           <div style={{ marginTop: 12, fontSize: 13 }}>
-            <Link className="auth-inline-link" to="/personal-khata/account" style={{ fontWeight: 600 }}>
+            <Link
+              className="auth-inline-link"
+              to="/personal-khata/account"
+              style={{ fontWeight: 600 }}
+            >
               Personal Khata — register / sign in (email or phone)
             </Link>
           </div>
@@ -147,7 +154,10 @@ export default function Login() {
           submitLabel="Verify & sign in"
           onSubmit={handleVerify}
           onResend={handleResend}
-          onBack={() => { setStage('credentials'); setOtpError(''); }}
+          onBack={() => {
+            setStage('credentials');
+            setOtpError('');
+          }}
         />
       ) : (
         <form className="auth-form" onSubmit={handleSubmit}>
@@ -155,20 +165,33 @@ export default function Login() {
           {error && <div className="alert alert-warning">{error}</div>}
 
           <div style={{ display: 'flex', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', alignSelf: 'center' }}>
+            <span
+              style={{
+                fontSize: 13,
+                fontWeight: 600,
+                color: 'var(--text-secondary)',
+                alignSelf: 'center',
+              }}
+            >
               Sign in with
             </span>
             <button
               type="button"
               className={idMethod === 'email' ? 'btn btn-primary btn-sm' : 'btn btn-ghost btn-sm'}
-              onClick={() => { setIdMethod('email'); setError(''); }}
+              onClick={() => {
+                setIdMethod('email');
+                setError('');
+              }}
             >
               Email
             </button>
             <button
               type="button"
               className={idMethod === 'phone' ? 'btn btn-primary btn-sm' : 'btn btn-ghost btn-sm'}
-              onClick={() => { setIdMethod('phone'); setError(''); }}
+              onClick={() => {
+                setIdMethod('phone');
+                setError('');
+              }}
             >
               Phone
             </button>
@@ -209,7 +232,9 @@ export default function Login() {
           <label className="auth-label">
             <span className="auth-label-row">
               <span style={{ color: 'var(--text-secondary)' }}>Password</span>
-              <Link className="auth-inline-link" to="/forgot-password" tabIndex={-1}>Forgot password?</Link>
+              <Link className="auth-inline-link" to="/forgot-password" tabIndex={-1}>
+                Forgot password?
+              </Link>
             </span>
             <PasswordField
               id="login-password"
@@ -222,7 +247,12 @@ export default function Login() {
             />
           </label>
 
-          <button className="btn btn-primary" type="submit" disabled={isSubmitting} style={{ width: '100%', justifyContent: 'center' }}>
+          <button
+            className="btn btn-primary"
+            type="submit"
+            disabled={isSubmitting}
+            style={{ width: '100%', justifyContent: 'center' }}
+          >
             {isSubmitting ? 'Logging in...' : 'Login'}
           </button>
         </form>

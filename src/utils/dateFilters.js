@@ -201,14 +201,18 @@ export function DateRangeSelect({
   return (
     <div className={`date-range-select${isCustom ? ' date-range-select--custom' : ''}`}>
       <select
-        className={['form-select', 'date-range-select__preset', className].filter(Boolean).join(' ')}
+        className={['form-select', 'date-range-select__preset', className]
+          .filter(Boolean)
+          .join(' ')}
         value={value}
         onChange={(event) => onChange(event.target.value)}
         style={inToolbar ? style : { width: 150, ...style }}
         aria-label="Date range"
       >
         {DATE_RANGE_OPTIONS.map((option) => (
-          <option key={option.value} value={option.value}>{option.label}</option>
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
         ))}
       </select>
 

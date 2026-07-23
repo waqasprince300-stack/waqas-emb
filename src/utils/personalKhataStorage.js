@@ -38,11 +38,11 @@ export function loadKhataState(scopeUserId) {
     const rawNew = localStorage.getItem(storageKey);
     if (rawNew) {
       const data = JSON.parse(rawNew);
-      const businesses = Array.isArray(data.businesses) && data.businesses.length
-        ? data.businesses
-        : [{ id: newId(), name: 'Default', createdAt: nowIso() }];
-      let activeBusinessId =
-        String(data.activeBusinessId || '').trim() || businesses[0].id;
+      const businesses =
+        Array.isArray(data.businesses) && data.businesses.length
+          ? data.businesses
+          : [{ id: newId(), name: 'Default', createdAt: nowIso() }];
+      let activeBusinessId = String(data.activeBusinessId || '').trim() || businesses[0].id;
       if (!businesses.some((b) => b.id === activeBusinessId)) {
         activeBusinessId = businesses[0].id;
       }
@@ -70,7 +70,7 @@ export function loadKhataState(scopeUserId) {
       const { contacts, entries } = migrateV1ContactsEntries(
         defaultBizId,
         contactsLegacy,
-        entriesLegacy,
+        entriesLegacy
       );
       const migrated = {
         businesses,
@@ -169,9 +169,7 @@ export function buildBusinessShareSnapshot(state, businessId) {
   const bid = String(businessId || '').trim();
   const biz = state.businesses.find((b) => b.id === bid);
   if (!biz) return null;
-  const contacts = state.contacts.filter(
-    (c) => String(c.businessId || bid) === bid,
-  );
+  const contacts = state.contacts.filter((c) => String(c.businessId || bid) === bid);
   const ids = new Set(contacts.map((c) => c.id));
   const entries = state.entries.filter((e) => ids.has(e.contactId));
   return {

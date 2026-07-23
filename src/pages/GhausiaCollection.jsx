@@ -3,10 +3,24 @@ import Swal from 'sweetalert2';
 import { useApp } from '../context/AppContext';
 import BusinessOwnerSwitcher from '../components/BusinessOwnerSwitcher';
 import LotStatusSelect from '../components/LotStatusSelect';
-import { Modal, FormGroup, StatusBadge, ActionBtn, SearchBar, EmptyState, ConfirmDialog } from '../components/UI';
+import {
+  Modal,
+  FormGroup,
+  StatusBadge as _StatusBadge,
+  ActionBtn,
+  SearchBar,
+  EmptyState,
+  ConfirmDialog,
+} from '../components/UI';
 import Loader from '../components/Loader';
 import LoaderDashboard from '../components/LoaderDashboard';
-import { DateRangeSelect, isWithinDateRange, latestDateFrom, compareRowsByUpdatedNewestFirst, formatDisplayDate } from '../utils/dateFilters';
+import {
+  DateRangeSelect,
+  isWithinDateRange,
+  latestDateFrom,
+  compareRowsByUpdatedNewestFirst,
+  formatDisplayDate,
+} from '../utils/dateFilters';
 import { workspaceDisplayTitleForLot } from '../utils/businessWorkspace';
 import { getAdminLedgerOrBusinessBill, getBusinessBillAmount } from '../utils/partyBillPrivacy';
 import { generateSerialLotNumbers, previewSerialLotNumbers } from '../utils/lotSerial';
@@ -22,7 +36,14 @@ import {
 
 const BASE_FABRICS = ['Lawn', 'Velvet', 'Cambric'];
 const COLOR_OPTIONS = Array.from({ length: 13 }, (_, i) => i);
-const STATUS_OPTIONS = ['pending', 'dispatched', 'pending approval', 'rejected', 'received back', 'completed'];
+const STATUS_OPTIONS = [
+  'pending',
+  'dispatched',
+  'pending approval',
+  'rejected',
+  'received back',
+  'completed',
+];
 
 function lotSaveErrorToast(title) {
   Swal.fire({
@@ -37,7 +58,9 @@ function lotSaveErrorToast(title) {
 }
 
 function normalizeLotNumberKey(value) {
-  return String(value || '').trim().toLowerCase();
+  return String(value || '')
+    .trim()
+    .toLowerCase();
 }
 
 function messageFromLotSaveError(err) {
@@ -63,7 +86,7 @@ function hasPositiveBillAmount(lot) {
   return Number(lot?.billAmount || 0) > 0;
 }
 
-const newDate = new Date().toISOString().split('T')[0];
+const _newDate = new Date().toISOString().split('T')[0];
 
 function resolveItemTypeFields(raw) {
   const t = String(raw?.itemType || raw?.fabric || '').trim();
@@ -87,17 +110,32 @@ function LotForm({
   defaultNewLotOwnerId,
 }) {
   const blank = {
-    lotNumber: '', lotNo: '', designNo: '', description: '', itemType: 'Lawn', fabric: 'Lawn', customFabric: '',
-    colors: 0, quantity: '', pieces: '', unit: 'pieces', rate: '', billAmount: '',
-    //  totalAmount: '', 
+    lotNumber: '',
+    lotNo: '',
+    designNo: '',
+    description: '',
+    itemType: 'Lawn',
+    fabric: 'Lawn',
+    customFabric: '',
+    colors: 0,
+    quantity: '',
+    pieces: '',
+    unit: 'pieces',
+    rate: '',
+    billAmount: '',
+    //  totalAmount: '',
     //  notes: '',
-    allotDate: new Date().toISOString().slice(0, 10), partyId: '', partyName: '',
-    status: 'pending', dispatchDate: newDate, receivedBackDate: '',
+    allotDate: new Date().toISOString().slice(0, 10),
+    partyId: '',
+    partyName: '',
+    status: 'pending',
+    dispatchDate: '',
+    receivedBackDate: '',
     saveBusinessOwnerId: defaultNewLotOwnerId || '',
   };
   const itemTypeOptions = useMemo(
     () => [...BASE_FABRICS, ...getRememberedItemTypes().filter((t) => !BASE_FABRICS.includes(t))],
-    [],
+    []
   );
 
   const [headConfig, setHeadConfig] = useState(() => getMachineHeadConfig());
@@ -124,12 +162,15 @@ function LotForm({
       ...typeFields,
       fabric: typeFields.itemType === '__custom' ? typeFields.customFabric : typeFields.itemType,
       pieces: initial.pieces ?? '',
-      partyId: initial.partyId || (parties.find(p => p.name === (initial.partyName || initial.party))?.id) || '',
-      partyName: (parties.find(p => p.id === initial.partyId)?.name) || initial.partyName || '',
+      partyId:
+        initial.partyId ||
+        parties.find((p) => p.name === (initial.partyName || initial.party))?.id ||
+        '',
+      partyName: parties.find((p) => p.id === initial.partyId)?.name || initial.partyName || '',
       saveBusinessOwnerId:
         initial.businessOwnerId != null && initial.businessOwnerId !== ''
           ? String(initial.businessOwnerId)
-          : (defaultNewLotOwnerId || ''),
+          : defaultNewLotOwnerId || '',
     };
   });
   const [errors, setErrors] = useState({});
@@ -210,17 +251,18 @@ function LotForm({
     return Object.keys(newErrors).length === 0;
   };
 
-  const saveOwnerForPayload =
-    pickWorkspaceForNewLot
-      ? String(form.saveBusinessOwnerId || '').trim()
-      : (initial?.businessOwnerId ? String(initial.businessOwnerId) : String(defaultNewLotOwnerId || '').trim());
+  const saveOwnerForPayload = pickWorkspaceForNewLot
+    ? String(form.saveBusinessOwnerId || '').trim()
+    : initial?.businessOwnerId
+      ? String(initial.businessOwnerId)
+      : String(defaultNewLotOwnerId || '').trim();
 
   const handleSave = async () => {
     if (!validate()) return;
     const finalType = form.itemType === '__custom' ? form.customFabric : form.itemType;
     const lotNumber = form.lotNumber || form.lotNo;
     const quantityValue = Number(form.quantity || form.pieces || 0);
-    const selectedParty = parties.find(p => p.id === form.partyId);
+    const selectedParty = parties.find((p) => p.id === form.partyId);
     const partyName = selectedParty?.name || form.partyName || '';
     const partyId = form.partyId || '';
 
@@ -298,7 +340,8 @@ function LotForm({
               lineHeight: 1.3,
             }}
           >
-            {h}{isDefault ? '·' : ''}
+            {h}
+            {isDefault ? '·' : ''}
           </button>
         );
       })}
@@ -335,7 +378,12 @@ function LotForm({
               border: '1px solid #e2e8f0',
             }}
           />
-          <button type="button" className="btn btn-ghost btn-sm" style={{ padding: '2px 8px', fontSize: 11 }} onClick={addCustomHead}>
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            style={{ padding: '2px 8px', fontSize: 11 }}
+            onClick={addCustomHead}
+          >
             Add
           </button>
           {selectedHead !== headConfig.defaultHead ? (
@@ -355,7 +403,16 @@ function LotForm({
       {isNewLot ? (
         <>
           <span style={{ color: '#e2e8f0', userSelect: 'none' }}>|</span>
-          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 5, cursor: 'pointer', color: '#475569', fontWeight: 600 }}>
+          <label
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 5,
+              cursor: 'pointer',
+              color: '#475569',
+              fontWeight: 600,
+            }}
+          >
             <input
               type="checkbox"
               checked={bulkMode}
@@ -381,7 +438,16 @@ function LotForm({
                 }}
               />
               {bulkLotNumbers && bulkLotNumbers.length > 1 ? (
-                <span style={{ color: '#94a3b8', fontSize: 11, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <span
+                  style={{
+                    color: '#94a3b8',
+                    fontSize: 11,
+                    maxWidth: 200,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
                   {previewSerialLotNumbers(bulkLotNumbers, 3)}
                 </span>
               ) : null}
@@ -432,11 +498,19 @@ function LotForm({
           <input
             className={`form-input${errors.lotNumber ? ' input-error' : ''}`}
             value={form.lotNumber}
-            onChange={(e) => { const v = e.target.value; set('lotNumber', v); set('lotNo', v); }}
+            onChange={(e) => {
+              const v = e.target.value;
+              set('lotNumber', v);
+              set('lotNo', v);
+            }}
             placeholder={isNewLot && bulkMode ? 'e.g. L-10 (serials from here)' : 'e.g. L-10'}
             autoComplete="off"
           />
-          {errors.lotNumber && <span style={{ color: '#dc2626', fontSize: 11, marginTop: 3, display: 'block' }}>{errors.lotNumber}</span>}
+          {errors.lotNumber && (
+            <span style={{ color: '#dc2626', fontSize: 11, marginTop: 3, display: 'block' }}>
+              {errors.lotNumber}
+            </span>
+          )}
         </FormGroup>
         <FormGroup label="Design Number *">
           <input
@@ -447,7 +521,11 @@ function LotForm({
             autoComplete="off"
             spellCheck={false}
           />
-          {errors.designNo && <span style={{ color: '#dc2626', fontSize: 11, marginTop: 3, display: 'block' }}>{errors.designNo}</span>}
+          {errors.designNo && (
+            <span style={{ color: '#dc2626', fontSize: 11, marginTop: 3, display: 'block' }}>
+              {errors.designNo}
+            </span>
+          )}
         </FormGroup>
         <FormGroup label="Description">
           <input
@@ -458,9 +536,15 @@ function LotForm({
           />
         </FormGroup>
         <FormGroup label="Item Type">
-          <select className="form-select" value={form.itemType} onChange={(e) => set('itemType', e.target.value)}>
+          <select
+            className="form-select"
+            value={form.itemType}
+            onChange={(e) => set('itemType', e.target.value)}
+          >
             {itemTypeOptions.map((f) => (
-              <option key={f} value={f}>{f}</option>
+              <option key={f} value={f}>
+                {f}
+              </option>
             ))}
             <option value="__custom">+ New item type…</option>
           </select>
@@ -498,15 +582,20 @@ function LotForm({
           />
         </FormGroup>
         <FormGroup label="Allot Date">
-          <input className="form-input" type="date" value={form.allotDate} onChange={e => set('allotDate', e.target.value)} />
+          <input
+            className="form-input"
+            type="date"
+            value={form.allotDate}
+            onChange={(e) => set('allotDate', e.target.value)}
+          />
         </FormGroup>
         <FormGroup label="Party">
           <select
             className="form-select"
             value={form.partyId}
             autoFocus={!initial}
-            onChange={e => {
-              const selectedParty = parties.find(p => p.id === e.target.value);
+            onChange={(e) => {
+              const selectedParty = parties.find((p) => p.id === e.target.value);
               set('partyId', e.target.value);
               set('partyName', selectedParty ? selectedParty.name : '');
             }}
@@ -515,21 +604,36 @@ function LotForm({
             {recentParties.length > 0 && (
               <optgroup label="Recent">
                 {recentParties.map((p) => (
-                  <option key={`recent-${p.id}`} value={p.id}>{p.name}</option>
+                  <option key={`recent-${p.id}`} value={p.id}>
+                    {p.name}
+                  </option>
                 ))}
               </optgroup>
             )}
             <optgroup label={recentParties.length > 0 ? 'All parties' : 'Parties'}>
               {(recentParties.length > 0 ? otherParties : parties).map((p) => (
-                <option key={p.id} value={p.id}>{p.name}</option>
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
               ))}
             </optgroup>
           </select>
         </FormGroup>
         {!(isNewLot && bulkMode) && (
           <FormGroup label="Status">
-            <select className="form-select" value={form.status} onChange={e => set('status', e.target.value)}>
-              {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}</option>)}
+            <select
+              className="form-select"
+              value={form.status}
+              onChange={(e) => set('status', e.target.value)}
+            >
+              {STATUS_OPTIONS.map((s) => (
+                <option key={s} value={s}>
+                  {s
+                    .split(' ')
+                    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+                    .join(' ')}
+                </option>
+              ))}
             </select>
           </FormGroup>
         )}
@@ -546,21 +650,49 @@ function LotForm({
         {/* <FormGroup label="Notes">
           <input className="form-input" value={form.notes} onChange={e => set('notes', e.target.value)} placeholder="Optional notes" />
         </FormGroup> */}
-        {(form.status === 'dispatched' || form.status === 'received back' || form.status === 'completed') && (
+        {(form.status === 'dispatched' ||
+          form.status === 'received back' ||
+          form.status === 'completed') && (
           <FormGroup label="Dispatch Date">
-            <input className="form-input" type="date" value={form.dispatchDate} onChange={e => set('dispatchDate', e.target.value)} />
+            <input
+              className="form-input"
+              type="date"
+              value={form.dispatchDate}
+              onChange={(e) => set('dispatchDate', e.target.value)}
+            />
           </FormGroup>
         )}
         {(form.status === 'received back' || form.status === 'completed') && (
           <FormGroup label="Received Back Date">
-            <input className="form-input" type="date" value={form.receivedBackDate} onChange={e => set('receivedBackDate', e.target.value)} />
+            <input
+              className="form-input"
+              type="date"
+              value={form.receivedBackDate}
+              onChange={(e) => set('receivedBackDate', e.target.value)}
+            />
           </FormGroup>
         )}
       </div>
-      <div className="modal-footer" style={{ padding: '16px 0 0', borderTop: '1px solid var(--border)', marginTop: 8 }}>
-        <button type="button" className="btn btn-ghost" onClick={onClose} disabled={saving}>Cancel</button>
-        <button type="submit" className="btn btn-primary" disabled={saving} style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-          {saving ? <><Loader /> Saving…</> : saveButtonLabel}
+      <div
+        className="modal-footer"
+        style={{ padding: '16px 0 0', borderTop: '1px solid var(--border)', marginTop: 8 }}
+      >
+        <button type="button" className="btn btn-ghost" onClick={onClose} disabled={saving}>
+          Cancel
+        </button>
+        <button
+          type="submit"
+          className="btn btn-primary"
+          disabled={saving}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
+        >
+          {saving ? (
+            <>
+              <Loader /> Saving…
+            </>
+          ) : (
+            saveButtonLabel
+          )}
         </button>
       </div>
     </form>
@@ -592,15 +724,15 @@ export default function GhausiaCollection() {
 
   const collectionLots = useMemo(
     () => (viewAllWorkspaces ? reportingLots : ghausiaLots),
-    [viewAllWorkspaces, reportingLots, ghausiaLots],
+    [viewAllWorkspaces, reportingLots, ghausiaLots]
   );
   const payments = useMemo(
     () => (viewAllWorkspaces ? reportingPayments : paymentsSingleWorkspace),
-    [viewAllWorkspaces, reportingPayments, paymentsSingleWorkspace],
+    [viewAllWorkspaces, reportingPayments, paymentsSingleWorkspace]
   );
   const partyEdits = useMemo(
     () => (viewAllWorkspaces ? reportingPartyEdits : partyEditsSingleWorkspace),
-    [viewAllWorkspaces, reportingPartyEdits, partyEditsSingleWorkspace],
+    [viewAllWorkspaces, reportingPartyEdits, partyEditsSingleWorkspace]
   );
 
   /** API business owner id for a row (critical when viewing all workspaces) */
@@ -620,11 +752,18 @@ export default function GhausiaCollection() {
   const [customEnd, setCustomEnd] = useState('');
   const customRange = useMemo(
     () => ({ start: customStart, end: customEnd }),
-    [customStart, customEnd],
+    [customStart, customEnd]
   );
   const [lotTableTab, setLotTableTab] = useState('others');
   const [payModal, setPayModal] = useState(false);
-  const [payForm, setPayForm] = useState({ type: 'Received', amount: '', party: 'Owner', date: '', note: '', linkedLot: '' });
+  const [payForm, setPayForm] = useState({
+    type: 'Received',
+    amount: '',
+    party: 'Owner',
+    date: '',
+    note: '',
+    linkedLot: '',
+  });
   const [payErrors, setPayErrors] = useState({});
   const [completeBillModal, setCompleteBillModal] = useState(null);
   const [completeBillInput, setCompleteBillInput] = useState('');
@@ -667,23 +806,20 @@ export default function GhausiaCollection() {
     });
   };
 
-  const statusMeta = {
-    'pending': { className: 'badge badge-pending', label: 'Pending' },
-    'dispatched': { className: 'badge badge-dispatched', label: 'Dispatched' },
+  const _statusMeta = {
+    pending: { className: 'badge badge-pending', label: 'Pending' },
+    dispatched: { className: 'badge badge-dispatched', label: 'Dispatched' },
     'received back': { className: 'badge badge-received', label: 'Received Back' },
-    'completed': { className: 'badge badge-completed', label: 'Completed' },
+    completed: { className: 'badge badge-completed', label: 'Completed' },
     'in progress': { className: 'badge badge-inprogress', label: 'In Progress' },
     'pending approval': { className: 'badge badge-inprogress', label: 'Awaiting approval' },
-    'rejected': { className: 'badge badge-dispatched', label: 'Rejected' },
+    rejected: { className: 'badge badge-dispatched', label: 'Rejected' },
   };
 
-  const activeWorkspace = useMemo(
-    () => {
-      if (viewAllWorkspaces) return { name: 'All workspaces' };
-      return businessOwners.find((o) => String(o.id || o._id) === String(activeBusinessOwnerId));
-    },
-    [businessOwners, activeBusinessOwnerId, viewAllWorkspaces],
-  );
+  const activeWorkspace = useMemo(() => {
+    if (viewAllWorkspaces) return { name: 'All workspaces' };
+    return businessOwners.find((o) => String(o.id || o._id) === String(activeBusinessOwnerId));
+  }, [businessOwners, activeBusinessOwnerId, viewAllWorkspaces]);
 
   const dismissCompleteBillModal = () => {
     const resolve = completeBillResolveRef.current;
@@ -708,15 +844,21 @@ export default function GhausiaCollection() {
     if (resolve) resolve(n);
   };
 
-  const promptBillAmountForCompletion = (lot, options = {}) => new Promise((resolve) => {
-    const effective = getAdminLedgerOrBusinessBill(lot, partyEdits[lot.id] || {});
-    const ov = options.billAmountOverride;
-    const rawBill = ov !== undefined && ov !== null ? Number(ov) : Number(effective || lot.billAmount || 0);
-    completeBillResolveRef.current = resolve;
-    setCompleteBillInput(rawBill > 0 ? String(rawBill) : '');
-    setCompleteBillError('');
-    setCompleteBillModal({ lot, fromBillable: !!options.fromBillable, billAmountOverride: options.billAmountOverride });
-  });
+  const promptBillAmountForCompletion = (lot, options = {}) =>
+    new Promise((resolve) => {
+      const effective = getAdminLedgerOrBusinessBill(lot, partyEdits[lot.id] || {});
+      const ov = options.billAmountOverride;
+      const rawBill =
+        ov !== undefined && ov !== null ? Number(ov) : Number(effective || lot.billAmount || 0);
+      completeBillResolveRef.current = resolve;
+      setCompleteBillInput(rawBill > 0 ? String(rawBill) : '');
+      setCompleteBillError('');
+      setCompleteBillModal({
+        lot,
+        fromBillable: !!options.fromBillable,
+        billAmountOverride: options.billAmountOverride,
+      });
+    });
 
   const persistLotCompletedWithPayment = async (lot, billAmount, options = {}) => {
     const { fromBillable = false } = options;
@@ -731,11 +873,17 @@ export default function GhausiaCollection() {
     const lotUpdate = {
       status: 'completed',
       receivedBackDate: today,
-      billAmount: fromBillable && partyEdits[lot.id]?.amountChangeNote ? Number(lot.billAmount || 0) : billAmount,
+      billAmount:
+        fromBillable && partyEdits[lot.id]?.amountChangeNote
+          ? Number(lot.billAmount || 0)
+          : billAmount,
       ...(fromBillable ? { completedFromBillable: false } : {}),
     };
     const linkedLot = String(lot.lotNumber || lot.lotNo || '').trim();
-    const partyName = (lot.partyName && String(lot.partyName).trim()) || (lot.partyId ? getPartyName(lot.partyId) : '') || '';
+    const partyName =
+      (lot.partyName && String(lot.partyName).trim()) ||
+      (lot.partyId ? getPartyName(lot.partyId) : '') ||
+      '';
     const designNo = String(lot.designNo || '').trim() || '—';
     const optimisticPayment = {
       id: `optimistic-${lotKey}-${Date.now()}`,
@@ -764,17 +912,22 @@ export default function GhausiaCollection() {
         return;
       }
 
-      const partyEditPromise = updatePartyEdit(lot.id, {
-        overrideStatus: 'Completed',
-        completeDate: today,
-      }, { businessOwnerId: lotBizId(lot) }).catch((e) => {
-        console.error(e);
+      const partyEditPromise = updatePartyEdit(
+        lot.id,
+        {
+          overrideStatus: 'Completed',
+          completeDate: today,
+        },
+        { businessOwnerId: lotBizId(lot) }
+      ).catch((_e) => {
+        console.error(_e);
       });
 
-      const paymentPromise = (fromBillable
-        ? recordOwnerBillableSettlementPayment({ ...lot, ...lotUpdate }, billAmount, today)
-        : recordOwnerReceivedForCompletedLot({ ...lot, ...lotUpdate }, billAmount, today)
-      ).catch((e) => {
+      const paymentPromise = (
+        fromBillable
+          ? recordOwnerBillableSettlementPayment({ ...lot, ...lotUpdate }, billAmount, today)
+          : recordOwnerReceivedForCompletedLot({ ...lot, ...lotUpdate }, billAmount, today)
+      ).catch((_e) => {
         Swal.fire({
           icon: 'warning',
           title: 'Lot updated; payment failed',
@@ -793,38 +946,53 @@ export default function GhausiaCollection() {
   };
 
   const handleCompleteFromBillable = async (lot) => {
-    const amount = await promptBillAmountForCompletion(lot, { fromBillable: true, billAmountOverride: getOwnerBillableAmount(lot) });
+    const amount = await promptBillAmountForCompletion(lot, {
+      fromBillable: true,
+      billAmountOverride: getOwnerBillableAmount(lot),
+    });
     if (amount == null) return;
     await persistLotCompletedWithPayment(lot, amount, { fromBillable: true });
   };
 
   const recordOwnerReceivedForCompletedLot = async (lotRef, amount, paymentDate) => {
     const linkedLot = String(lotRef.lotNumber || lotRef.lotNo || '').trim();
-    const partyName = (lotRef.partyName && String(lotRef.partyName).trim()) || (lotRef.partyId ? getPartyName(lotRef.partyId) : '') || '';
+    const partyName =
+      (lotRef.partyName && String(lotRef.partyName).trim()) ||
+      (lotRef.partyId ? getPartyName(lotRef.partyId) : '') ||
+      '';
     const designNo = String(lotRef.designNo || '').trim() || '—';
-    await addPayment({
-      type: 'Received',
-      amount: Number(amount),
-      party: 'Owner',
-      date: paymentDate,
-      linkedLot,
-      note: `Lot completed — Party: ${partyName || '—'}; Design: ${designNo}; Type: ${lotRef.itemType || lotRef.fabric || '—'}`,
-    }, { businessOwnerId: lotBizId(lotRef) });
+    await addPayment(
+      {
+        type: 'Received',
+        amount: Number(amount),
+        party: 'Owner',
+        date: paymentDate,
+        linkedLot,
+        note: `Lot completed — Party: ${partyName || '—'}; Design: ${designNo}; Type: ${lotRef.itemType || lotRef.fabric || '—'}`,
+      },
+      { businessOwnerId: lotBizId(lotRef) }
+    );
   };
 
   /** Settlement for billable lots: records Paid → Owner so it appears in Payment Management and reduces Owner Received net. */
   const recordOwnerBillableSettlementPayment = async (lotRef, amount, paymentDate) => {
     const linkedLot = String(lotRef.lotNumber || lotRef.lotNo || '').trim();
-    const partyName = (lotRef.partyName && String(lotRef.partyName).trim()) || (lotRef.partyId ? getPartyName(lotRef.partyId) : '') || '';
+    const partyName =
+      (lotRef.partyName && String(lotRef.partyName).trim()) ||
+      (lotRef.partyId ? getPartyName(lotRef.partyId) : '') ||
+      '';
     const designNo = String(lotRef.designNo || '').trim() || '—';
-    await addPayment({
-      type: 'Paid',
-      amount: Number(amount),
-      party: 'Owner',
-      date: paymentDate,
-      linkedLot,
-      note: `Billable lot settled — Party: ${partyName || '—'}; Design: ${designNo}; Type: ${lotRef.itemType || lotRef.fabric || '—'}`,
-    }, { businessOwnerId: lotBizId(lotRef) });
+    await addPayment(
+      {
+        type: 'Paid',
+        amount: Number(amount),
+        party: 'Owner',
+        date: paymentDate,
+        linkedLot,
+        note: `Billable lot settled — Party: ${partyName || '—'}; Design: ${designNo}; Type: ${lotRef.itemType || lotRef.fabric || '—'}`,
+      },
+      { businessOwnerId: lotBizId(lotRef) }
+    );
   };
 
   const setLotStatus = async (lot, newStatus) => {
@@ -851,10 +1019,14 @@ export default function GhausiaCollection() {
 
       const ledgerStatus = newStatus === 'dispatched' ? 'In Progress' : newStatus;
       try {
-        await updatePartyEdit(lot.id, {
-          overrideStatus: ledgerStatus,
-          completeDate: '',
-        }, { businessOwnerId: lotBizId(lot) });
+        await updatePartyEdit(
+          lot.id,
+          {
+            overrideStatus: ledgerStatus,
+            completeDate: '',
+          },
+          { businessOwnerId: lotBizId(lot) }
+        );
       } catch (e) {
         console.error(e);
       }
@@ -867,16 +1039,46 @@ export default function GhausiaCollection() {
     const list = effectiveCollectionLots.filter((l) => {
       const q = search.toLowerCase();
       const lotLabel = (l.lotNumber || l.lotNo || '').toLowerCase();
-      const matchQ = !q || lotLabel.includes(q) || String(l.designNo || "").toLowerCase().includes(q) || String(l.description || "").toLowerCase().includes(q);
+      const matchQ =
+        !q ||
+        lotLabel.includes(q) ||
+        String(l.designNo || '')
+          .toLowerCase()
+          .includes(q) ||
+        String(l.description || '')
+          .toLowerCase()
+          .includes(q);
       if (!matchQ) return false;
       if (partyFilter !== 'All' && String(l.partyId || '') !== String(partyFilter)) return false;
-      if (!isWithinDateRange(latestDateFrom(l, ['updatedAt', 'createdAt', 'receivedBackDate', 'dispatchDate', 'allotDate', 'receivedDate']), dateRange, customRange)) return false;
+      if (
+        !isWithinDateRange(
+          latestDateFrom(l, [
+            'updatedAt',
+            'createdAt',
+            'receivedBackDate',
+            'dispatchDate',
+            'allotDate',
+            'receivedDate',
+          ]),
+          dateRange,
+          customRange
+        )
+      )
+        return false;
       if (lotTableTab === 'completed') return l.status === 'completed';
       if (l.status === 'completed') return false;
       return statusFilter === 'All' || l.status === statusFilter;
     });
     return [...list].sort((a, b) => compareRowsByUpdatedNewestFirst(a, b, 'lot'));
-  }, [effectiveCollectionLots, search, partyFilter, dateRange, customRange, statusFilter, lotTableTab]);
+  }, [
+    effectiveCollectionLots,
+    search,
+    partyFilter,
+    dateRange,
+    customRange,
+    statusFilter,
+    lotTableTab,
+  ]);
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safeCurrentPage = Math.min(currentPage, totalPages);
   const pageStart = (safeCurrentPage - 1) * PAGE_SIZE;
@@ -893,34 +1095,52 @@ export default function GhausiaCollection() {
   }, [currentPage, totalPages]);
 
   const visibleLots = useMemo(
-    () => effectiveCollectionLots.filter((l) => {
-      if (partyFilter !== 'All' && String(l.partyId || '') !== String(partyFilter)) return false;
-      return isWithinDateRange(latestDateFrom(l, ['updatedAt', 'createdAt', 'receivedBackDate', 'dispatchDate', 'allotDate', 'receivedDate']), dateRange, customRange);
-    }),
-    [effectiveCollectionLots, partyFilter, dateRange, customRange],
+    () =>
+      effectiveCollectionLots.filter((l) => {
+        if (partyFilter !== 'All' && String(l.partyId || '') !== String(partyFilter)) return false;
+        return isWithinDateRange(
+          latestDateFrom(l, [
+            'updatedAt',
+            'createdAt',
+            'receivedBackDate',
+            'dispatchDate',
+            'allotDate',
+            'receivedDate',
+          ]),
+          dateRange,
+          customRange
+        );
+      }),
+    [effectiveCollectionLots, partyFilter, dateRange, customRange]
   );
 
   const completedLotsCount = useMemo(
     () => visibleLots.filter((l) => l.status === 'completed').length,
-    [visibleLots],
+    [visibleLots]
   );
   const otherLotsCount = visibleLots.length - completedLotsCount;
-  const othersTabStatusLabel = statusFilter === 'All'
-    ? 'Others'
-    : statusFilter.split(' ').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+  const othersTabStatusLabel =
+    statusFilter === 'All'
+      ? 'Others'
+      : statusFilter
+          .split(' ')
+          .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+          .join(' ');
   const othersTabCount = useMemo(() => {
     if (statusFilter === 'All') return otherLotsCount;
     return visibleLots.filter((l) => l.status === statusFilter).length;
   }, [visibleLots, statusFilter, otherLotsCount]);
-  const othersTabHint = statusFilter === 'All'
-    ? 'Pending, dispatched, and received back (not completed)'
-    : `${othersTabStatusLabel} lots in the current filters`;
+  const othersTabHint =
+    statusFilter === 'All'
+      ? 'Pending, dispatched, and received back (not completed)'
+      : `${othersTabStatusLabel} lots in the current filters`;
 
   const billable = useMemo(
-    () => [...visibleLots.filter((l) => l.status === 'received back')].sort((a, b) =>
-      compareRowsByUpdatedNewestFirst(a, b, 'lot'),
-    ),
-    [visibleLots],
+    () =>
+      [...visibleLots.filter((l) => l.status === 'received back')].sort((a, b) =>
+        compareRowsByUpdatedNewestFirst(a, b, 'lot')
+      ),
+    [visibleLots]
   );
   /**
    * Amount billable to owner: workspace lot bill only (not party ledger `partyBillAmount`).
@@ -944,7 +1164,7 @@ export default function GhausiaCollection() {
   const billableSafePage = Math.min(billablePage, billablePageCount);
   const billablePageItems = billableFiltered.slice(
     (billableSafePage - 1) * BILLABLE_PAGE_SIZE,
-    billableSafePage * BILLABLE_PAGE_SIZE,
+    billableSafePage * BILLABLE_PAGE_SIZE
   );
 
   useEffect(() => {
@@ -954,23 +1174,34 @@ export default function GhausiaCollection() {
   useEffect(() => {
     if (billablePage > billablePageCount) setBillablePage(billablePageCount);
   }, [billablePage, billablePageCount]);
-  const ownerIn = effectivePayments.filter(p => p.type === 'Received').reduce((s, p) => s + p.amount, 0);
+  const ownerIn = effectivePayments
+    .filter((p) => p.type === 'Received')
+    .reduce((s, p) => s + p.amount, 0);
   const ownerPaidToOwner = effectivePayments
     .filter((p) => p.type === 'Paid' && p.party === 'Owner')
     .reduce((s, p) => s + p.amount, 0);
   const billableSettledTotal = useMemo(
-    () => effectiveCollectionLots
-      .filter((l) => l.status === 'completed' && l.completedFromBillable)
-      .reduce((s, l) => s + Number(l.billAmount || 0), 0),
-    [effectiveCollectionLots],
+    () =>
+      effectiveCollectionLots
+        .filter((l) => l.status === 'completed' && l.completedFromBillable)
+        .reduce((s, l) => s + Number(l.billAmount || 0), 0),
+    [effectiveCollectionLots]
   );
   const ownerReceivedNet = ownerIn - ownerPaidToOwner - billableSettledTotal;
   const ownerReceivedIsPending = ownerReceivedNet < 0;
-  const partyOut = effectivePayments.filter(p => p.type === 'Paid').reduce((s, p) => s + p.amount, 0);
+  const _partyOut = effectivePayments
+    .filter((p) => p.type === 'Paid')
+    .reduce((s, p) => s + p.amount, 0);
   const statsRefreshing = lotSaving || paymentSaving || deleteLoading || inlineSummaryBusy;
 
-  const openEdit = (lot) => { setEditing(lot); setModal('form'); };
-  const openAdd = () => { setEditing(null); setModal('form'); };
+  const openEdit = (lot) => {
+    setEditing(lot);
+    setModal('form');
+  };
+  const openAdd = () => {
+    setEditing(null);
+    setModal('form');
+  };
 
   const handleSave = async (form) => {
     const bulkLotNumbers = Array.isArray(form.bulkLotNumbers) ? form.bulkLotNumbers : null;
@@ -989,11 +1220,15 @@ export default function GhausiaCollection() {
         return;
       }
 
-      const { saveBusinessOwnerId: _ignoreSaveOwner, bulkLotNumbers: _bulk, ...basePayload } = saveForm;
+      const {
+        saveBusinessOwnerId: _ignoreSaveOwner,
+        bulkLotNumbers: _bulk,
+        ...basePayload
+      } = saveForm;
       const existingKeys = new Set(
         collectionLots
           .filter((l) => String(l.businessOwnerId ?? '') === targetBiz)
-          .map((l) => normalizeLotNumberKey(l.lotNumber ?? l.lotNo)),
+          .map((l) => normalizeLotNumberKey(l.lotNumber ?? l.lotNo))
       );
 
       setLotSaving(true);
@@ -1017,7 +1252,7 @@ export default function GhausiaCollection() {
                 lotNo: lotNumber,
                 status: 'pending',
               },
-              { businessOwnerId: targetBiz },
+              { businessOwnerId: targetBiz }
             );
             existingKeys.add(lotKey);
             created += 1;
@@ -1030,7 +1265,7 @@ export default function GhausiaCollection() {
           lotSaveErrorToast(
             skipped > 0
               ? 'All lot numbers in this range already exist in this collection.'
-              : 'No lots were saved. Check your lot numbers.',
+              : 'No lots were saved. Check your lot numbers.'
           );
           return;
         }
@@ -1088,7 +1323,9 @@ export default function GhausiaCollection() {
         return normalizeLotNumberKey(l.lotNumber ?? l.lotNo) === lotKey;
       });
       if (dupLocal) {
-        lotSaveErrorToast('A lot with this number already exists in this collection. Try a different number.');
+        lotSaveErrorToast(
+          'A lot with this number already exists in this collection. Try a different number.'
+        );
         return;
       }
     }
@@ -1101,14 +1338,22 @@ export default function GhausiaCollection() {
       if (prev) {
         await updateLot(prev.id, lotPayloadForApi, { businessOwnerId: targetBiz });
         if (saveForm.status === 'completed') {
-          await updatePartyEdit(prev.id, {
-            overrideStatus: 'Completed',
-            completeDate: today,
-          }, { businessOwnerId: targetBiz });
+          await updatePartyEdit(
+            prev.id,
+            {
+              overrideStatus: 'Completed',
+              completeDate: today,
+            },
+            { businessOwnerId: targetBiz }
+          );
         }
         if (recordOwnerPaymentAfterSave) {
           try {
-            await recordOwnerReceivedForCompletedLot({ ...prev, ...saveForm, businessOwnerId: targetBiz }, saveForm.billAmount, today);
+            await recordOwnerReceivedForCompletedLot(
+              { ...prev, ...saveForm, businessOwnerId: targetBiz },
+              saveForm.billAmount,
+              today
+            );
           } catch (e) {
             Swal.fire({
               icon: 'warning',
@@ -1120,14 +1365,22 @@ export default function GhausiaCollection() {
       } else {
         const created = await addLot(lotPayloadForApi, { businessOwnerId: targetBiz });
         if (saveForm.status === 'completed') {
-          await updatePartyEdit(created.id, {
-            overrideStatus: 'Completed',
-            completeDate: today,
-          }, { businessOwnerId: targetBiz });
+          await updatePartyEdit(
+            created.id,
+            {
+              overrideStatus: 'Completed',
+              completeDate: today,
+            },
+            { businessOwnerId: targetBiz }
+          );
         }
         if (recordOwnerPaymentAfterSave) {
           try {
-            await recordOwnerReceivedForCompletedLot({ ...created, ...saveForm, businessOwnerId: targetBiz }, saveForm.billAmount, today);
+            await recordOwnerReceivedForCompletedLot(
+              { ...created, ...saveForm, businessOwnerId: targetBiz },
+              saveForm.billAmount,
+              today
+            );
           } catch (e) {
             Swal.fire({
               icon: 'warning',
@@ -1138,7 +1391,8 @@ export default function GhausiaCollection() {
         }
       }
       rememberLotFormSave(saveForm, { collectionId: targetBiz });
-      setModal(null); setEditing(null);
+      setModal(null);
+      setEditing(null);
     } catch (e) {
       lotSaveErrorToast(messageFromLotSaveError(e));
     } finally {
@@ -1162,18 +1416,26 @@ export default function GhausiaCollection() {
       const lot = collectionLots.find((l) => String(l.id) === String(lotId));
       const biz = lot ? lotBizId(lot) : String(activeBusinessOwnerId || '').trim();
       const currentDate = new Date().toISOString().slice(0, 10);
-      const selectedParty = parties.find(p => p.id === partyId);
-      await updateLot(lotId, {
-        partyId: partyId || '',
-        partyName: selectedParty ? selectedParty.name : '',
-        status: partyId ? 'dispatched' : 'pending',
-        dispatchDate: partyId ? currentDate : '',
-      }, { businessOwnerId: biz });
+      const selectedParty = parties.find((p) => p.id === partyId);
+      await updateLot(
+        lotId,
+        {
+          partyId: partyId || '',
+          partyName: selectedParty ? selectedParty.name : '',
+          status: partyId ? 'dispatched' : 'pending',
+          dispatchDate: partyId ? currentDate : '',
+        },
+        { businessOwnerId: biz }
+      );
       if (partyId) {
-        await updatePartyEdit(lotId, {
-          overrideStatus: 'In Progress',
-          allotDate: currentDate,
-        }, { businessOwnerId: biz });
+        await updatePartyEdit(
+          lotId,
+          {
+            overrideStatus: 'In Progress',
+            allotDate: currentDate,
+          },
+          { businessOwnerId: biz }
+        );
       }
     } finally {
       setInlineSummaryBusy(false);
@@ -1193,25 +1455,39 @@ export default function GhausiaCollection() {
     if (!validatePayForm()) return;
     setPaymentSaving(true);
     try {
-      await addPayment({
-        type: payForm.type,
-        amount: Number(payForm.amount),
-        party: payForm.party,
-        date: payForm.date,
-        linkedLot: payForm.linkedLot,
-        note: payForm.note,
-      }, { businessOwnerId: activeBusinessOwnerId });
+      await addPayment(
+        {
+          type: payForm.type,
+          amount: Number(payForm.amount),
+          party: payForm.party,
+          date: payForm.date,
+          linkedLot: payForm.linkedLot,
+          note: payForm.note,
+        },
+        { businessOwnerId: activeBusinessOwnerId }
+      );
       setPayModal(false);
       setPayErrors({});
-      setPayForm({ type: 'Received', amount: '', party: 'Owner', date: '', note: '', linkedLot: '' });
+      setPayForm({
+        type: 'Received',
+        amount: '',
+        party: 'Owner',
+        date: '',
+        note: '',
+        linkedLot: '',
+      });
     } catch (err) {
-      Swal.fire({ icon: 'error', title: 'Error', text: 'Failed to save payment. Please try again.' });
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Failed to save payment. Please try again.',
+      });
     } finally {
       setPaymentSaving(false);
     }
   };
 
-  const handleDeletePayment = async (id) => {
+  const _handleDeletePayment = async (id) => {
     const result = await Swal.fire({
       title: 'Delete Payment?',
       text: 'This action cannot be undone.',
@@ -1225,14 +1501,26 @@ export default function GhausiaCollection() {
       try {
         await deletePayment(id, { businessOwnerId: activeBusinessOwnerId });
       } catch (e) {
-        Swal.fire({ icon: 'error', title: 'Error', text: String(e?.message || e || 'Could not delete payment') });
+        Swal.fire({
+          icon: 'error',
+          title: 'Error',
+          text: String(e?.message || e || 'Could not delete payment'),
+        });
       }
     }
   };
 
   if (initialDataLoading || (!viewAllWorkspaces && scopedDataLoading)) {
     return (
-      <div style={{ textAlign: 'center', display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
+      <div
+        style={{
+          textAlign: 'center',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          minHeight: '100vh',
+        }}
+      >
         <LoaderDashboard height={30} width={30} />
       </div>
     );
@@ -1329,7 +1617,17 @@ export default function GhausiaCollection() {
               boxShadow: '0 2px 8px rgba(30, 64, 175, 0.25)',
             }}
           >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+            >
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
             Add lot
           </button>
         </div>
@@ -1344,7 +1642,9 @@ export default function GhausiaCollection() {
             background: 'rgba(255,255,255,0.85)',
           }}
         >
-          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', flexShrink: 0 }}>
+          <span
+            style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', flexShrink: 0 }}
+          >
             Workspace
           </span>
           <BusinessOwnerSwitcher compact />
@@ -1372,21 +1672,39 @@ export default function GhausiaCollection() {
             }}
           >
             <Loader />
-            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>Updating…</span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>
+              Updating…
+            </span>
           </div>
         )}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
+            gap: 12,
+          }}
+        >
           {[
             { label: 'Total Lots', value: visibleLots.length, color: '#1e40af' },
             { label: 'Billable Lots', value: billable.length, color: '#dc2626' },
-            { label: 'Billable Amount', value: `₨${billableTotal.toLocaleString()}`, color: '#dc2626' },
+            {
+              label: 'Billable Amount',
+              value: `₨${billableTotal.toLocaleString()}`,
+              color: '#dc2626',
+            },
             {
               label: 'Received from Owner',
-              value: ownerReceivedIsPending ? 'Pending to owner' : `₨${ownerReceivedNet.toLocaleString()}`,
+              value: ownerReceivedIsPending
+                ? 'Pending to owner'
+                : `₨${ownerReceivedNet.toLocaleString()}`,
               color: ownerReceivedIsPending ? '#d97706' : '#15803d',
             },
-            { label: `${billableTotal - (ownerReceivedNet) >= 0 ? 'Receivable from Owner': 'Advance from Owner'}`, value: `₨${(billableTotal - (ownerReceivedNet)).toLocaleString()}`, color: (billableTotal - (ownerReceivedNet)) >= 0 ? '#15803d' : '#dc2626' },
-          ].map(c => (
+            {
+              label: `${billableTotal - ownerReceivedNet >= 0 ? 'Receivable from Owner' : 'Advance from Owner'}`,
+              value: `₨${(billableTotal - ownerReceivedNet).toLocaleString()}`,
+              color: billableTotal - ownerReceivedNet >= 0 ? '#15803d' : '#dc2626',
+            },
+          ].map((c) => (
             <div key={c.label} className="stat-card">
               <div className="stat-label">{c.label}</div>
               <div style={{ fontSize: 18, fontWeight: 700, color: c.color }}>{c.value}</div>
@@ -1397,7 +1715,15 @@ export default function GhausiaCollection() {
 
       {/* Payment Panel */}
       <div className="card" style={{ marginBottom: 22 }}>
-        <div className="card-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+        <div
+          className="card-header"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 10,
+          }}
+        >
           <span className="card-title">
             Billable lots to Owner
             {billable.length > 0 && (
@@ -1411,7 +1737,11 @@ export default function GhausiaCollection() {
               type="button"
               className="btn btn-sm"
               onClick={() => setBillableCollapsed((v) => !v)}
-              style={{ background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}
+              style={{
+                background: 'transparent',
+                border: '1px solid var(--border)',
+                color: 'var(--text-secondary)',
+              }}
             >
               {billableCollapsed ? 'Show' : 'Hide'}
             </button>
@@ -1448,7 +1778,7 @@ export default function GhausiaCollection() {
                         ₨{p.amount.toLocaleString()}
                       </td>
                       <td>
-                        <button className="btn-icon" onClick={() => handleDeletePayment(p.id)} title="Delete">
+                        <button className="btn-icon" onClick={() => _handleDeletePayment(p.id)} title="Delete">
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#dc2626" strokeWidth="2">
                             <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/>
                             <path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
@@ -1463,7 +1793,15 @@ export default function GhausiaCollection() {
           )}
         </div> */}
         {billable.length > 0 && !billableCollapsed && (
-          <div style={{ margin: '0', background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 10, padding: 14 }}>
+          <div
+            style={{
+              margin: '0',
+              background: '#FFFBEB',
+              border: '1px solid #FDE68A',
+              borderRadius: 10,
+              padding: 14,
+            }}
+          >
             <div
               style={{
                 display: 'flex',
@@ -1475,7 +1813,8 @@ export default function GhausiaCollection() {
               }}
             >
               <div style={{ fontSize: 13, fontWeight: 700, color: '#92600A' }}>
-                Billable to Owner — {billable.length} lots · Total: ₨{billableTotal.toLocaleString()}
+                Billable to Owner — {billable.length} lots · Total: ₨
+                {billableTotal.toLocaleString()}
               </div>
               <input
                 type="text"
@@ -1501,7 +1840,7 @@ export default function GhausiaCollection() {
               </div>
             ) : (
               <>
-                {billablePageItems.map(l => (
+                {billablePageItems.map((l) => (
                   <div
                     key={l.id}
                     style={{
@@ -1516,18 +1855,28 @@ export default function GhausiaCollection() {
                     }}
                   >
                     <span style={{ flex: '1 1 160px', minWidth: 0 }}>
-                      {l.lotNumber || l.lotNo} / {l.designNo} — <span style={{ color: '#92600A' }}>{l.partyName || '—'}</span>
+                      {l.lotNumber || l.lotNo} / {l.designNo} —{' '}
+                      <span style={{ color: '#92600A' }}>{l.partyName || '—'}</span>
                     </span>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
                       {partyEdits[l.id]?.amountChangeNote ? (
                         <div style={{ textAlign: 'right', color: '#92600A' }}>
                           <strong>₨{getOwnerBillableAmount(l).toLocaleString()}</strong>
                           <div style={{ fontSize: 11, color: '#92400e', marginTop: 2 }}>
-                            Party ledger: Previous ₨{Number(partyEdits[l.id].amountChangeNote.previousAmount || 0).toLocaleString()} → Updated ₨{Number(partyEdits[l.id].amountChangeNote.updatedAmount || 0).toLocaleString()}
+                            Party ledger: Previous ₨
+                            {Number(
+                              partyEdits[l.id].amountChangeNote.previousAmount || 0
+                            ).toLocaleString()}{' '}
+                            → Updated ₨
+                            {Number(
+                              partyEdits[l.id].amountChangeNote.updatedAmount || 0
+                            ).toLocaleString()}
                           </div>
                         </div>
                       ) : (
-                        <strong style={{ color: '#92600A' }}>₨{getOwnerBillableAmount(l).toLocaleString()}</strong>
+                        <strong style={{ color: '#92600A' }}>
+                          ₨{getOwnerBillableAmount(l).toLocaleString()}
+                        </strong>
                       )}
                       <button
                         type="button"
@@ -1560,8 +1909,9 @@ export default function GhausiaCollection() {
                     }}
                   >
                     <span style={{ fontSize: 12, color: '#92600A' }}>
-                      Showing {(billableSafePage - 1) * BILLABLE_PAGE_SIZE + 1}
-                      –{Math.min(billableSafePage * BILLABLE_PAGE_SIZE, billableFiltered.length)} of {billableFiltered.length}
+                      Showing {(billableSafePage - 1) * BILLABLE_PAGE_SIZE + 1}–
+                      {Math.min(billableSafePage * BILLABLE_PAGE_SIZE, billableFiltered.length)} of{' '}
+                      {billableFiltered.length}
                     </span>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <button
@@ -1606,15 +1956,21 @@ export default function GhausiaCollection() {
 
       {/* Toolbar */}
       <div className="toolbar pl-toolbar">
-        <SearchBar value={search} onChange={setSearch} placeholder="Search lot no., design, description..." />
+        <SearchBar
+          value={search}
+          onChange={setSearch}
+          placeholder="Search lot no., design, description..."
+        />
         <select
           className="form-select pl-toolbar-filter pl-toolbar-filter--party"
           value={partyFilter}
-          onChange={e => setPartyFilter(e.target.value)}
+          onChange={(e) => setPartyFilter(e.target.value)}
         >
           <option value="All">All Parties</option>
-          {parties.map(p => (
-            <option key={p.id} value={String(p.id)}>{p.name}</option>
+          {parties.map((p) => (
+            <option key={p.id} value={String(p.id)}>
+              {p.name}
+            </option>
           ))}
         </select>
         <DateRangeSelect
@@ -1632,15 +1988,22 @@ export default function GhausiaCollection() {
           <select
             className="form-select pl-toolbar-filter pl-toolbar-filter--status"
             value={statusFilter}
-            onChange={e => setStatusFilter(e.target.value)}
+            onChange={(e) => setStatusFilter(e.target.value)}
           >
             <option value="All">All Statuses</option>
-            {STATUS_OPTIONS.filter((s) => s !== 'completed').map(s => (
-              <option key={s} value={s}>{s.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}</option>
+            {STATUS_OPTIONS.filter((s) => s !== 'completed').map((s) => (
+              <option key={s} value={s}>
+                {s
+                  .split(' ')
+                  .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+                  .join(' ')}
+              </option>
             ))}
           </select>
         ) : (
-          <span style={{ fontSize: 13, color: 'var(--text-secondary)', alignSelf: 'center' }}>Completed lots only</span>
+          <span style={{ fontSize: 13, color: 'var(--text-secondary)', alignSelf: 'center' }}>
+            Completed lots only
+          </span>
         )}
       </div>
 
@@ -1657,7 +2020,12 @@ export default function GhausiaCollection() {
       >
         {[
           { id: 'others', label: othersTabStatusLabel, count: othersTabCount, hint: othersTabHint },
-          { id: 'completed', label: 'Completed', count: completedLotsCount, hint: 'Lots marked completed' },
+          {
+            id: 'completed',
+            label: 'Completed',
+            count: completedLotsCount,
+            hint: 'Lots marked completed',
+          },
         ].map((tab) => (
           <button
             key={tab.id}
@@ -1704,86 +2072,172 @@ export default function GhausiaCollection() {
           <table>
             <thead>
               <tr>
-                <th>Lot No</th><th>Design No</th><th>Description</th><th>Item Type</th>
+                <th>Lot No</th>
+                <th>Design No</th>
+                <th>Description</th>
+                <th>Item Type</th>
                 <th>Colors</th>
                 <th>Pieces</th>
                 <th>Allot Date</th>
                 <th>Business</th>
                 <th>Party Name</th>
-                <th>Status</th><th style={{ textAlign: 'right' }}>Bill Amount</th><th>Actions</th>
+                <th>Status</th>
+                <th style={{ textAlign: 'right' }}>Bill Amount</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 ? (
-                <tr><td colSpan={12}><EmptyState message="No lots found" /></td></tr>
-              ) : paginatedLots.map(l => (
-                <tr key={l.id}>
-                  <td style={{ fontWeight: 700, color: '#1e40af' }}>{l.lotNumber}</td>
-                  <td style={{ fontWeight: 600 }}>{l.designNo}</td>
-                  <td>{l.description}</td>
-                  <td><span style={{ background: '#F0F9FF', color: '#0369a1', border: '1px solid #BAE6FD', borderRadius: 6, padding: '2px 8px', fontSize: 12 }}>{l.itemType || l.fabric}</span></td>
-                  <td>{l.colors}</td>
-                  <td>{l.pieces}</td>
-                  <td>{formatDisplayDate(l.allotDate)}</td>
-                  <td style={{ color: 'var(--text-secondary)', fontSize: 13, maxWidth: 160 }}>
-                    {workspaceDisplayTitleForLot(l, businessOwners)}
-                  </td>
-                  <td>
-                    <select
-                      className="form-select"
-                      style={{ width: '100%', fontSize: 13, padding: '4px 8px', border: '1px solid var(--border)', borderRadius: 4 }}
-                      value={l.partyId || ''}
-                      onChange={(e) => handlePartyChange(l.id, e.target.value)}
-                    >
-                      <option value="">— Select Party —</option>
-                      {parties.map(p => (
-                        <option key={p.id} value={p.id}>{p.name}</option>
-                      ))}
-                    </select>
-                  </td>
-                  <td>
-                    {lotTableTab === 'completed' ?
-                      <span style={{ fontSize: 12, color: 'green', marginTop: 3, fontWeight: '500', padding: '2px 8px', borderRadius: 6, background: '#DCFCE7', border: '1px solid #DCFCE7' }}>Completed</span> :
-                      <>
-                        <LotStatusSelect
-                          value={l.status}
-                          options={STATUS_OPTIONS}
-                          disabled={completionPersistingLotId === l.id || inlineSummaryBusy}
-                          onChange={(next) => setLotStatus(l, next)}
-                        />
-                        {l.dispatchDate && l.status !== 'pending' && <div style={{ fontSize: 12, color: '#dc2626', marginTop: 3, fontWeight: '500' }}>Dispatch: {formatDisplayDate(l.dispatchDate)}</div>}
-                        {l.receivedBackDate && <div style={{ fontSize: 12, color: 'green', marginTop: 1, fontWeight: '500' }}>Received: {formatDisplayDate(l.receivedBackDate)}</div>}
-                      </>
-                    }
-                  </td>
-                  <td style={{ textAlign: 'right', fontWeight: 700, color: '#1e40af' }}>
-                    ₨{getOwnerBillableAmount(l).toLocaleString()}
-                  </td>
-                  <td>
-                    <div style={{ display: 'flex', gap: 6 }}>
-                      <ActionBtn variant="edit" onClick={() => openEdit(l)} />
-                      <ActionBtn variant="delete" onClick={() => setDeleteTarget(l)} />
-                    </div>
+                <tr>
+                  <td colSpan={12}>
+                    <EmptyState message="No lots found" />
                   </td>
                 </tr>
-              ))}
+              ) : (
+                paginatedLots.map((l) => (
+                  <tr key={l.id}>
+                    <td style={{ fontWeight: 700, color: '#1e40af' }}>{l.lotNumber}</td>
+                    <td style={{ fontWeight: 600 }}>{l.designNo}</td>
+                    <td>{l.description}</td>
+                    <td>
+                      <span
+                        style={{
+                          background: '#F0F9FF',
+                          color: '#0369a1',
+                          border: '1px solid #BAE6FD',
+                          borderRadius: 6,
+                          padding: '2px 8px',
+                          fontSize: 12,
+                        }}
+                      >
+                        {l.itemType || l.fabric}
+                      </span>
+                    </td>
+                    <td>{l.colors}</td>
+                    <td>{l.pieces}</td>
+                    <td>{formatDisplayDate(l.allotDate)}</td>
+                    <td style={{ color: 'var(--text-secondary)', fontSize: 13, maxWidth: 160 }}>
+                      {workspaceDisplayTitleForLot(l, businessOwners)}
+                    </td>
+                    <td>
+                      <select
+                        className="form-select"
+                        style={{
+                          width: '100%',
+                          fontSize: 13,
+                          padding: '4px 8px',
+                          border: '1px solid var(--border)',
+                          borderRadius: 4,
+                        }}
+                        value={l.partyId || ''}
+                        onChange={(e) => handlePartyChange(l.id, e.target.value)}
+                      >
+                        <option value="">— Select Party —</option>
+                        {parties.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.name}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                    <td>
+                      {lotTableTab === 'completed' ? (
+                        <span
+                          style={{
+                            fontSize: 12,
+                            color: 'green',
+                            marginTop: 3,
+                            fontWeight: '500',
+                            padding: '2px 8px',
+                            borderRadius: 6,
+                            background: '#DCFCE7',
+                            border: '1px solid #DCFCE7',
+                          }}
+                        >
+                          Completed
+                        </span>
+                      ) : (
+                        <>
+                          <LotStatusSelect
+                            value={l.status}
+                            options={STATUS_OPTIONS}
+                            disabled={completionPersistingLotId === l.id || inlineSummaryBusy}
+                            onChange={(next) => setLotStatus(l, next)}
+                          />
+                          {l.dispatchDate && l.status !== 'pending' && (
+                            <div
+                              style={{
+                                fontSize: 12,
+                                color: '#dc2626',
+                                marginTop: 3,
+                                fontWeight: '500',
+                              }}
+                            >
+                              Dispatch: {formatDisplayDate(l.dispatchDate)}
+                            </div>
+                          )}
+                          {l.receivedBackDate && (
+                            <div
+                              style={{
+                                fontSize: 12,
+                                color: 'green',
+                                marginTop: 1,
+                                fontWeight: '500',
+                              }}
+                            >
+                              Received: {formatDisplayDate(l.receivedBackDate)}
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </td>
+                    <td style={{ textAlign: 'right', fontWeight: 700, color: '#1e40af' }}>
+                      ₨{getOwnerBillableAmount(l).toLocaleString()}
+                    </td>
+                    <td>
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <ActionBtn variant="edit" onClick={() => openEdit(l)} />
+                        <ActionBtn variant="delete" onClick={() => setDeleteTarget(l)} />
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
       </div>
       {filtered.length > 0 && (
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginTop: 12, flexWrap: 'wrap' }}>
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            gap: 12,
+            marginTop: 12,
+            flexWrap: 'wrap',
+          }}
+        >
           <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-            Showing {pageStart + 1}-{Math.min(pageStart + PAGE_SIZE, filtered.length)} of {filtered.length}
+            Showing {pageStart + 1}-{Math.min(pageStart + PAGE_SIZE, filtered.length)} of{' '}
+            {filtered.length}
           </span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <button className="btn btn-ghost btn-sm" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={safeCurrentPage === 1}>
+            <button
+              className="btn btn-ghost btn-sm"
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              disabled={safeCurrentPage === 1}
+            >
               Prev
             </button>
             <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
               Page {safeCurrentPage} of {totalPages}
             </span>
-            <button className="btn btn-ghost btn-sm" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={safeCurrentPage === totalPages}>
+            <button
+              className="btn btn-ghost btn-sm"
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              disabled={safeCurrentPage === totalPages}
+            >
               Next
             </button>
           </div>
@@ -1792,12 +2246,25 @@ export default function GhausiaCollection() {
 
       {/* Lot Form Modal */}
       {modal === 'form' && (
-        <Modal title={editing ? 'Edit Lot' : 'Add New Lot'} onClose={() => { if (!lotSaving) { setModal(null); setEditing(null); } }}>
+        <Modal
+          title={editing ? 'Edit Lot' : 'Add New Lot'}
+          onClose={() => {
+            if (!lotSaving) {
+              setModal(null);
+              setEditing(null);
+            }
+          }}
+        >
           <LotForm
             key={editing?.id || 'new'}
             initial={editing}
             onSave={handleSave}
-            onClose={() => { if (!lotSaving) { setModal(null); setEditing(null); } }}
+            onClose={() => {
+              if (!lotSaving) {
+                setModal(null);
+                setEditing(null);
+              }
+            }}
             parties={parties}
             saving={lotSaving}
             pickWorkspaceForNewLot={viewAllWorkspaces && !editing}
@@ -1808,105 +2275,203 @@ export default function GhausiaCollection() {
       )}
 
       {/* Complete lot — bill amount & owner payment */}
-      {completeBillModal && (() => {
-        const lot = completeBillModal.lot;
-        const fromBillable = !!completeBillModal.fromBillable;
-        const ov = completeBillModal.billAmountOverride;
-        const effective = getAdminLedgerOrBusinessBill(lot, partyEdits[lot.id] || {});
-        const rawBill = ov !== undefined && ov !== null ? Number(ov) : Number(effective || lot.billAmount || 0);
-        const confirmAmt = Number(completeBillInput);
-        const amountForOwnerCheck = (!Number.isNaN(confirmAmt) && confirmAmt > 0 ? confirmAmt : rawBill);
-        const amountBill = rawBill.toLocaleString();
-        const lotNo = String(lot.lotNumber || lot.lotNo || '').trim() || '—';
-        const designNo = String(lot.designNo || '').trim() || '—';
-        const partyLabel = (lot.partyName && String(lot.partyName).trim())
-          || (lot.partyId ? getPartyName(lot.partyId) : '')
-          || '—';
-        return (
-          <Modal
-            title={fromBillable ? 'Confirm payment & complete lot' : 'Bill amount for completion'}
-            onClose={dismissCompleteBillModal}
-            onFormSubmit={() => {
-              confirmCompleteBillModal();
-            }}
-            footer={(
-              <>
-                <button type="button" className="btn btn-ghost" onClick={dismissCompleteBillModal}>Cancel</button>
-                <button type="submit" className="btn btn-primary">
-                  {fromBillable ? 'Complete & settle' : 'Complete & record payment'}
-                </button>
-              </>
-            )}
-          >
-            {fromBillable ? (
-              <p style={{ textAlign: 'left', fontSize: 13, margin: '0 0 12px', color: 'var(--text-secondary)' }}>
-                Confirm the bill amount for this lot. It will move to <strong>Completed</strong>, the <strong>Owner Received</strong> total will go down by this amount, and a <strong>Paid → Owner</strong> row will be saved in Payment Management (linked to this lot).
-                {rawBill > 0
-                  ? <> Current bill: <strong>₨{amountBill}</strong> (edit below if needed).</>
-                  : <> No bill amount on file (₨{amountBill}) — enter the amount below.</>}
-                {amountForOwnerCheck > 0 && ownerReceivedNet < amountForOwnerCheck && (
-                  <span style={{ display: 'block', marginTop: 10, color: '#b45309', fontWeight: 600 }}>
-                    Owner Received (after other settlements) is less than this bill — after completion, Owner Received will show as <strong>Pending to owner</strong> until recorded receipts catch up.
+      {completeBillModal &&
+        (() => {
+          const lot = completeBillModal.lot;
+          const fromBillable = !!completeBillModal.fromBillable;
+          const ov = completeBillModal.billAmountOverride;
+          const effective = getAdminLedgerOrBusinessBill(lot, partyEdits[lot.id] || {});
+          const rawBill =
+            ov !== undefined && ov !== null ? Number(ov) : Number(effective || lot.billAmount || 0);
+          const confirmAmt = Number(completeBillInput);
+          const amountForOwnerCheck =
+            !Number.isNaN(confirmAmt) && confirmAmt > 0 ? confirmAmt : rawBill;
+          const amountBill = rawBill.toLocaleString();
+          const lotNo = String(lot.lotNumber || lot.lotNo || '').trim() || '—';
+          const designNo = String(lot.designNo || '').trim() || '—';
+          const partyLabel =
+            (lot.partyName && String(lot.partyName).trim()) ||
+            (lot.partyId ? getPartyName(lot.partyId) : '') ||
+            '—';
+          return (
+            <Modal
+              title={fromBillable ? 'Confirm payment & complete lot' : 'Bill amount for completion'}
+              onClose={dismissCompleteBillModal}
+              onFormSubmit={() => {
+                confirmCompleteBillModal();
+              }}
+              footer={
+                <>
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    onClick={dismissCompleteBillModal}
+                  >
+                    Cancel
+                  </button>
+                  <button type="submit" className="btn btn-primary">
+                    {fromBillable ? 'Complete & settle' : 'Complete & record payment'}
+                  </button>
+                </>
+              }
+            >
+              {fromBillable ? (
+                <p
+                  style={{
+                    textAlign: 'left',
+                    fontSize: 13,
+                    margin: '0 0 12px',
+                    color: 'var(--text-secondary)',
+                  }}
+                >
+                  Confirm the bill amount for this lot. It will move to <strong>Completed</strong>,
+                  the <strong>Owner Received</strong> total will go down by this amount, and a{' '}
+                  <strong>Paid → Owner</strong> row will be saved in Payment Management (linked to
+                  this lot).
+                  {rawBill > 0 ? (
+                    <>
+                      {' '}
+                      Current bill: <strong>₨{amountBill}</strong> (edit below if needed).
+                    </>
+                  ) : (
+                    <> No bill amount on file (₨{amountBill}) — enter the amount below.</>
+                  )}
+                  {amountForOwnerCheck > 0 && ownerReceivedNet < amountForOwnerCheck && (
+                    <span
+                      style={{ display: 'block', marginTop: 10, color: '#b45309', fontWeight: 600 }}
+                    >
+                      Owner Received (after other settlements) is less than this bill — after
+                      completion, Owner Received will show as <strong>Pending to owner</strong>{' '}
+                      until recorded receipts catch up.
+                    </span>
+                  )}
+                </p>
+              ) : rawBill > 0 ? (
+                <p
+                  style={{
+                    textAlign: 'left',
+                    fontSize: 13,
+                    margin: '0 0 12px',
+                    color: 'var(--text-secondary)',
+                  }}
+                >
+                  This lot has a bill amount of <strong>₨{amountBill}</strong>. You can keep it or
+                  change it below. Completing will add a <strong>Received</strong> entry in Payment
+                  Management using the amount you confirm.
+                </p>
+              ) : (
+                <p
+                  style={{
+                    textAlign: 'left',
+                    fontSize: 13,
+                    margin: '0 0 12px',
+                    color: 'var(--text-secondary)',
+                  }}
+                >
+                  This lot has no bill amount (₨{amountBill}). Enter the amount received from the
+                  owner to mark it completed and add a <strong>Received</strong> entry in Payment
+                  Management.
+                </p>
+              )}
+              <div
+                style={{
+                  textAlign: 'left',
+                  fontSize: 12,
+                  color: 'var(--text-muted)',
+                  lineHeight: 1.5,
+                  marginBottom: 16,
+                }}
+              >
+                <strong>Lot:</strong> {lotNo} · <strong>Design:</strong> {designNo}
+                <br />
+                <strong>Party:</strong> {partyLabel}
+                <br />
+              </div>
+              <FormGroup
+                label={rawBill > 0 ? 'Bill amount (₨) — edit if needed' : 'Amount received (₨) *'}
+              >
+                <input
+                  className={`form-input${completeBillError ? ' input-error' : ''}`}
+                  type="number"
+                  min={1}
+                  step={1}
+                  value={completeBillInput}
+                  onChange={(e) => {
+                    setCompleteBillInput(e.target.value);
+                    setCompleteBillError('');
+                  }}
+                  placeholder={rawBill > 0 ? `Default ₨${amountBill}` : 'Amount (₨)'}
+                  autoFocus
+                />
+                {completeBillError && (
+                  <span style={{ color: '#dc2626', fontSize: 11, marginTop: 3, display: 'block' }}>
+                    {completeBillError}
                   </span>
                 )}
-              </p>
-            ) : rawBill > 0 ? (
-              <p style={{ textAlign: 'left', fontSize: 13, margin: '0 0 12px', color: 'var(--text-secondary)' }}>
-                This lot has a bill amount of <strong>₨{amountBill}</strong>. You can keep it or change it below. Completing will add a <strong>Received</strong> entry in Payment Management using the amount you confirm.
-              </p>
-            ) : (
-              <p style={{ textAlign: 'left', fontSize: 13, margin: '0 0 12px', color: 'var(--text-secondary)' }}>
-                This lot has no bill amount (₨{amountBill}). Enter the amount received from the owner to mark it completed and add a <strong>Received</strong> entry in Payment Management.
-              </p>
-            )}
-            <div style={{ textAlign: 'left', fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5, marginBottom: 16 }}>
-              <strong>Lot:</strong> {lotNo} · <strong>Design:</strong> {designNo}
-              <br />
-              <strong>Party:</strong> {partyLabel}
-              <br />
-            </div>
-            <FormGroup label={rawBill > 0 ? 'Bill amount (₨) — edit if needed' : 'Amount received (₨) *'}>
-              <input
-                className={`form-input${completeBillError ? ' input-error' : ''}`}
-                type="number"
-                min={1}
-                step={1}
-                value={completeBillInput}
-                onChange={(e) => { setCompleteBillInput(e.target.value); setCompleteBillError(''); }}
-                placeholder={rawBill > 0 ? `Default ₨${amountBill}` : 'Amount (₨)'}
-                autoFocus
-              />
-              {completeBillError && (
-                <span style={{ color: '#dc2626', fontSize: 11, marginTop: 3, display: 'block' }}>{completeBillError}</span>
-              )}
-            </FormGroup>
-            <strong>Owner Received:</strong> ₨{ownerReceivedNet.toLocaleString()}
-          </Modal>
-        );
-      })()}
+              </FormGroup>
+              <strong>Owner Received:</strong> ₨{ownerReceivedNet.toLocaleString()}
+            </Modal>
+          );
+        })()}
 
       {/* Payment Modal */}
       {payModal && (
-        <Modal title="Record Payment" onClose={() => { if (!paymentSaving) { setPayModal(false); setPayErrors({}); } }}
+        <Modal
+          title="Record Payment"
+          onClose={() => {
+            if (!paymentSaving) {
+              setPayModal(false);
+              setPayErrors({});
+            }
+          }}
           onFormSubmit={() => {
             void handleAddPayment();
           }}
           footer={
             <>
-              <button type="button" className="btn btn-ghost" onClick={() => { setPayModal(false); setPayErrors({}); }} disabled={paymentSaving}>Cancel</button>
-              <button type="submit" className="btn btn-success" disabled={paymentSaving} style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                {paymentSaving ? <><Loader /> Saving…</> : 'Save Payment'}
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={() => {
+                  setPayModal(false);
+                  setPayErrors({});
+                }}
+                disabled={paymentSaving}
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="btn btn-success"
+                disabled={paymentSaving}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
+              >
+                {paymentSaving ? (
+                  <>
+                    <Loader /> Saving…
+                  </>
+                ) : (
+                  'Save Payment'
+                )}
               </button>
             </>
           }
         >
           <div className="grid-2">
             <FormGroup label="Type">
-              <select className="form-select" value={payForm.type} onChange={e => {
-                const newType = e.target.value;
-                setPayForm(f => ({ ...f, type: newType, party: newType === 'Received' ? 'Owner' : '' }));
-                setPayErrors(prev => ({ ...prev, party: undefined }));
-              }}>
+              <select
+                className="form-select"
+                value={payForm.type}
+                onChange={(e) => {
+                  const newType = e.target.value;
+                  setPayForm((f) => ({
+                    ...f,
+                    type: newType,
+                    party: newType === 'Received' ? 'Owner' : '',
+                  }));
+                  setPayErrors((prev) => ({ ...prev, party: undefined }));
+                }}
+              >
                 <option>Received</option>
                 <option>Paid</option>
               </select>
@@ -1916,33 +2481,57 @@ export default function GhausiaCollection() {
                 className={`form-input${payErrors.amount ? ' input-error' : ''}`}
                 type="number"
                 value={payForm.amount}
-                onChange={e => { setPayForm(f => ({ ...f, amount: e.target.value })); setPayErrors(p => ({ ...p, amount: undefined })); }}
+                onChange={(e) => {
+                  setPayForm((f) => ({ ...f, amount: e.target.value }));
+                  setPayErrors((p) => ({ ...p, amount: undefined }));
+                }}
                 placeholder="50000"
               />
-              {payErrors.amount && <span style={{ color: '#dc2626', fontSize: 11, marginTop: 3, display: 'block' }}>{payErrors.amount}</span>}
+              {payErrors.amount && (
+                <span style={{ color: '#dc2626', fontSize: 11, marginTop: 3, display: 'block' }}>
+                  {payErrors.amount}
+                </span>
+              )}
             </FormGroup>
             <FormGroup label={payForm.type === 'Received' ? 'Received From' : 'Paid To *'}>
               {payForm.type === 'Received' ? (
                 <select
                   className="form-select"
                   value={payForm.party}
-                  onChange={e => setPayForm(f => ({ ...f, party: e.target.value }))}
+                  onChange={(e) => setPayForm((f) => ({ ...f, party: e.target.value }))}
                 >
                   <option value="Owner">Owner</option>
-                  {parties.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
+                  {parties.map((p) => (
+                    <option key={p.id} value={p.name}>
+                      {p.name}
+                    </option>
+                  ))}
                 </select>
               ) : (
                 <>
                   <select
                     className={`form-select${payErrors.party ? ' input-error' : ''}`}
                     value={payForm.party}
-                    onChange={e => { setPayForm(f => ({ ...f, party: e.target.value })); setPayErrors(p => ({ ...p, party: undefined })); }}
+                    onChange={(e) => {
+                      setPayForm((f) => ({ ...f, party: e.target.value }));
+                      setPayErrors((p) => ({ ...p, party: undefined }));
+                    }}
                   >
                     <option value="">— Select Party —</option>
-                    {parties.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
+                    {parties.map((p) => (
+                      <option key={p.id} value={p.name}>
+                        {p.name}
+                      </option>
+                    ))}
                     <option value="Other">Other</option>
                   </select>
-                  {payErrors.party && <span style={{ color: '#dc2626', fontSize: 11, marginTop: 3, display: 'block' }}>{payErrors.party}</span>}
+                  {payErrors.party && (
+                    <span
+                      style={{ color: '#dc2626', fontSize: 11, marginTop: 3, display: 'block' }}
+                    >
+                      {payErrors.party}
+                    </span>
+                  )}
                 </>
               )}
             </FormGroup>
@@ -1951,18 +2540,38 @@ export default function GhausiaCollection() {
                 className={`form-input${payErrors.date ? ' input-error' : ''}`}
                 type="date"
                 value={payForm.date}
-                onChange={e => { setPayForm(f => ({ ...f, date: e.target.value })); setPayErrors(p => ({ ...p, date: undefined })); }}
+                onChange={(e) => {
+                  setPayForm((f) => ({ ...f, date: e.target.value }));
+                  setPayErrors((p) => ({ ...p, date: undefined }));
+                }}
               />
-              {payErrors.date && <span style={{ color: '#dc2626', fontSize: 11, marginTop: 3, display: 'block' }}>{payErrors.date}</span>}
+              {payErrors.date && (
+                <span style={{ color: '#dc2626', fontSize: 11, marginTop: 3, display: 'block' }}>
+                  {payErrors.date}
+                </span>
+              )}
             </FormGroup>
             <FormGroup label="Linked Lot (optional)">
-              <select className="form-select" value={payForm.linkedLot} onChange={e => setPayForm(f => ({ ...f, linkedLot: e.target.value }))}>
+              <select
+                className="form-select"
+                value={payForm.linkedLot}
+                onChange={(e) => setPayForm((f) => ({ ...f, linkedLot: e.target.value }))}
+              >
                 <option value="">None</option>
-                {collectionLots.map(l => <option key={l.id} value={l.lotNumber}>{l.lotNumber || l.lotNo} / {l.designNo}</option>)}
+                {collectionLots.map((l) => (
+                  <option key={l.id} value={l.lotNumber}>
+                    {l.lotNumber || l.lotNo} / {l.designNo}
+                  </option>
+                ))}
               </select>
             </FormGroup>
             <FormGroup label="Note">
-              <input className="form-input" value={payForm.note} onChange={e => setPayForm(f => ({ ...f, note: e.target.value }))} placeholder="Optional note" />
+              <input
+                className="form-input"
+                value={payForm.note}
+                onChange={(e) => setPayForm((f) => ({ ...f, note: e.target.value }))}
+                placeholder="Optional note"
+              />
             </FormGroup>
           </div>
         </Modal>

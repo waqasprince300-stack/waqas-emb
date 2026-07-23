@@ -79,7 +79,10 @@ export default function LotStatusSelect({
 
   return (
     <>
-      <div ref={wrapRef} style={{ position: 'relative', display: 'inline-block', verticalAlign: 'middle' }}>
+      <div
+        ref={wrapRef}
+        style={{ position: 'relative', display: 'inline-block', verticalAlign: 'middle' }}
+      >
         <button
           type="button"
           className={`form-select lot-status-select${className ? ` ${className}` : ''}${open ? ' lot-status-select--open' : ''}`}
@@ -173,7 +176,7 @@ export default function LotStatusSelect({
               );
             })}
           </ul>,
-          document.body,
+          document.body
         )}
     </>
   );

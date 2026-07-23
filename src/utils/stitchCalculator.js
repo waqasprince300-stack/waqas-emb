@@ -21,19 +21,51 @@ export const STITCH_PARTS = [
 
 /** Default quick-add chip ids (built-in). */
 export const DEFAULT_QUICK_PART_IDS = [
-  'bazu', 'front', 'left', 'right', 'back', 'dupatta', 'toser', 'pati',
-  'collar', 'damman', 'gala', 'pocket', 'lace', 'border', 'shalwar', 'trouser',
+  'bazu',
+  'front',
+  'left',
+  'right',
+  'back',
+  'dupatta',
+  'toser',
+  'pati',
+  'collar',
+  'damman',
+  'gala',
+  'pocket',
+  'lace',
+  'border',
+  'shalwar',
+  'trouser',
 ];
 
 export const REPEAT_OPTIONS = [
-  1 / 6, 1 / 3, 0.5, 1, 1.25, 1.5, 1.75, 2, 2.5, 3, 3.5, 4, 5, 6, 7, 7.5, 8, 9, 10,
+  1 / 6,
+  1 / 3,
+  0.5,
+  1,
+  1.25,
+  1.5,
+  1.75,
+  2,
+  2.5,
+  3,
+  3.5,
+  4,
+  5,
+  6,
+  7,
+  7.5,
+  8,
+  9,
+  10,
 ];
 
 export function buildStitchPartsList(customParts = []) {
   const builtins = STITCH_PARTS.filter((p) => p.id !== 'custom');
   const builtinIds = new Set(builtins.map((p) => p.id));
   const custom = (Array.isArray(customParts) ? customParts : []).filter(
-    (p) => p?.id && p?.label && !builtinIds.has(p.id),
+    (p) => p?.id && p?.label && !builtinIds.has(p.id)
   );
   const other = STITCH_PARTS.find((p) => p.id === 'custom');
   return [...builtins, ...custom, ...(other ? [other] : [])];

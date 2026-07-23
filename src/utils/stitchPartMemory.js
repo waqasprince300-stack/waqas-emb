@@ -2,11 +2,13 @@ const STORAGE_KEY = 'waqas_emb_stitch_parts_v1';
 const MAX_CUSTOM = 40;
 
 function toSlug(label) {
-  return String(label || '')
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '_')
-    .replace(/^_|_$/g, '') || 'part';
+  return (
+    String(label || '')
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_|_$/g, '') || 'part'
+  );
 }
 
 export function customPartId(label) {
@@ -38,9 +40,7 @@ export function saveCustomStitchPart(label) {
   const id = customPartId(trimmed);
   const existing = loadCustomStitchParts();
   const lower = trimmed.toLowerCase();
-  const withoutDup = existing.filter(
-    (p) => p.label.toLowerCase() !== lower && p.id !== id,
-  );
+  const withoutDup = existing.filter((p) => p.label.toLowerCase() !== lower && p.id !== id);
   const next = [{ id, label: trimmed }, ...withoutDup].slice(0, MAX_CUSTOM);
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
