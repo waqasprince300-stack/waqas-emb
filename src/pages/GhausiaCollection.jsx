@@ -2066,8 +2066,8 @@ export default function GhausiaCollection() {
         ))}
       </div>
 
-      {/* Table */}
-      <div className="table-wrapper">
+      {/* Table for Desktop & Tablet */}
+      <div className="table-wrapper desktop-only-table">
         <div className="table-scroll">
           <table>
             <thead>
@@ -2206,6 +2206,79 @@ export default function GhausiaCollection() {
             </tbody>
           </table>
         </div>
+      </div>
+
+      {/* Mobile Card List for Ghausia Collection — zero horizontal scroll */}
+      <div className="mobile-only-ghausia-cards">
+        {filtered.length === 0 ? (
+          <EmptyState message="No lots found" />
+        ) : (
+          paginatedLots.map((l) => (
+            <div key={`gh-mob-${l.id}`} className="ghausia-mobile-card">
+              <div className="gh-mob-header">
+                <div>
+                  <span className="gh-mob-lot-no">Lot #{l.lotNumber}</span>
+                  {l.designNo ? <span style={{ fontSize: 13, fontWeight: 600, color: '#475569' }}> · Design #{l.designNo}</span> : null}
+                </div>
+                <div>
+                  {lotTableTab === 'completed' ? (
+                    <span className="badge-completed">Completed</span>
+                  ) : (
+                    <LotStatusSelect
+                      value={l.status}
+                      options={STATUS_OPTIONS}
+                      disabled={completionPersistingLotId === l.id || inlineSummaryBusy}
+                      onChange={(next) => setLotStatus(l, next)}
+                    />
+                  )}
+                </div>
+              </div>
+
+              <div className="gh-mob-body">
+                <div className="gh-mob-chips">
+                  <span className="fabric-chip">{l.itemType || l.fabric || 'Lawn'}</span>
+                  <span className="info-chip">Colors: {l.colors || 0}</span>
+                  <span className="info-chip">Pieces: {l.pieces || 0}</span>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>Party:</label>
+                  <select
+                    className="form-select"
+                    style={{ fontSize: 12, padding: '4px 8px', borderRadius: 6, flex: 1 }}
+                    value={l.partyId || ''}
+                    onChange={(e) => handlePartyChange(l.id, e.target.value)}
+                  >
+                    <option value="">— Select Party —</option>
+                    {parties.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="gh-mob-info">
+                  <div>Workspace: {workspaceDisplayTitleForLot(l, businessOwners)}</div>
+                  <div>Allot Date: {formatDisplayDate(l.allotDate)}</div>
+                  {l.description && <div>Note: {l.description}</div>}
+                </div>
+
+                <div className="gh-mob-bill-row">
+                  <span style={{ fontSize: 13, color: '#64748b' }}>Bill Amount:</span>
+                  <strong style={{ fontSize: 15, color: '#1e40af' }}>
+                    ₨{getOwnerBillableAmount(l).toLocaleString()}
+                  </strong>
+                </div>
+              </div>
+
+              <div className="gh-mob-footer">
+                <ActionBtn variant="edit" onClick={() => openEdit(l)} />
+                <ActionBtn variant="delete" onClick={() => setDeleteTarget(l)} />
+              </div>
+            </div>
+          ))
+        )}
       </div>
       {filtered.length > 0 && (
         <div

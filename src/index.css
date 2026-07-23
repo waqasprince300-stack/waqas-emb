@@ -2054,8 +2054,10 @@ tbody tr:last-child td {
   }
 }
 
-/* Mobile Payments Card View */
-.mobile-only-payment-cards {
+/* Mobile Payments, Party Ledger & Ghausia Cards View */
+.mobile-only-payment-cards,
+.mobile-only-party-ledger-cards,
+.mobile-only-ghausia-cards {
   display: none;
 }
 
@@ -2063,14 +2065,19 @@ tbody tr:last-child td {
   .desktop-only-table {
     display: none !important;
   }
-  .mobile-only-payment-cards {
+  .mobile-only-payment-cards,
+  .mobile-only-party-ledger-cards,
+  .mobile-only-ghausia-cards {
     display: flex !important;
     flex-direction: column;
-    gap: 12px;
+    gap: 14px;
     width: 100%;
     margin-top: 14px;
   }
-  .payment-card-mobile {
+
+  .payment-card-mobile,
+  .party-ledger-mobile-card,
+  .ghausia-mobile-card {
     background: #ffffff;
     border: 1px solid var(--border, #e2e8f0);
     border-radius: 12px;
@@ -2078,27 +2085,123 @@ tbody tr:last-child td {
     display: flex;
     flex-direction: column;
     gap: 10px;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
   }
-  .pmc-header {
+
+  .pmc-header,
+  .pl-mob-header,
+  .gh-mob-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
     border-bottom: 1px solid #f1f5f9;
     padding-bottom: 8px;
   }
-  .pmc-body {
+
+  .pl-mob-lot-no,
+  .gh-mob-lot-no {
+    font-size: 15px;
+    font-weight: 700;
+    color: #1e40af;
+  }
+
+  .pmc-body,
+  .pl-mob-body,
+  .gh-mob-body {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 8px;
   }
-  .pmc-footer {
+
+  .pl-mob-row,
+  .gh-mob-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+  }
+
+  .fabric-chip {
+    background: #f0f9ff;
+    color: #0369a1;
+    border: 1px solid #bae6fd;
+    border-radius: 6px;
+    padding: 2px 8px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .info-chip {
+    background: #f8fafc;
+    color: #64748b;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 2px 6px;
+    font-size: 11.5px;
+  }
+
+  .pl-mob-details,
+  .gh-mob-info {
+    font-size: 12.5px;
+    color: #475569;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .pl-mob-amount-row,
+  .gh-mob-bill-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #f8fafc;
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-weight: 600;
+  }
+
+  .pmc-footer,
+  .pl-mob-actions,
+  .gh-mob-footer {
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: 8px;
     padding-top: 8px;
     border-top: 1px dashed #e2e8f0;
+    flex-wrap: wrap;
+  }
+
+  .badge-completed {
+    font-size: 12px;
+    color: #166534;
+    background: #dcfce7;
+    border: 1px solid #bbf7d0;
+    padding: 2px 8px;
+    border-radius: 6px;
+    font-weight: 600;
+  }
+
+  .badge-review {
+    font-size: 12px;
+    color: #92400e;
+    background: #fef3c7;
+    border: 1px solid #fcd34d;
+    padding: 2px 8px;
+    border-radius: 6px;
+    font-weight: 600;
+  }
+
+  .badge-status {
+    font-size: 12px;
+    color: #1e40af;
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    padding: 2px 8px;
+    border-radius: 6px;
+    font-weight: 600;
   }
 }
+
 
 

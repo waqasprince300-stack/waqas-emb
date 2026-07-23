@@ -1648,17 +1648,13 @@ export default function PartyLedger() {
             background: '#EFF6FF',
             border: '1px solid #BFDBFE',
             fontSize: 13,
-            color: '#1e40af',
-            lineHeight: 1.4,
-          }}
-        >
           Table filtered by status: <strong>{partyFacingStatusLabel(statusFilter, isParty)}</strong>
           . Summary cards above stay overall (Status does not change them).
         </div>
       )}
 
-      {/* Table */}
-      <div className="table-wrapper">
+      {/* Table for Desktop & Tablet */}
+      <div className="table-wrapper desktop-only-table">
         <div className="table-scroll">
           <table>
             <thead>
@@ -1978,17 +1974,16 @@ export default function PartyLedger() {
                                   background: 'linear-gradient(180deg, #F8FAFF 0%, #EEF2FF 100%)',
                                   color: '#3730a3',
                                   cursor: 'pointer',
-                                  padding: '5px 10px',
-                                  borderRadius: 20,
+                                  padding: '3px 8px',
+                                  borderRadius: 6,
                                   display: 'inline-flex',
                                   alignItems: 'center',
-                                  gap: 6,
-                                  boxShadow: '0 1px 2px rgba(79,70,229,0.08)',
+                                  gap: 5,
                                 }}
                               >
                                 <svg
-                                  width="13"
-                                  height="13"
+                                  width="12"
+                                  height="12"
                                   viewBox="0 0 24 24"
                                   fill="none"
                                   stroke="currentColor"
@@ -1996,7 +1991,7 @@ export default function PartyLedger() {
                                 >
                                   <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
                                   <circle cx="8.5" cy="8.5" r="1.5" />
-                                  <path d="M21 15l-5-5L5 21" />
+                                  <polyline points="21 15 16 10 5 21" />
                                 </svg>
                                 <span>Pictures</span>
                                 <span
@@ -2129,11 +2124,6 @@ export default function PartyLedger() {
                           <div
                             style={{
                               display: 'flex',
-                              gap: 8,
-                              flexWrap: 'wrap',
-                              alignItems: 'center',
-                            }}
-                          >
                             {isAdmin &&
                               pe.billRevisionRequest &&
                               String(pe.billRevisionRequest.status || '').toLowerCase() ===
