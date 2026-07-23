@@ -2255,6 +2255,7 @@ export default function GhausiaCollection() {
                         options={STATUS_OPTIONS}
                         disabled={completionPersistingLotId === l.id || inlineSummaryBusy}
                         onChange={(next) => setLotStatus(l, next)}
+                        style={{ width: 'auto', minWidth: 0, maxWidth: 105, fontSize: 10.5, padding: '2px 18px 2px 6px', height: 22, backgroundPosition: 'right 4px center' }}
                       />
                     )}
                   </div>
