@@ -2055,10 +2055,11 @@ tbody tr:last-child td {
 }
 
 /* Mobile Payments, Party Ledger & Ghausia Cards View */
+.mobile-only-tiles,
 .mobile-only-payment-cards,
 .mobile-only-party-ledger-cards,
 .mobile-only-ghausia-cards {
-  display: none;
+  display: none !important;
 }
 
 @media screen and (max-width: 768px) {
@@ -2204,7 +2205,8 @@ tbody tr:last-child td {
 }
 
 /* Mobile View Switcher - Only visible on Mobile (< 768px) */
-.mobile-view-switcher {
+.mobile-view-switcher,
+.mobile-only-tiles {
   display: none !important;
 }
 
@@ -2212,16 +2214,15 @@ tbody tr:last-child td {
   .mobile-view-switcher {
     display: flex !important;
   }
-}
-
-/* Ultra-Compact Grid Tiles for Mobile Preview */
-.tiles-grid {
-  display: grid !important;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-  gap: 8px;
-  width: 100%;
-  margin-top: 10px;
-  margin-bottom: 14px;
+  .mobile-only-tiles.tiles-grid,
+  .tiles-grid {
+    display: grid !important;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 8px;
+    width: 100%;
+    margin-top: 10px;
+    margin-bottom: 14px;
+  }
 }
 
 .lot-tile-card {
