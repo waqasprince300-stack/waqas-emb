@@ -2248,7 +2248,7 @@ export default function GhausiaCollection() {
         </div>
       ) : (
         /* Tile / Grid View */
-        <div className="tiles-grid desktop-only-table">
+        <div className="tiles-grid">
           {filtered.length === 0 ? (
             <EmptyState message="No lots found" />
           ) : (
@@ -2321,8 +2321,9 @@ export default function GhausiaCollection() {
         </div>
       )}
 
-      {/* Mobile Card List for Ghausia Collection — zero horizontal scroll */}
-      <div className="mobile-only-ghausia-cards">
+      {/* Mobile Card List for Ghausia Collection (shown only in Table View mode) */}
+      {viewMode === 'table' && (
+        <div className="mobile-only-ghausia-cards">
         {filtered.length === 0 ? (
           <EmptyState message="No lots found" />
         ) : (
@@ -2393,6 +2394,7 @@ export default function GhausiaCollection() {
           ))
         )}
       </div>
+      )}
       {filtered.length > 0 && (
         <div
           style={{

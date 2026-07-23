@@ -2228,8 +2228,8 @@ export default function PartyLedger() {
           </div>
         </div>
       ) : (
-        /* Tile / Grid View for Desktop */
-        <div className="tiles-grid desktop-only-table">
+        /* Tile / Grid View for Desktop & Mobile */
+        <div className="tiles-grid">
           {filtered.length === 0 ? (
             <EmptyState message={isParty ? 'No lots found' : 'No assigned lots found'} />
           ) : (
@@ -2321,101 +2321,99 @@ export default function PartyLedger() {
         </div>
       )}
 
-      {/* Mobile Card List for Party Ledger — zero horizontal scroll */}
-      <div className="mobile-only-party-ledger-cards">
-        {filtered.length === 0 ? (
-          <EmptyState message={isParty ? 'No lots found' : 'No assigned lots found'} />
-        ) : (
-          paginatedLots.map((l) => {
-            const pe = ledgerPartyEdits[l.id] || {};
-            const displayStatus = getDisplayStatus(l);
-            const partyBillOnly = getPartyLedgerBillDisplay(pe);
-            const displayComplete = getDisplayCompleteDate(l, pe);
+      {/* Mobile Card List for Party Ledger (shown only in Table View mode) */}
+      {viewMode === 'table' && (
+        <div className="mobile-only-party-ledger-cards">
+          {filtered.length === 0 ? (
+            <EmptyState message={isParty ? 'No lots found' : 'No assigned lots found'} />
+          ) : (
+            paginatedLots.map((l) => {
+              const pe = ledgerPartyEdits[l.id] || {};
+              const displayStatus = getDisplayStatus(l);
+              const partyBillOnly = getPartyLedgerBillDisplay(pe);
+              const displayComplete = getDisplayCompleteDate(l, pe);
 
-            return (
-              <div key={`pl-mob-${l.id}`} className="party-ledger-mobile-card">
-                <div className="pl-mob-header">
-                  <div>
-                    <span className="pl-mob-lot-no">Lot #{l.lotNo || l.lotNumber}</span>
-                    {l.designNo ? <span style={{ fontSize: 13, fontWeight: 600, color: '#475569' }}> · Design #{l.designNo}</span> : null}
+              return (
+                <div key={`pl-mob-${l.id}`} className="party-ledger-mobile-card">
+                  <div className="pl-mob-header">
+                    <div>
+                      <span className="pl-mob-lot-no">Lot #{l.lotNo || l.lotNumber}</span>
+                      {l.designNo ? <span style={{ fontSize: 13, fontWeight: 600, color: '#475569' }}> · Design #{l.designNo}</span> : null}
+                    </div>
+                    <div>
+                      {displayStatus === 'Completed' ? (
+                        <span className="badge-completed">Completed</span>
+                      ) : displayStatus === 'Pending review' ? (
+                        <span className="badge-review">{partyFacingStatusLabel('Pending review', isParty)}</span>
+                      ) : (
+                        <span className="badge-status">{partyFacingStatusLabel(displayStatus, isParty)}</span>
+                      )}
+                    </div>
                   </div>
-                  <div>
-                    {displayStatus === 'Completed' ? (
-                      <span className="badge-completed">Completed</span>
-                    ) : displayStatus === 'Pending review' ? (
-                      <span className="badge-review">{partyFacingStatusLabel('Pending review', isParty)}</span>
-                    ) : (
-                      <span className="badge-status">{partyFacingStatusLabel(displayStatus, isParty)}</span>
+
+                  <div className="pl-mob-body">
+                    <div className="pl-mob-chips">
+                      <span className="fabric-chip">{l.fabric || l.itemType || 'Lawn'}</span>
+                      <span className="info-chip">Colors: {l.colors || 0}</span>
+                      <span className="info-chip">Pieces: {l.pieces || 0}</span>
+                    </div>
+
+                    <div className="pl-mob-info">
+                      {showPartyNameCol && <div>Party: <strong>{getPartyNameLocal(l.partyId, l.partyName)}</strong></div>}
+                      {showWorkspaceCol && <div>Workspace: <strong>{workspaceNameForLot(l)}</strong></div>}
+                      <div>Allot Date: {formatDisplayDate(l.allotDate)}</div>
+                      <div>Complete Date: {displayComplete ? formatDisplayDate(displayComplete) : '—'}</div>
+                      {l.description && <div>Note: {l.description}</div>}
+                    </div>
+
+                    <div className="pl-mob-bill-row">
+                      <span style={{ fontSize: 13, color: '#64748b' }}>{isParty ? 'Your ledger:' : 'Bill Amount:'}</span>
+                      <strong style={{ fontSize: 15, color: '#1e40af' }}>
+                        {partyBillOnly == null ? '—' : `₨${partyBillOnly.toLocaleString()}`}
+                      </strong>
+                    </div>
+                  </div>
+
+                  <div className="pl-mob-footer">
+                    <LazyReceiptThumb
+                      lotId={l.id}
+                      receipt={pe.receipt}
+                      hasReceipt={pe.hasReceipt}
+                      businessOwnerId={normalizedBusinessOwnerId(l.businessOwnerId)}
+                      lotLabel={l.lotNo || l.lotNumber}
+                      onOpen={setReceiptPreview}
+                      emptyLabel="No bill"
+                    />
+
+                    {displayStatus !== 'Completed' && !(displayStatus === 'Pending' && isParty) && (
+                      <select
+                        className="form-select"
+                        style={{ fontSize: 12, padding: '4px 8px', borderRadius: 6, width: 'auto' }}
+                        value={displayStatus === 'Rejected' ? 'Rejected' : displayStatus}
+                        onChange={(e) => handleRowStatusChange(l, e.target.value)}
+                      >
+                        <option value="Pending">{partyFacingStatusLabel('Pending', isParty)}</option>
+                        <option value="In Progress">{partyFacingStatusLabel('In Progress', isParty)}</option>
+                        <option value="Completed">{isParty ? 'Submit for review' : 'Completed'}</option>
+                      </select>
+                    )}
+
+                    {displayStatus !== 'Completed' && (
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm"
+                        onClick={() => openEdit(l, displayStatus)}
+                      >
+                        Edit
+                      </button>
                     )}
                   </div>
                 </div>
-
-                <div className="pl-mob-body">
-                  <div className="pl-mob-row">
-                    <span className="fabric-chip">{l.fabric || l.itemType || 'Lawn'}</span>
-                    <span className="info-chip">Colors: {l.colors || 0}</span>
-                    <span className="info-chip">Pieces: {l.pieces || 0}</span>
-                  </div>
-
-                  <div className="pl-mob-details">
-                    {showPartyNameCol && (
-                      <div>Party: <strong>{getPartyNameLocal(l.partyId, l.partyName)}</strong></div>
-                    )}
-                    {showWorkspaceCol && (
-                      <div>Workspace: {workspaceNameForLot(l)}</div>
-                    )}
-                    <div>Allot Date: {formatDisplayDate(l.allotDate)}</div>
-                    <div>Complete Date: {displayComplete ? formatDisplayDate(displayComplete) : '—'}</div>
-                    {l.description && <div>Desc: {l.description}</div>}
-                  </div>
-
-                  <div className="pl-mob-amount-row">
-                    <span className="amount-label">{isParty ? 'Your ledger:' : 'Bill Amount:'}</span>
-                    <span className="amount-val" style={{ color: '#1e40af', fontSize: 15, fontWeight: 700 }}>
-                      {partyBillOnly == null ? '—' : `₨${partyBillOnly.toLocaleString()}`}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="pl-mob-actions">
-                  <LazyReceiptThumb
-                    lotId={l.id}
-                    receipt={pe.receipt}
-                    hasReceipt={pe.hasReceipt}
-                    businessOwnerId={normalizedBusinessOwnerId(l.businessOwnerId)}
-                    lotLabel={l.lotNo || l.lotNumber}
-                    onOpen={setReceiptPreview}
-                    emptyLabel="No bill"
-                  />
-
-                  {displayStatus !== 'Completed' && !(displayStatus === 'Pending' && isParty) && (
-                    <select
-                      className="form-select"
-                      style={{ fontSize: 12, padding: '4px 8px', borderRadius: 6, width: 'auto' }}
-                      value={displayStatus === 'Rejected' ? 'Rejected' : displayStatus}
-                      onChange={(e) => handleRowStatusChange(l, e.target.value)}
-                    >
-                      <option value="Pending">{partyFacingStatusLabel('Pending', isParty)}</option>
-                      <option value="In Progress">{partyFacingStatusLabel('In Progress', isParty)}</option>
-                      <option value="Completed">{isParty ? 'Submit for review' : 'Completed'}</option>
-                    </select>
-                  )}
-
-                  {displayStatus !== 'Completed' && (
-                    <button
-                      type="button"
-                      className="btn btn-ghost btn-sm"
-                      onClick={() => openEdit(l, displayStatus)}
-                    >
-                      Edit
-                    </button>
-                  )}
-                </div>
-              </div>
-            );
-          })
-        )}
-      </div>
+              );
+            })
+          )}
+        </div>
+      )}
       {filtered.length > 0 && (
         <div
           style={{

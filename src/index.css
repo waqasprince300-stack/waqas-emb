@@ -2203,73 +2203,75 @@ tbody tr:last-child td {
   }
 }
 
-/* Tile / Grid View Styles */
+/* Ultra-Compact Tile / Grid View Styles */
 .tiles-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 16px;
+  display: grid !important;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 12px;
   width: 100%;
-  margin-top: 14px;
+  margin-top: 12px;
   margin-bottom: 16px;
 }
 
 .lot-tile-card {
   background: #ffffff;
   border: 1px solid var(--border, #e2e8f0);
-  border-radius: 12px;
-  padding: 16px;
+  border-radius: 10px;
+  padding: 10px 12px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  gap: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  transition: all 0.15s ease;
 }
 
 .lot-tile-card:hover {
+  border-color: #3b82f6;
   transform: translateY(-2px);
-  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 4px 10px rgba(59, 130, 246, 0.12);
 }
 
 .lot-tile-header {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
+  gap: 6px;
   border-bottom: 1px solid #f1f5f9;
-  padding-bottom: 10px;
+  padding-bottom: 6px;
 }
 
 .lot-tile-number {
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 700;
   color: #1e40af;
 }
 
 .lot-tile-design {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   color: #334155;
-  margin-top: 2px;
+  margin-top: 1px;
 }
 
 .lot-tile-body {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
 .lot-tile-chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 4px;
   align-items: center;
 }
 
 .lot-tile-info {
-  font-size: 12.5px;
+  font-size: 11.5px;
   color: #475569;
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 2px;
 }
 
 .lot-tile-bill {
@@ -2277,8 +2279,9 @@ tbody tr:last-child td {
   justify-content: space-between;
   align-items: center;
   background: #f8fafc;
-  padding: 8px 12px;
-  border-radius: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  font-size: 12px;
   font-weight: 600;
 }
 
@@ -2286,11 +2289,19 @@ tbody tr:last-child td {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  padding-top: 10px;
+  gap: 6px;
+  padding-top: 6px;
   border-top: 1px dashed #e2e8f0;
   flex-wrap: wrap;
 }
+
+@media screen and (max-width: 768px) {
+  .tiles-grid {
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 10px;
+  }
+}
+
 
 
 
