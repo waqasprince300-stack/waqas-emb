@@ -927,7 +927,7 @@ export default function GhausiaCollection() {
         fromBillable
           ? recordOwnerBillableSettlementPayment({ ...lot, ...lotUpdate }, billAmount, today)
           : recordOwnerReceivedForCompletedLot({ ...lot, ...lotUpdate }, billAmount, today)
-      ).catch((_e) => {
+      ).catch(() => {
         Swal.fire({
           icon: 'warning',
           title: 'Lot updated; payment failed',

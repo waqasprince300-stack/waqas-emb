@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
 import { Modal, FormGroup, SearchBar, EmptyState, ConfirmDialog } from '../components/UI';
 import Loader from '../components/Loader';
@@ -10,8 +10,6 @@ import {
   dateRangeLabel,
   formatDisplayDateTime,
 } from '../utils/dateFilters';
-
-/* eslint-disable react-hooks/exhaustive-deps */
 
 function toPartyFormFields(initial) {
   if (!initial) return { name: '', phone: '', address: '' };
@@ -225,22 +223,28 @@ export default function Parties() {
   }, [currentPage, totalPages]);
 
   /** Align with Party Ledger: exclude pending_review from party "completed" bill stats. */
-  const lotStatusKey = (l) => {
-    const ls = String(l.status || '')
-      .toLowerCase()
-      .trim();
-    if (ls === 'pending approval') return 'pending_approval';
-    if (ls === 'rejected') return 'rejected';
-    const pe = reportingPartyEdits[l.id] || {};
-    const raw = String(pe.overrideStatus || l.status || '').toLowerCase();
-    if (raw === 'received back') return 'completed';
-    return raw.replace(/\s+/g, '_').replace('/', '_');
-  };
+  const lotStatusKey = useCallback(
+    (l) => {
+      const ls = String(l.status || '')
+        .toLowerCase()
+        .trim();
+      if (ls === 'pending approval') return 'pending_approval';
+      if (ls === 'rejected') return 'rejected';
+      const pe = reportingPartyEdits[l.id] || {};
+      const raw = String(pe.overrideStatus || l.status || '').toLowerCase();
+      if (raw === 'received back') return 'completed';
+      return raw.replace(/\s+/g, '_').replace('/', '_');
+    },
+    [reportingPartyEdits]
+  );
 
-  const lotBillAmount = (l) => {
-    const pe = reportingPartyEdits[l.id] || {};
-    return Number(pe.partyBillAmount !== undefined ? pe.partyBillAmount : l.billAmount || 0);
-  };
+  const lotBillAmount = useCallback(
+    (l) => {
+      const pe = reportingPartyEdits[l.id] || {};
+      return Number(pe.partyBillAmount !== undefined ? pe.partyBillAmount : l.billAmount || 0);
+    },
+    [reportingPartyEdits]
+  );
 
   const EMPTY_LOT_STATS = {
     total: 0,
@@ -255,7 +259,6 @@ export default function Parties() {
   };
 
   /** Pre-compute stats for every party in one pass instead of scanning all lots per card. */
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   const statsByPartyId = useMemo(() => {
     const lotsByParty = new Map();
     for (const l of rangedLots) {
@@ -322,7 +325,7 @@ export default function Parties() {
       });
     }
     return result;
-  }, [parties, rangedLots, rangedPayments, reportingPartyEdits]);
+  }, [parties, rangedLots, rangedPayments, lotBillAmount, lotStatusKey]);
 
   const getLotStats = (partyId) => statsByPartyId.get(String(partyId ?? '')) || EMPTY_LOT_STATS;
 

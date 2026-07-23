@@ -13,8 +13,6 @@ import { connectRealtime, disconnectRealtime, onDataChanged } from '../services/
 import { useAuth } from './AuthContext';
 import { normalizedBusinessOwnerId, workspaceLabelEmbeddedInLot } from '../utils/businessWorkspace';
 
-/* eslint-disable react-hooks/exhaustive-deps */
-
 const AppContext = createContext(null);
 
 const normalizeDateString = (value) => {
@@ -537,9 +535,9 @@ export function AppProvider({ children }) {
   const [viewAllWorkspaces, setViewAllWorkspaces] = useState(readViewAllWorkspaces);
 
   /** Local CRUD keeps state in sync per workspace; drop cached bootstrap so a workspace switch refetches fresh data. */
-  const invalidateBootstrapCache = () => {
+  const invalidateBootstrapCache = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ['bootstrap'] });
-  };
+  }, [queryClient]);
 
   /**
    * Background refresh of all app data (no full-screen loader). Used on page navigation so each
@@ -588,7 +586,7 @@ export function AppProvider({ children }) {
     [isAuthenticated, isRefreshSuppressed, user?.role, queryClient, runLightBootstrapRefresh]
   );
 
-  const selectBusinessOwner = (id) => {
+  const selectBusinessOwner = useCallback((id) => {
     const nextId = String(id || '');
     if (nextId === String(activeBusinessOwnerId || '') && !viewAllWorkspaces) {
       return;
@@ -604,16 +602,16 @@ export function AppProvider({ children }) {
     setViewAllWorkspaces(false);
     localStorage.setItem(BUSINESS_OWNER_KEY, nextId);
     setActiveBusinessOwnerId(nextId);
-  };
+  }, [activeBusinessOwnerId, viewAllWorkspaces]);
 
-  const selectAllWorkspacesView = () => {
+  const selectAllWorkspacesView = useCallback(() => {
     try {
       localStorage.setItem(WORKSPACE_VIEW_ALL_KEY, '1');
     } catch {
       /* ignore */
     }
     setViewAllWorkspaces(true);
-  };
+  }, []);
 
   useEffect(() => {
     const clearAllData = () => {
@@ -897,15 +895,15 @@ export function AppProvider({ children }) {
     if (!isAuthenticated) disconnectRealtime();
   }, [isAuthenticated]);
 
-  const createBusinessOwner = async (data) => {
+  const createBusinessOwner = useCallback(async (data) => {
     const created = await apiService.createBusinessOwner(data);
     invalidateBootstrapCache();
     setBusinessOwners((current) => [...current, created]);
     selectBusinessOwner(created.id || created._id);
     return created;
-  };
+  }, [invalidateBootstrapCache, selectBusinessOwner]);
 
-  const deleteBusinessOwner = async (id, opts = {}) => {
+  const deleteBusinessOwner = useCallback(async (id, opts = {}) => {
     const idStr = String(id ?? '').trim();
     if (!idStr) return;
     await apiService.deleteBusinessOwner(id, opts);
@@ -963,28 +961,28 @@ export function AppProvider({ children }) {
         selectBusinessOwner(String(remaining[0].id || remaining[0]._id));
       }
     }
-  };
+  }, [activeBusinessOwnerId, adminReportingLots, businessOwners, ghausiaLots, invalidateBootstrapCache, selectBusinessOwner]);
 
-  const addParty = async (p) => {
+  const addParty = useCallback(async (p) => {
     const created = normalizeParty(await apiService.createParty(p));
     setParties((arr) => [...arr, created]);
     return created;
-  };
+  }, []);
 
-  const updateParty = async (id, p) => {
+  const updateParty = useCallback(async (id, p) => {
     const updated = normalizeParty(await apiService.updateParty(id, p));
     const idStr = String(id);
     setParties((arr) => arr.map((x) => (String(x.id) === idStr ? updated : x)));
     return updated;
-  };
+  }, []);
 
-  const deleteParty = async (id) => {
+  const deleteParty = useCallback(async (id) => {
     await apiService.deleteParty(id);
     const idStr = String(id);
     setParties((arr) => arr.filter((x) => String(x.id) !== idStr));
-  };
+  }, []);
 
-  const addLot = async (lot, opts = {}) => {
+  const addLot = useCallback(async (lot, opts = {}) => {
     const { businessOwnerId } = opts;
     const created = normalizeLotData(
       await trackWrite(apiService.createGhausiaLot(lot, businessOwnerId))
@@ -994,9 +992,9 @@ export function AppProvider({ children }) {
       setAdminReportingLots((arr) => [...arr, created]);
     }
     return created;
-  };
+  }, [trackWrite, user?.role]);
 
-  const updateLot = async (id, patch, opts = {}) => {
+  const updateLot = useCallback(async (id, patch, opts = {}) => {
     const { businessOwnerId } = opts;
     const updated = normalizeLotData(
       await trackWrite(apiService.updateGhausiaLot(id, patch, businessOwnerId))
@@ -1014,9 +1012,9 @@ export function AppProvider({ children }) {
       setPartyCrossLots((arr) => arr.map((x) => (String(x.id) === idStr ? updated : x)));
     }
     return updated;
-  };
+  }, [trackWrite, user?.role]);
 
-  const deleteLot = async (id, opts = {}) => {
+  const deleteLot = useCallback(async (id, opts = {}) => {
     const { businessOwnerId } = opts;
     await trackWrite(apiService.deleteGhausiaLot(id, businessOwnerId));
     const idStr = String(id);
@@ -1027,9 +1025,9 @@ export function AppProvider({ children }) {
     if (user?.role === 'party') {
       setPartyCrossLots((arr) => arr.filter((x) => String(x.id) !== idStr));
     }
-  };
+  }, [trackWrite, user?.role]);
 
-  const mergeLotAcrossCollections = (raw) => {
+  const mergeLotAcrossCollections = useCallback((raw) => {
     const normalized = normalizeLotData(raw);
     const idStr = String(normalized.id);
     const apply = (arr) =>
@@ -1044,9 +1042,9 @@ export function AppProvider({ children }) {
       setPartyCrossLots(apply);
     }
     return normalized;
-  };
+  }, [user?.role]);
 
-  const approveLotCompletion = async (lotId, opts = {}) => {
+  const approveLotCompletion = useCallback(async (lotId, opts = {}) => {
     const { businessOwnerId, ownerBillingChoice, ownerBillAmount, resolvedBusinessBill } = opts;
     const raw = await trackWrite(
       apiService.approveLotCompletion(lotId, {
@@ -1091,9 +1089,9 @@ export function AppProvider({ children }) {
     setAdminReportingPartyEdits(mergePe);
     setPartyCrossPartyEdits(mergePe);
     return normalized;
-  };
+  }, [mergeLotAcrossCollections, trackWrite]);
 
-  const rejectLotCompletion = async (lotId, rejectionNote, opts = {}) => {
+  const rejectLotCompletion = useCallback(async (lotId, rejectionNote, opts = {}) => {
     const { businessOwnerId } = opts;
     const raw = await trackWrite(
       apiService.rejectLotCompletion(lotId, rejectionNote, businessOwnerId)
@@ -1112,9 +1110,9 @@ export function AppProvider({ children }) {
     setAdminReportingPartyEdits(mergePe);
     setPartyCrossPartyEdits(mergePe);
     return normalized;
-  };
+  }, [mergeLotAcrossCollections, trackWrite]);
 
-  const updatePartyEdit = async (lotId, data, opts = {}) => {
+  const updatePartyEdit = useCallback(async (lotId, data, opts = {}) => {
     const { businessOwnerId } = opts;
     try {
       const result = await trackWrite(
@@ -1147,9 +1145,9 @@ export function AppProvider({ children }) {
       console.error('Error updating party edit:', error);
       throw error;
     }
-  };
+  }, [trackWrite, user?.role]);
 
-  const addPayment = async (p, opts = {}) => {
+  const addPayment = useCallback(async (p, opts = {}) => {
     const { businessOwnerId } = opts;
     const payment = await trackWrite(
       apiService.createPayment({ ...p, amount: Number(p.amount) }, businessOwnerId)
@@ -1162,9 +1160,9 @@ export function AppProvider({ children }) {
       setPartyCrossPayments((arr) => [...arr, payment]);
     }
     return payment;
-  };
+  }, [trackWrite, user?.role]);
 
-  const deletePayment = async (id, opts = {}) => {
+  const deletePayment = useCallback(async (id, opts = {}) => {
     const { businessOwnerId } = opts;
     await trackWrite(apiService.deletePayment(id, businessOwnerId));
     const idStr = String(id);
@@ -1175,18 +1173,18 @@ export function AppProvider({ children }) {
     if (user?.role === 'party') {
       setPartyCrossPayments((arr) => arr.filter((x) => String(x.id) !== idStr));
     }
-  };
+  }, [trackWrite, user?.role]);
 
   const partiesById = useMemo(() => {
     const map = new Map();
     for (const p of parties) map.set(String(p.id), p);
     return map;
   }, [parties]);
-  const getPartyById = (id) => {
+  const getPartyById = useCallback((id) => {
     if (id == null || id === '') return undefined;
     return partiesById.get(String(id));
-  };
-  const getPartyName = (id) => getPartyById(id)?.name || 'Unknown';
+  }, [partiesById]);
+  const getPartyName = useCallback((id) => getPartyById(id)?.name || 'Unknown', [getPartyById]);
 
   const reportingLots = user?.role === 'admin' ? adminReportingLots : ghausiaLots;
   const reportingPayments = user?.role === 'admin' ? adminReportingPayments : payments;
@@ -1271,18 +1269,19 @@ export function AppProvider({ children }) {
       partyCrossPayments,
       businessOwners,
       activeBusinessOwnerId,
+      selectBusinessOwner,
+      selectAllWorkspacesView,
       viewAllWorkspaces,
       createBusinessOwner,
       deleteBusinessOwner,
-      selectBusinessOwner,
+      getPartyById,
+      getPartyName,
       initialDataLoading,
       initialDataPhase,
       scopedDataLoading,
       backgroundRefreshing,
       bootstrapLoadError,
       refreshData,
-      getPartyById,
-      getPartyName,
       notifications,
       notificationUnreadCount,
       refreshNotifications,

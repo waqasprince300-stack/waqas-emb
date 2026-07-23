@@ -10,14 +10,11 @@ const fmtMoney = (n) =>
 
 const fmtWhen = (iso) => formatDisplayDateTime(iso);
 
-/* eslint-disable react-hooks/exhaustive-deps */
-
 export default function PersonalKhataShared() {
   const location = useLocation();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   const snapshot = useMemo(
     () => parseKhataShareFromLocation(location),
-    [location.pathname, location.search, location.hash]
+    [location]
   );
 
   const [expanded, setExpanded] = useState({});

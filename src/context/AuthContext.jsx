@@ -67,7 +67,6 @@ export function AuthProvider({ children }) {
     return nextSession.user;
   }, []);
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     const u = session?.user;
     if (!u || u.status !== 'approved' || u.role === 'admin' || u.role === 'super_admin') return;
