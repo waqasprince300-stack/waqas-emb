@@ -2054,3 +2054,51 @@ tbody tr:last-child td {
   }
 }
 
+/* Mobile Payments Card View */
+.mobile-only-payment-cards {
+  display: none;
+}
+
+@media screen and (max-width: 768px) {
+  .desktop-only-table {
+    display: none !important;
+  }
+  .mobile-only-payment-cards {
+    display: flex !important;
+    flex-direction: column;
+    gap: 12px;
+    width: 100%;
+    margin-top: 14px;
+  }
+  .payment-card-mobile {
+    background: #ffffff;
+    border: 1px solid var(--border, #e2e8f0);
+    border-radius: 12px;
+    padding: 14px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  }
+  .pmc-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #f1f5f9;
+    padding-bottom: 8px;
+  }
+  .pmc-body {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .pmc-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-top: 8px;
+    border-top: 1px dashed #e2e8f0;
+  }
+}
+
+

@@ -1051,8 +1051,8 @@ export default function Payments() {
         </span>
       </div>
 
-      {/* Table */}
-      <div className="table-wrapper">
+      {/* Table for Desktop & Tablet */}
+      <div className="table-wrapper desktop-only-table">
         <div className="table-scroll">
           <table>
             <thead>
@@ -1221,6 +1221,141 @@ export default function Payments() {
             </tbody>
           </table>
         </div>
+      </div>
+
+      {/* Mobile Card List — zero horizontal scroll */}
+      <div className="mobile-only-payment-cards">
+        {filtered.length === 0 ? (
+          <EmptyState message="No payment records found" />
+        ) : (
+          paginatedPayments.map((p) => {
+            const pt = presentationType(p, isParty);
+            const partyReceived = isParty && pt === 'Received';
+            const partyWorkBill = isParty && pt === 'Bill';
+            const ownerBill = !isParty && isOwnerBillSettlement(p);
+            const badgeGreen = isParty ? partyReceived : p.type === 'Received';
+
+            const typeLabel = isParty
+              ? pt === 'Bill'
+                ? 'Work bill'
+                : pt
+              : adminPaymentTypeLabel(p);
+
+            const partyLabel = isParty
+              ? String(p.party || '—')
+              : adminPaymentPartyLabel(p, businessOwners);
+
+            const amt = Number(p.amount ?? 0);
+            const showPlus = isParty ? pt === 'Received' || pt === 'Bill' : p.type !== 'Paid';
+            const amtColor = partyWorkBill
+              ? '#dc2626'
+              : partyReceived
+                ? '#15803d'
+                : showPlus
+                  ? '#15803d'
+                  : '#dc2626';
+
+            const { lotLabel, designLabel } = resolveLinkedLotDesignDisplay(
+              p,
+              lotsLookupForLinks
+            );
+
+            return (
+              <div
+                key={`mob-${String(p.id)}-${p._synthetic ? 'b' : 'p'}`}
+                className="payment-card-mobile"
+              >
+                <div className="pmc-header">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span
+                      style={{
+                        background: ownerBill ? '#FFFBEB' : badgeGreen ? '#F0FDF4' : '#FEF2F2',
+                        color: ownerBill ? '#92400E' : badgeGreen ? '#166534' : '#991B1B',
+                        border: `1px solid ${
+                          ownerBill ? '#FCD34D' : badgeGreen ? '#BBF7D0' : '#FECACA'
+                        }`,
+                        borderRadius: 20,
+                        padding: '2px 10px',
+                        fontSize: 11,
+                        fontWeight: 600,
+                      }}
+                    >
+                      {typeLabel}
+                    </span>
+                    <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                      {formatDisplayDate(p.date)}
+                    </span>
+                  </div>
+                  <span style={{ fontSize: 15, fontWeight: 700, color: amtColor }}>
+                    {showPlus ? '+' : '-'}₨{amt.toLocaleString()}
+                  </span>
+                </div>
+
+                <div className="pmc-body">
+                  {!isParty && (
+                    <div style={{ fontSize: 13, fontWeight: 600, color: '#1e293b' }}>
+                      Party: {partyLabel}
+                    </div>
+                  )}
+                  {isAdmin && (
+                    <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
+                      Owner: {p._synthetic ? '—' : paymentOwnerColumn(p)}
+                    </div>
+                  )}
+                  {lotLabel && (
+                    <div
+                      style={{
+                        marginTop: 6,
+                        background: '#EFF6FF',
+                        color: '#1e40af',
+                        border: '1px solid #BFDBFE',
+                        borderRadius: 6,
+                        padding: '4px 8px',
+                        fontSize: 12,
+                        fontWeight: 600,
+                        display: 'inline-block',
+                      }}
+                    >
+                      Lot #{lotLabel} {designLabel ? `· Design: ${designLabel}` : ''}
+                    </div>
+                  )}
+                  {p.note && (
+                    <div style={{ fontSize: 12.5, color: '#475569', marginTop: 4 }}>
+                      Note: {p.note}
+                    </div>
+                  )}
+                </div>
+
+                <div className="pmc-footer">
+                  <PaymentSlipCell payment={p} isParty={isParty} />
+                  {isAdmin && !p._synthetic && (
+                    <button
+                      className="btn-icon"
+                      onClick={() => handleDelete(p)}
+                      title="Delete payment"
+                      style={{ marginLeft: 'auto' }}
+                    >
+                      <svg
+                        width="14"
+                        height="14"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="#dc2626"
+                        strokeWidth="2"
+                      >
+                        <polyline points="3 6 5 6 21 6" />
+                        <path d="M19 6l-1 14H6L5 6" />
+                        <path d="M10 11v6" />
+                        <path d="M14 11v6" />
+                        <path d="M9 6V4h6v2" />
+                      </svg>
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })
+        )}
       </div>
       {filtered.length > 0 && (
         <div
