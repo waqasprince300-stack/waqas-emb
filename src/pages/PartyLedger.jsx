@@ -2128,6 +2128,11 @@ export default function PartyLedger() {
                           <div
                             style={{
                               display: 'flex',
+                              gap: 8,
+                              flexWrap: 'wrap',
+                              alignItems: 'center',
+                            }}
+                          >
                             {isAdmin &&
                               pe.billRevisionRequest &&
                               String(pe.billRevisionRequest.status || '').toLowerCase() ===
