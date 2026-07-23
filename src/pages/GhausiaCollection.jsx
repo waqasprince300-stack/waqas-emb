@@ -755,6 +755,7 @@ export default function GhausiaCollection() {
     [customStart, customEnd]
   );
   const [lotTableTab, setLotTableTab] = useState('others');
+  const [viewMode, setViewMode] = useState('tile');
   const [payModal, setPayModal] = useState(false);
   const [payForm, setPayForm] = useState({
     type: 'Received',
@@ -2007,206 +2008,318 @@ export default function GhausiaCollection() {
         )}
       </div>
 
-      {/* Table tabs */}
+      {/* Table tabs & View Mode Switcher */}
       <div
         role="tablist"
         aria-label="Lots by completion"
         style={{
           display: 'flex',
-          gap: 4,
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 12,
           marginBottom: 12,
           borderBottom: '1px solid var(--border)',
+          flexWrap: 'wrap',
         }}
       >
-        {[
-          { id: 'others', label: othersTabStatusLabel, count: othersTabCount, hint: othersTabHint },
-          {
-            id: 'completed',
-            label: 'Completed',
-            count: completedLotsCount,
-            hint: 'Lots marked completed',
-          },
-        ].map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            role="tab"
-            aria-selected={lotTableTab === tab.id}
-            title={tab.hint}
-            onClick={() => setLotTableTab(tab.id)}
-            style={{
-              padding: '10px 18px',
-              fontSize: 14,
-              fontWeight: 600,
-              border: 'none',
-              borderBottom: lotTableTab === tab.id ? '2px solid #1e40af' : '2px solid transparent',
-              marginBottom: -1,
-              background: 'transparent',
-              color: lotTableTab === tab.id ? '#1e40af' : 'var(--text-secondary)',
-              cursor: 'pointer',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 8,
-            }}
-          >
-            {tab.label}
-            <span
+        <div style={{ display: 'flex', gap: 4 }}>
+          {[
+            { id: 'others', label: othersTabStatusLabel, count: othersTabCount, hint: othersTabHint },
+            {
+              id: 'completed',
+              label: 'Completed',
+              count: completedLotsCount,
+              hint: 'Lots marked completed',
+            },
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              role="tab"
+              aria-selected={lotTableTab === tab.id}
+              title={tab.hint}
+              onClick={() => setLotTableTab(tab.id)}
               style={{
-                fontSize: 12,
-                fontWeight: 700,
-                background: lotTableTab === tab.id ? '#EFF6FF' : '#F3F4F6',
-                color: lotTableTab === tab.id ? '#1e40af' : 'var(--text-muted)',
-                padding: '2px 8px',
-                borderRadius: 999,
+                padding: '10px 18px',
+                fontSize: 14,
+                fontWeight: 600,
+                border: 'none',
+                borderBottom: lotTableTab === tab.id ? '2px solid #1e40af' : '2px solid transparent',
+                marginBottom: -1,
+                background: 'transparent',
+                color: lotTableTab === tab.id ? '#1e40af' : 'var(--text-secondary)',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 8,
               }}
             >
-              {tab.count}
-            </span>
-          </button>
-        ))}
-      </div>
+              {tab.label}
+              <span
+                style={{
+                  fontSize: 12,
+                  fontWeight: 700,
+                  background: lotTableTab === tab.id ? '#EFF6FF' : '#F3F4F6',
+                  color: lotTableTab === tab.id ? '#1e40af' : 'var(--text-muted)',
+                  padding: '2px 8px',
+                  borderRadius: 999,
+                }}
+              >
+                {tab.count}
+              </span>
+            </button>
+          ))}
+        </div>
 
-      {/* Table for Desktop & Tablet */}
-      <div className="table-wrapper desktop-only-table">
-        <div className="table-scroll">
-          <table>
-            <thead>
-              <tr>
-                <th>Lot No</th>
-                <th>Design No</th>
-                <th>Description</th>
-                <th>Item Type</th>
-                <th>Colors</th>
-                <th>Pieces</th>
-                <th>Allot Date</th>
-                <th>Business</th>
-                <th>Party Name</th>
-                <th>Status</th>
-                <th style={{ textAlign: 'right' }}>Bill Amount</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.length === 0 ? (
-                <tr>
-                  <td colSpan={12}>
-                    <EmptyState message="No lots found" />
-                  </td>
-                </tr>
-              ) : (
-                paginatedLots.map((l) => (
-                  <tr key={l.id}>
-                    <td style={{ fontWeight: 700, color: '#1e40af' }}>{l.lotNumber}</td>
-                    <td style={{ fontWeight: 600 }}>{l.designNo}</td>
-                    <td>{l.description}</td>
-                    <td>
-                      <span
-                        style={{
-                          background: '#F0F9FF',
-                          color: '#0369a1',
-                          border: '1px solid #BAE6FD',
-                          borderRadius: 6,
-                          padding: '2px 8px',
-                          fontSize: 12,
-                        }}
-                      >
-                        {l.itemType || l.fabric}
-                      </span>
-                    </td>
-                    <td>{l.colors}</td>
-                    <td>{l.pieces}</td>
-                    <td>{formatDisplayDate(l.allotDate)}</td>
-                    <td style={{ color: 'var(--text-secondary)', fontSize: 13, maxWidth: 160 }}>
-                      {workspaceDisplayTitleForLot(l, businessOwners)}
-                    </td>
-                    <td>
-                      <select
-                        className="form-select"
-                        style={{
-                          width: '100%',
-                          fontSize: 13,
-                          padding: '4px 8px',
-                          border: '1px solid var(--border)',
-                          borderRadius: 4,
-                        }}
-                        value={l.partyId || ''}
-                        onChange={(e) => handlePartyChange(l.id, e.target.value)}
-                      >
-                        <option value="">— Select Party —</option>
-                        {parties.map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {p.name}
-                          </option>
-                        ))}
-                      </select>
-                    </td>
-                    <td>
-                      {lotTableTab === 'completed' ? (
-                        <span
-                          style={{
-                            fontSize: 12,
-                            color: 'green',
-                            marginTop: 3,
-                            fontWeight: '500',
-                            padding: '2px 8px',
-                            borderRadius: 6,
-                            background: '#DCFCE7',
-                            border: '1px solid #DCFCE7',
-                          }}
-                        >
-                          Completed
-                        </span>
-                      ) : (
-                        <>
-                          <LotStatusSelect
-                            value={l.status}
-                            options={STATUS_OPTIONS}
-                            disabled={completionPersistingLotId === l.id || inlineSummaryBusy}
-                            onChange={(next) => setLotStatus(l, next)}
-                          />
-                          {l.dispatchDate && l.status !== 'pending' && (
-                            <div
-                              style={{
-                                fontSize: 12,
-                                color: '#dc2626',
-                                marginTop: 3,
-                                fontWeight: '500',
-                              }}
-                            >
-                              Dispatch: {formatDisplayDate(l.dispatchDate)}
-                            </div>
-                          )}
-                          {l.receivedBackDate && (
-                            <div
-                              style={{
-                                fontSize: 12,
-                                color: 'green',
-                                marginTop: 1,
-                                fontWeight: '500',
-                              }}
-                            >
-                              Received: {formatDisplayDate(l.receivedBackDate)}
-                            </div>
-                          )}
-                        </>
-                      )}
-                    </td>
-                    <td style={{ textAlign: 'right', fontWeight: 700, color: '#1e40af' }}>
-                      ₨{getOwnerBillableAmount(l).toLocaleString()}
-                    </td>
-                    <td>
-                      <div style={{ display: 'flex', gap: 6 }}>
-                        <ActionBtn variant="edit" onClick={() => openEdit(l)} />
-                        <ActionBtn variant="delete" onClick={() => setDeleteTarget(l)} />
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+        {/* View Switcher: Table View vs Tile View */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+          <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>View:</span>
+          <button
+            type="button"
+            className={`btn btn-sm ${viewMode === 'table' ? 'btn-primary' : 'btn-ghost'}`}
+            onClick={() => setViewMode('table')}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 10px', fontSize: 12 }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <line x1="3" y1="6" x2="21" y2="6"/>
+              <line x1="3" y1="12" x2="21" y2="12"/>
+              <line x1="3" y1="18" x2="21" y2="18"/>
+            </svg>
+            Table
+          </button>
+          <button
+            type="button"
+            className={`btn btn-sm ${viewMode === 'tile' ? 'btn-primary' : 'btn-ghost'}`}
+            onClick={() => setViewMode('tile')}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 10px', fontSize: 12 }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <rect x="3" y="3" width="7" height="7"/>
+              <rect x="14" y="3" width="7" height="7"/>
+              <rect x="14" y="14" width="7" height="7"/>
+              <rect x="3" y="14" width="7" height="7"/>
+            </svg>
+            Tiles
+          </button>
         </div>
       </div>
+
+      {/* Table vs Tile View */}
+      {viewMode === 'table' ? (
+        <div className="table-wrapper desktop-only-table">
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Lot No</th>
+                  <th>Design No</th>
+                  <th>Description</th>
+                  <th>Item Type</th>
+                  <th>Colors</th>
+                  <th>Pieces</th>
+                  <th>Allot Date</th>
+                  <th>Business</th>
+                  <th>Party Name</th>
+                  <th>Status</th>
+                  <th style={{ textAlign: 'right' }}>Bill Amount</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.length === 0 ? (
+                  <tr>
+                    <td colSpan={12}>
+                      <EmptyState message="No lots found" />
+                    </td>
+                  </tr>
+                ) : (
+                  paginatedLots.map((l) => (
+                    <tr key={l.id}>
+                      <td style={{ fontWeight: 700, color: '#1e40af' }}>{l.lotNumber}</td>
+                      <td style={{ fontWeight: 600 }}>{l.designNo}</td>
+                      <td>{l.description}</td>
+                      <td>
+                        <span
+                          style={{
+                            background: '#F0F9FF',
+                            color: '#0369a1',
+                            border: '1px solid #BAE6FD',
+                            borderRadius: 6,
+                            padding: '2px 8px',
+                            fontSize: 12,
+                          }}
+                        >
+                          {l.itemType || l.fabric}
+                        </span>
+                      </td>
+                      <td>{l.colors}</td>
+                      <td>{l.pieces}</td>
+                      <td>{formatDisplayDate(l.allotDate)}</td>
+                      <td style={{ color: 'var(--text-secondary)', fontSize: 13, maxWidth: 160 }}>
+                        {workspaceDisplayTitleForLot(l, businessOwners)}
+                      </td>
+                      <td>
+                        <select
+                          className="form-select"
+                          style={{
+                            width: '100%',
+                            fontSize: 13,
+                            padding: '4px 8px',
+                            border: '1px solid var(--border)',
+                            borderRadius: 4,
+                          }}
+                          value={l.partyId || ''}
+                          onChange={(e) => handlePartyChange(l.id, e.target.value)}
+                        >
+                          <option value="">— Select Party —</option>
+                          {parties.map((p) => (
+                            <option key={p.id} value={p.id}>
+                              {p.name}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                      <td>
+                        {lotTableTab === 'completed' ? (
+                          <span
+                            style={{
+                              fontSize: 12,
+                              color: 'green',
+                              marginTop: 3,
+                              fontWeight: '500',
+                              padding: '2px 8px',
+                              borderRadius: 6,
+                              background: '#DCFCE7',
+                              border: '1px solid #DCFCE7',
+                            }}
+                          >
+                            Completed
+                          </span>
+                        ) : (
+                          <>
+                            <LotStatusSelect
+                              value={l.status}
+                              options={STATUS_OPTIONS}
+                              disabled={completionPersistingLotId === l.id || inlineSummaryBusy}
+                              onChange={(next) => setLotStatus(l, next)}
+                            />
+                            {l.dispatchDate && l.status !== 'pending' && (
+                              <div
+                                style={{
+                                  fontSize: 12,
+                                  color: '#dc2626',
+                                  marginTop: 3,
+                                  fontWeight: '500',
+                                }}
+                              >
+                                Dispatch: {formatDisplayDate(l.dispatchDate)}
+                              </div>
+                            )}
+                            {l.receivedBackDate && (
+                              <div
+                                style={{
+                                  fontSize: 12,
+                                  color: 'green',
+                                  marginTop: 1,
+                                  fontWeight: '500',
+                                }}
+                              >
+                                Received: {formatDisplayDate(l.receivedBackDate)}
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </td>
+                      <td style={{ textAlign: 'right', fontWeight: 700, color: '#1e40af' }}>
+                        ₨{getOwnerBillableAmount(l).toLocaleString()}
+                      </td>
+                      <td>
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          <ActionBtn variant="edit" onClick={() => openEdit(l)} />
+                          <ActionBtn variant="delete" onClick={() => setDeleteTarget(l)} />
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : (
+        /* Tile / Grid View */
+        <div className="tiles-grid desktop-only-table">
+          {filtered.length === 0 ? (
+            <EmptyState message="No lots found" />
+          ) : (
+            paginatedLots.map((l) => (
+              <div key={`gh-tile-${l.id}`} className="lot-tile-card">
+                <div className="lot-tile-header">
+                  <div>
+                    <div className="lot-tile-number">Lot #{l.lotNumber || l.lotNo}</div>
+                    {l.designNo ? <div className="lot-tile-design">Design #{l.designNo}</div> : null}
+                  </div>
+                  <div>
+                    {lotTableTab === 'completed' ? (
+                      <span className="badge-completed">Completed</span>
+                    ) : (
+                      <LotStatusSelect
+                        value={l.status}
+                        options={STATUS_OPTIONS}
+                        disabled={completionPersistingLotId === l.id || inlineSummaryBusy}
+                        onChange={(next) => setLotStatus(l, next)}
+                      />
+                    )}
+                  </div>
+                </div>
+
+                <div className="lot-tile-body">
+                  <div className="lot-tile-chips">
+                    <span className="fabric-chip">{l.itemType || l.fabric || 'Lawn'}</span>
+                    <span className="info-chip">Colors: {l.colors || 0}</span>
+                    <span className="info-chip">Pieces: {l.pieces || 0}</span>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>Party:</label>
+                    <select
+                      className="form-select"
+                      style={{ fontSize: 12, padding: '4px 8px', borderRadius: 6, flex: 1 }}
+                      value={l.partyId || ''}
+                      onChange={(e) => handlePartyChange(l.id, e.target.value)}
+                    >
+                      <option value="">— Select Party —</option>
+                      {parties.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="lot-tile-info">
+                    <div>Workspace: <strong>{workspaceDisplayTitleForLot(l, businessOwners)}</strong></div>
+                    <div>Allot Date: {formatDisplayDate(l.allotDate)}</div>
+                    {l.description && <div>Note: {l.description}</div>}
+                  </div>
+
+                  <div className="lot-tile-bill">
+                    <span style={{ fontSize: 13, color: '#64748b' }}>Bill Amount:</span>
+                    <strong style={{ fontSize: 16, color: '#1e40af' }}>
+                      ₨{getOwnerBillableAmount(l).toLocaleString()}
+                    </strong>
+                  </div>
+                </div>
+
+                <div className="lot-tile-footer">
+                  <ActionBtn variant="edit" onClick={() => openEdit(l)} />
+                  <ActionBtn variant="delete" onClick={() => setDeleteTarget(l)} />
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      )}
 
       {/* Mobile Card List for Ghausia Collection — zero horizontal scroll */}
       <div className="mobile-only-ghausia-cards">
