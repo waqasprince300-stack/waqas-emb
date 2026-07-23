@@ -177,7 +177,9 @@ class ApiService {
           console.error('API request timed out:', url);
           throw timeoutErr;
         }
-        console.error('API request failed:', error);
+        if (!meta?.suppressConsoleError && !options?.suppressConsoleError && error?.status !== 404) {
+          console.error('API request failed:', error);
+        }
         throw error;
       }
     }
