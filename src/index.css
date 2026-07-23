@@ -1997,3 +1997,60 @@ tbody tr:last-child td {
   border: none;
   border-radius: 4px;
 }
+
+/* =============================  Summary Cards & Responsive Grid =============================================== */
+.pk-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+  width: 100%;
+}
+
+.pk-summary-card {
+  background: #ffffff;
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 12px;
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.pk-summary-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.pk-card-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: #64748b;
+}
+
+.pk-card-value {
+  font-size: 20px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.text-indigo { color: #4f46e5; }
+.text-emerald { color: #059669; }
+.text-amber { color: #d97706; }
+
+@media screen and (max-width: 600px) {
+  .pk-summary-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  .filter-controls-row {
+    flex-direction: column;
+    align-items: stretch !important;
+  }
+  .filter-controls-row select,
+  .filter-controls-row input {
+    width: 100% !important;
+  }
+}
+
