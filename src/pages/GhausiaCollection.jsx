@@ -2016,13 +2016,12 @@ export default function GhausiaCollection() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          gap: 12,
-          marginBottom: 12,
+          gap: 6,
+          marginBottom: 10,
           borderBottom: '1px solid var(--border)',
-          flexWrap: 'wrap',
         }}
       >
-        <div style={{ display: 'flex', gap: 4 }}>
+        <div style={{ display: 'flex', gap: 2 }}>
           {[
             { id: 'others', label: othersTabStatusLabel, count: othersTabCount, hint: othersTabHint },
             {
@@ -2040,8 +2039,8 @@ export default function GhausiaCollection() {
               title={tab.hint}
               onClick={() => setLotTableTab(tab.id)}
               style={{
-                padding: '10px 18px',
-                fontSize: 14,
+                padding: '8px 10px',
+                fontSize: 13,
                 fontWeight: 600,
                 border: 'none',
                 borderBottom: lotTableTab === tab.id ? '2px solid #1e40af' : '2px solid transparent',
@@ -2051,17 +2050,17 @@ export default function GhausiaCollection() {
                 cursor: 'pointer',
                 display: 'inline-flex',
                 alignItems: 'center',
-                gap: 8,
+                gap: 5,
               }}
             >
               {tab.label}
               <span
                 style={{
-                  fontSize: 12,
+                  fontSize: 11,
                   fontWeight: 700,
                   background: lotTableTab === tab.id ? '#EFF6FF' : '#F3F4F6',
                   color: lotTableTab === tab.id ? '#1e40af' : 'var(--text-muted)',
-                  padding: '2px 8px',
+                  padding: '1px 6px',
                   borderRadius: 999,
                 }}
               >
@@ -2072,33 +2071,21 @@ export default function GhausiaCollection() {
         </div>
 
         {/* View Switcher: Table View vs Tile View (Mobile Only) */}
-        <div className="mobile-view-switcher" style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-          <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>View:</span>
+        <div className="mobile-view-switcher" style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
           <button
             type="button"
             className={`btn btn-sm ${viewMode === 'table' ? 'btn-primary' : 'btn-ghost'}`}
             onClick={() => setViewMode('table')}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 10px', fontSize: 12 }}
+            style={{ padding: '3px 8px', fontSize: 11 }}
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <line x1="3" y1="6" x2="21" y2="6"/>
-              <line x1="3" y1="12" x2="21" y2="12"/>
-              <line x1="3" y1="18" x2="21" y2="18"/>
-            </svg>
             List
           </button>
           <button
             type="button"
             className={`btn btn-sm ${viewMode === 'tile' ? 'btn-primary' : 'btn-ghost'}`}
             onClick={() => setViewMode('tile')}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 10px', fontSize: 12 }}
+            style={{ padding: '3px 8px', fontSize: 11 }}
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <rect x="3" y="3" width="7" height="7"/>
-              <rect x="14" y="3" width="7" height="7"/>
-              <rect x="14" y="14" width="7" height="7"/>
-              <rect x="3" y="14" width="7" height="7"/>
-            </svg>
             Tiles
           </button>
         </div>
@@ -2261,7 +2248,7 @@ export default function GhausiaCollection() {
                   </div>
                   <div>
                     {lotTableTab === 'completed' ? (
-                      <span className="badge-completed">Completed</span>
+                      <span className="badge-completed" style={{ fontSize: 10, padding: '1px 5px' }}>Done</span>
                     ) : (
                       <LotStatusSelect
                         value={l.status}
@@ -2276,15 +2263,13 @@ export default function GhausiaCollection() {
                 <div className="lot-tile-body">
                   <div className="lot-tile-chips">
                     <span className="fabric-chip">{l.itemType || l.fabric || 'Lawn'}</span>
-                    <span className="info-chip">Colors: {l.colors || 0}</span>
-                    <span className="info-chip">Pieces: {l.pieces || 0}</span>
+                    <span className="info-chip">{l.colors || 0} col</span>
+                    <span className="info-chip">{l.pieces || 0} pcs</span>
                   </div>
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
-                    <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>Party:</label>
+                  <div>
                     <select
-                      className="form-select"
-                      style={{ fontSize: 12, padding: '4px 8px', borderRadius: 6, flex: 1 }}
+                      className="form-select mini-party-select"
                       value={l.partyId || ''}
                       onChange={(e) => handlePartyChange(l.id, e.target.value)}
                     >
@@ -2296,24 +2281,28 @@ export default function GhausiaCollection() {
                       ))}
                     </select>
                   </div>
-
-                  <div className="lot-tile-info">
-                    <div>Workspace: <strong>{workspaceDisplayTitleForLot(l, businessOwners)}</strong></div>
-                    <div>Allot Date: {formatDisplayDate(l.allotDate)}</div>
-                    {l.description && <div>Note: {l.description}</div>}
-                  </div>
-
-                  <div className="lot-tile-bill">
-                    <span style={{ fontSize: 13, color: '#64748b' }}>Bill Amount:</span>
-                    <strong style={{ fontSize: 16, color: '#1e40af' }}>
-                      ₨{getOwnerBillableAmount(l).toLocaleString()}
-                    </strong>
-                  </div>
                 </div>
 
                 <div className="lot-tile-footer">
-                  <ActionBtn variant="edit" onClick={() => openEdit(l)} />
-                  <ActionBtn variant="delete" onClick={() => setDeleteTarget(l)} />
+                  <span className="lot-tile-price">
+                    ₨{getOwnerBillableAmount(l).toLocaleString()}
+                  </span>
+                  <div className="lot-tile-actions">
+                    <button
+                      type="button"
+                      className="btn-tile-action"
+                      onClick={() => openEdit(l)}
+                    >
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-tile-action delete"
+                      onClick={() => setDeleteTarget(l)}
+                    >
+                      Delete
+                    </button>
+                  </div>
                 </div>
               </div>
             ))

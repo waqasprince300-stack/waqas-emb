@@ -1583,33 +1583,21 @@ export default function PartyLedger() {
         </div>
 
         {/* View Switcher: Table View vs Tile View (Mobile Only) */}
-        <div className="mobile-view-switcher" style={{ display: 'flex', alignItems: 'center', gap: 6, paddingRight: 6 }}>
-          <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>View:</span>
+        <div className="mobile-view-switcher" style={{ display: 'flex', alignItems: 'center', gap: 4, paddingRight: 4 }}>
           <button
             type="button"
             className={`btn btn-sm ${viewMode === 'table' ? 'btn-primary' : 'btn-ghost'}`}
             onClick={() => setViewMode('table')}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 10px', fontSize: 12 }}
+            style={{ padding: '3px 8px', fontSize: 11 }}
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <line x1="3" y1="6" x2="21" y2="6"/>
-              <line x1="3" y1="12" x2="21" y2="12"/>
-              <line x1="3" y1="18" x2="21" y2="18"/>
-            </svg>
             List
           </button>
           <button
             type="button"
             className={`btn btn-sm ${viewMode === 'tile' ? 'btn-primary' : 'btn-ghost'}`}
             onClick={() => setViewMode('tile')}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 10px', fontSize: 12 }}
+            style={{ padding: '3px 8px', fontSize: 11 }}
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <rect x="3" y="3" width="7" height="7"/>
-              <rect x="14" y="3" width="7" height="7"/>
-              <rect x="14" y="14" width="7" height="7"/>
-              <rect x="3" y="14" width="7" height="7"/>
-            </svg>
             Tiles
           </button>
         </div>
