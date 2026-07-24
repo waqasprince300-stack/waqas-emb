@@ -395,7 +395,7 @@ export default function Dashboard() {
                   style={{ boxShadow: '0 1px 2px rgba(15,23,42,0.04)' }}
                 >
                   <div className="stat-label">{c.label}</div>
-                  <div className="stat-value" style={{ color: c.color, fontSize: 24 }}>
+                  <div className="stat-value" style={{ color: c.color, fontSize: 24, wordBreak: 'break-word' }}>
                     {c.value}
                   </div>
                   <div className="stat-sub">{c.sub}</div>
@@ -415,7 +415,7 @@ export default function Dashboard() {
             >
               <div className="stat-card" style={{ boxShadow: '0 1px 2px rgba(15,23,42,0.04)' }}>
                 <div className="stat-label">{activePartyStat.label}</div>
-                <div className="stat-value" style={{ color: activePartyStat.color, fontSize: 24 }}>
+                <div className="stat-value" style={{ color: activePartyStat.color, fontSize: 24, wordBreak: 'break-word' }}>
                   {activePartyStat.value}
                 </div>
                 <div className="stat-sub">{activePartyStat.sub}</div>
@@ -438,7 +438,7 @@ export default function Dashboard() {
                   }}
                 >
                   <div className="stat-label">{c.label}</div>
-                  <div className="stat-value" style={{ color: c.color, fontSize: 24 }}>
+                  <div className="stat-value" style={{ color: c.color, fontSize: 20, wordBreak: 'break-word' }}>
                     {hideAmounts ? '****' : (c.signed ? formatSignedRupee(c.value) : formatRupee(c.value))}
                   </div>
                   {c.note && <div className="stat-sub">{c.note}</div>}
