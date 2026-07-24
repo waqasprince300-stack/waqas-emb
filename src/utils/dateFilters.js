@@ -194,12 +194,13 @@ export function DateRangeSelect({
   onCustomChange,
   style,
   className = '',
+  containerClassName = '',
 }) {
-  const inToolbar = String(className).includes('pl-toolbar-filter');
+  const inToolbar = String(className).includes('pl-toolbar-filter') || String(containerClassName).includes('pl-toolbar-filter');
   const isCustom = value === 'custom';
 
   return (
-    <div className={`date-range-select${isCustom ? ' date-range-select--custom' : ''}`}>
+    <div className={`date-range-select${isCustom ? ' date-range-select--custom' : ''} ${containerClassName}`.trim()}>
       <select
         className={['form-select', 'date-range-select__preset', className]
           .filter(Boolean)

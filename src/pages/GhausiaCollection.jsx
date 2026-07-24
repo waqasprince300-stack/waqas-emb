@@ -3,6 +3,7 @@ import Swal from 'sweetalert2';
 import { useApp } from '../context/AppContext';
 import BusinessOwnerSwitcher from '../components/BusinessOwnerSwitcher';
 import LotStatusSelect from '../components/LotStatusSelect';
+import PartyPickerSelect from '../components/PartyPickerSelect';
 import {
   Modal,
   FormGroup,
@@ -653,15 +654,15 @@ function LotForm({
         {(form.status === 'dispatched' ||
           form.status === 'received back' ||
           form.status === 'completed') && (
-          <FormGroup label="Dispatch Date">
-            <input
-              className="form-input"
-              type="date"
-              value={form.dispatchDate}
-              onChange={(e) => set('dispatchDate', e.target.value)}
-            />
-          </FormGroup>
-        )}
+            <FormGroup label="Dispatch Date">
+              <input
+                className="form-input"
+                type="date"
+                value={form.dispatchDate}
+                onChange={(e) => set('dispatchDate', e.target.value)}
+              />
+            </FormGroup>
+          )}
         {(form.status === 'received back' || form.status === 'completed') && (
           <FormGroup label="Received Back Date">
             <input
@@ -750,6 +751,7 @@ export default function GhausiaCollection() {
   const [dateRange, setDateRange] = useState('all');
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
+  const [hideAmounts, setHideAmounts] = useState(false);
   const customRange = useMemo(
     () => ({ start: customStart, end: customEnd }),
     [customStart, customEnd]
@@ -1124,9 +1126,9 @@ export default function GhausiaCollection() {
     statusFilter === 'All'
       ? 'Others'
       : statusFilter
-          .split(' ')
-          .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-          .join(' ');
+        .split(' ')
+        .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+        .join(' ');
   const othersTabCount = useMemo(() => {
     if (statusFilter === 'All') return otherLotsCount;
     return visibleLots.filter((l) => l.status === statusFilter).length;
@@ -1278,14 +1280,13 @@ export default function GhausiaCollection() {
         await Swal.fire({
           icon: failed.length > 0 ? 'warning' : 'success',
           title: 'Bulk save done',
-          html: `<p style="margin:0 0 8px">${parts.join(' · ')}</p>${
-            failed.length > 0
+          html: `<p style="margin:0 0 8px">${parts.join(' · ')}</p>${failed.length > 0
               ? `<p style="margin:0;font-size:13px;color:#64748b">${failed
-                  .slice(0, 5)
-                  .map((f) => `${f.lotNumber}: ${f.message}`)
-                  .join('<br/>')}${failed.length > 5 ? '<br/>…' : ''}</p>`
+                .slice(0, 5)
+                .map((f) => `${f.lotNumber}: ${f.message}`)
+                .join('<br/>')}${failed.length > 5 ? '<br/>…' : ''}</p>`
               : ''
-          }`,
+            }`,
         });
 
         if (created > 0) {
@@ -1604,33 +1605,47 @@ export default function GhausiaCollection() {
                 : 'Manage design lots, statuses, and owner billing for this business. Use the dropdown below to switch workspace or view all workspaces.'}
             </p>
           </div>
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={openAdd}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 8,
-              padding: '12px 18px',
-              fontWeight: 700,
-              borderRadius: 12,
-              boxShadow: '0 2px 8px rgba(30, 64, 175, 0.25)',
-            }}
-          >
-            <svg
-              width="18"
-              height="18"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.5"
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            <button 
+              onClick={() => setHideAmounts(h => !h)} 
+              style={{ background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--text-muted)', fontWeight: 600 }}
             >
-              <line x1="12" y1="5" x2="12" y2="19" />
-              <line x1="5" y1="12" x2="19" y2="12" />
-            </svg>
-            Add lot
-          </button>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                {hideAmounts 
+                  ? <><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></>
+                  : <><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></>
+                }
+              </svg>
+              {hideAmounts ? 'Show' : 'Hide'}
+            </button>
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={openAdd}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '12px 18px',
+                fontWeight: 700,
+                borderRadius: 12,
+                boxShadow: '0 2px 8px rgba(30, 64, 175, 0.25)',
+              }}
+            >
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+              >
+                <line x1="12" y1="5" x2="12" y2="19" />
+                <line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
+              Add lot
+            </button>
+          </div>
         </div>
         <div
           style={{
@@ -1643,12 +1658,14 @@ export default function GhausiaCollection() {
             background: 'rgba(255,255,255,0.85)',
           }}
         >
-          <span
-            style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', flexShrink: 0 }}
-          >
-            Workspace
-          </span>
-          <BusinessOwnerSwitcher compact />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <span
+              style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', flexShrink: 0 }}
+            >
+              Workspace
+            </span>
+            <BusinessOwnerSwitcher compact />
+          </div>
         </div>
       </div>
 
@@ -1690,19 +1707,19 @@ export default function GhausiaCollection() {
             { label: 'Billable Lots', value: billable.length, color: '#dc2626' },
             {
               label: 'Billable Amount',
-              value: `₨${billableTotal.toLocaleString()}`,
+              value: hideAmounts ? '****' : `₨${billableTotal.toLocaleString()}`,
               color: '#dc2626',
             },
             {
               label: 'Received from Owner',
               value: ownerReceivedIsPending
                 ? 'Pending to owner'
-                : `₨${ownerReceivedNet.toLocaleString()}`,
+                : (hideAmounts ? '****' : `₨${ownerReceivedNet.toLocaleString()}`),
               color: ownerReceivedIsPending ? '#d97706' : '#15803d',
             },
             {
               label: `${billableTotal - ownerReceivedNet >= 0 ? 'Receivable from Owner' : 'Advance from Owner'}`,
-              value: `₨${(billableTotal - ownerReceivedNet).toLocaleString()}`,
+              value: hideAmounts ? '****' : `₨${(billableTotal - ownerReceivedNet).toLocaleString()}`,
               color: billableTotal - ownerReceivedNet >= 0 ? '#15803d' : '#dc2626',
             },
           ].map((c) => (
@@ -2268,19 +2285,12 @@ export default function GhausiaCollection() {
                     <span className="info-chip">{l.pieces || 0} pcs</span>
                   </div>
 
-                  <div>
-                    <select
-                      className="form-select mini-party-select"
+                  <div style={{ marginTop: 4 }}>
+                    <PartyPickerSelect
                       value={l.partyId || ''}
-                      onChange={(e) => handlePartyChange(l.id, e.target.value)}
-                    >
-                      <option value="">— Select Party —</option>
-                      {parties.map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.name}
-                        </option>
-                      ))}
-                    </select>
+                      onChange={(val) => handlePartyChange(l.id, val)}
+                      parties={parties}
+                    />
                   </div>
                 </div>
 
@@ -2311,76 +2321,67 @@ export default function GhausiaCollection() {
         </div>
       ) : (
         <div className="mobile-only-ghausia-cards">
-        {filtered.length === 0 ? (
-          <EmptyState message="No lots found" />
-        ) : (
-          paginatedLots.map((l) => (
-            <div key={`gh-mob-${l.id}`} className="ghausia-mobile-card">
-              <div className="gh-mob-header">
-                <div>
-                  <span className="gh-mob-lot-no">Lot #{l.lotNumber}</span>
-                  {l.designNo ? <span style={{ fontSize: 13, fontWeight: 600, color: '#475569' }}> · Design #{l.designNo}</span> : null}
+          {filtered.length === 0 ? (
+            <EmptyState message="No lots found" />
+          ) : (
+            paginatedLots.map((l) => (
+              <div key={`gh-mob-${l.id}`} className="ghausia-mobile-card">
+                <div className="gh-mob-header">
+                  <div>
+                    <span className="gh-mob-lot-no">Lot #{l.lotNumber}</span>
+                    {l.designNo ? <span style={{ fontSize: 13, fontWeight: 600, color: '#475569' }}> · Design #{l.designNo}</span> : null}
+                  </div>
+                  <div>
+                    {lotTableTab === 'completed' ? (
+                      <span className="badge-completed">Completed</span>
+                    ) : (
+                      <LotStatusSelect
+                        value={l.status}
+                        options={STATUS_OPTIONS}
+                        disabled={completionPersistingLotId === l.id || inlineSummaryBusy}
+                        onChange={(next) => setLotStatus(l, next)}
+                      />
+                    )}
+                  </div>
                 </div>
-                <div>
-                  {lotTableTab === 'completed' ? (
-                    <span className="badge-completed">Completed</span>
-                  ) : (
-                    <LotStatusSelect
-                      value={l.status}
-                      options={STATUS_OPTIONS}
-                      disabled={completionPersistingLotId === l.id || inlineSummaryBusy}
-                      onChange={(next) => setLotStatus(l, next)}
+
+                <div className="gh-mob-body">
+                  <div className="gh-mob-chips">
+                    <span className="fabric-chip">{l.itemType || l.fabric || 'Lawn'}</span>
+                    <span className="info-chip">Colors: {l.colors || 0}</span>
+                    <span className="info-chip">Pieces: {l.pieces || 0}</span>
+                  </div>
+
+                  <div style={{ marginTop: 4 }}>
+                    <PartyPickerSelect
+                      value={l.partyId || ''}
+                      onChange={(val) => handlePartyChange(l.id, val)}
+                      parties={parties}
                     />
-                  )}
+                  </div>
+
+                  <div className="gh-mob-info">
+                    <div>Workspace: {workspaceDisplayTitleForLot(l, businessOwners)}</div>
+                    <div>Allot Date: {formatDisplayDate(l.allotDate)}</div>
+                    {l.description && <div>Note: {l.description}</div>}
+                  </div>
+
+                  <div className="gh-mob-bill-row">
+                    <span style={{ fontSize: 13, color: '#64748b' }}>Bill Amount:</span>
+                    <strong style={{ fontSize: 15, color: '#1e40af' }}>
+                      ₨{getOwnerBillableAmount(l).toLocaleString()}
+                    </strong>
+                  </div>
+                </div>
+
+                <div className="gh-mob-footer">
+                  <ActionBtn variant="edit" onClick={() => openEdit(l)} />
+                  <ActionBtn variant="delete" onClick={() => setDeleteTarget(l)} />
                 </div>
               </div>
-
-              <div className="gh-mob-body">
-                <div className="gh-mob-chips">
-                  <span className="fabric-chip">{l.itemType || l.fabric || 'Lawn'}</span>
-                  <span className="info-chip">Colors: {l.colors || 0}</span>
-                  <span className="info-chip">Pieces: {l.pieces || 0}</span>
-                </div>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
-                  <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>Party:</label>
-                  <select
-                    className="form-select"
-                    style={{ fontSize: 12, padding: '4px 8px', borderRadius: 6, flex: 1 }}
-                    value={l.partyId || ''}
-                    onChange={(e) => handlePartyChange(l.id, e.target.value)}
-                  >
-                    <option value="">— Select Party —</option>
-                    {parties.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="gh-mob-info">
-                  <div>Workspace: {workspaceDisplayTitleForLot(l, businessOwners)}</div>
-                  <div>Allot Date: {formatDisplayDate(l.allotDate)}</div>
-                  {l.description && <div>Note: {l.description}</div>}
-                </div>
-
-                <div className="gh-mob-bill-row">
-                  <span style={{ fontSize: 13, color: '#64748b' }}>Bill Amount:</span>
-                  <strong style={{ fontSize: 15, color: '#1e40af' }}>
-                    ₨{getOwnerBillableAmount(l).toLocaleString()}
-                  </strong>
-                </div>
-              </div>
-
-              <div className="gh-mob-footer">
-                <ActionBtn variant="edit" onClick={() => openEdit(l)} />
-                <ActionBtn variant="delete" onClick={() => setDeleteTarget(l)} />
-              </div>
-            </div>
-          ))
-        )}
-      </div>
+            ))
+          )}
+        </div>
       )}
       {filtered.length > 0 && (
         <div

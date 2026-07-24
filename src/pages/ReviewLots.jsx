@@ -374,7 +374,7 @@ export default function ReviewLots() {
         </span>
       </div>
 
-      <div className="table-wrapper">
+      <div className="table-wrapper desktop-only-table">
         <div className="table-scroll">
           <table>
             <thead>
@@ -469,8 +469,16 @@ export default function ReviewLots() {
                       <td style={{ whiteSpace: 'nowrap' }}>
                         <button
                           type="button"
+                          className="btn btn-ghost btn-sm"
+                          style={{ color: '#b91c1c', borderColor: '#fecaca', marginRight: 6 }}
+                          disabled={busyId === l.id}
+                          onClick={() => openReject(l)}
+                        >
+                          Reject
+                        </button>
+                        <button
+                          type="button"
                           className="btn btn-success btn-sm"
-                          style={{ marginRight: 6 }}
                           disabled={busyId === l.id}
                           onClick={() => handleApprove(l)}
                         >
@@ -482,15 +490,6 @@ export default function ReviewLots() {
                             'Approve'
                           )}
                         </button>
-                        <button
-                          type="button"
-                          className="btn btn-ghost btn-sm"
-                          style={{ color: '#b91c1c', borderColor: '#fecaca' }}
-                          disabled={busyId === l.id}
-                          onClick={() => openReject(l)}
-                        >
-                          Reject
-                        </button>
                       </td>
                     </tr>
                   );
@@ -499,6 +498,96 @@ export default function ReviewLots() {
             </tbody>
           </table>
         </div>
+      </div>
+
+      <div className="mobile-only-review-cards">
+        {pendingLots.length === 0 ? (
+          <EmptyState message="No lots are waiting for review" />
+        ) : (
+          pendingLots.map((l) => {
+            const pe = reportingPartyEdits[l.id] || {};
+            const submittedLabel = formatReviewSubmittedAt(l, pe);
+            return (
+              <div key={l.id} className="review-mobile-card" style={String(highlightLotId) === String(l.id) ? { outline: '2px solid #F59E0B' } : undefined}>
+                <div className="rl-mob-header">
+                  <div className="rl-mob-lot-no">{l.lotNo || l.lotNumber}</div>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: '#dc2626' }}>
+                    ₨{peBill(l.id, l).toLocaleString()}
+                  </div>
+                </div>
+                <div className="pmc-body" style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13.5 }}>
+                    <span style={{ color: 'var(--text-secondary)' }}>Design:</span>
+                    <span style={{ fontWeight: 600 }}>{l.designNo}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13.5 }}>
+                    <span style={{ color: 'var(--text-secondary)' }}>Party:</span>
+                    <span style={{ fontWeight: 600 }}>{partyName(l.partyId, l.partyName)}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13.5 }}>
+                    <span style={{ color: 'var(--text-secondary)' }}>Collection:</span>
+                    <span style={{ fontWeight: 600 }}>{businessName(l.businessOwnerId)}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13.5 }}>
+                    <span style={{ color: 'var(--text-secondary)' }}>Submitted:</span>
+                    <span style={{ fontWeight: 600, textAlign: 'right' }}>{submittedLabel || '—'}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13.5, marginTop: 4 }}>
+                    <span style={{ color: 'var(--text-secondary)' }}>Receipt:</span>
+                    <LazyReceiptThumb
+                      lotId={l.id}
+                      receipt={pe.receipt}
+                      hasReceipt={pe.hasReceipt}
+                      businessOwnerId={l.businessOwnerId}
+                      lotLabel={l.lotNo || l.lotNumber}
+                      onOpen={setReceiptPreview}
+                      emptyLabel="—"
+                    />
+                  </div>
+                  {(pe.notes || pendingRevisionIsReal(pe) || hasOwnerReceivedForLot(l, reportingPayments)) && (
+                    <div style={{ fontSize: 12.5, marginTop: 8, padding: '10px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px' }}>
+                      {pe.notes && <div style={{ marginBottom: 6, color: 'var(--text-primary)' }}>{pe.notes}</div>}
+                      {pendingRevisionIsReal(pe) ? (
+                        <div style={{ fontSize: 11.5, color: '#92400e', lineHeight: 1.4 }}>
+                          Party revised bill: ₨
+                          {Number(pe.pendingRevision.fromAmount).toLocaleString()} → ₨
+                          {Number(pe.pendingRevision.toAmount).toLocaleString()}
+                          {hasOwnerReceivedForLot(l, reportingPayments) ? (
+                            <span style={{ display: 'block', marginTop: 4 }}>· Owner payment exists</span>
+                          ) : null}
+                        </div>
+                      ) : hasOwnerReceivedForLot(l, reportingPayments) ? (
+                        <div style={{ fontSize: 11.5, color: '#0369a1' }}>
+                          Owner payment is linked to this lot.
+                        </div>
+                      ) : null}
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', gap: '10px', marginTop: '16px' }}>
+                    <button
+                      type="button"
+                      className="btn btn-ghost"
+                      style={{ flex: 1, padding: '10px', fontSize: 14, color: '#b91c1c', borderColor: '#fecaca' }}
+                      disabled={busyId === l.id}
+                      onClick={() => openReject(l)}
+                    >
+                      Reject
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-success"
+                      style={{ flex: 1, padding: '10px', fontSize: 14 }}
+                      disabled={busyId === l.id}
+                      onClick={() => handleApprove(l)}
+                    >
+                      {busyId === l.id ? <><Loader /> …</> : 'Approve'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })
+        )}
       </div>
 
       {approveBillingModal && (

@@ -4,7 +4,7 @@
 }
 
 .card-calculator {
-  max-width: 1000px;
+  max-width: 100%;
   margin: auto;
   background: white;
   border-radius: 16px;
@@ -126,6 +126,71 @@
 .deleteBtn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
+}
+
+/* Mobile responsive labels for Rate Calculator */
+.mob-calc-label {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  .desktop-only-calc-header {
+    display: none !important;
+  }
+  
+  .row.calc-row {
+    display: grid;
+    grid-template-columns: 1.5fr 1fr 1fr;
+    gap: 8px;
+    padding: 12px;
+    padding-top: 28px;
+    position: relative;
+    border: 1px solid #e8ecf1;
+    background: #ffffff;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02);
+  }
+  
+  .calc-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    width: 100%;
+  }
+  
+  .calc-cell.horizontal {
+    grid-column: 1 / -1;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    background: #f1f5f9;
+    padding: 8px 12px;
+    border-radius: 8px;
+    margin-top: 4px;
+  }
+
+  .mob-calc-label {
+    display: block;
+    font-size: 11px;
+    font-weight: 700;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  
+  .deleteBtn {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    background: #fee2e2;
+    color: #ef4444;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+  }
 }
 
 .addBtn {

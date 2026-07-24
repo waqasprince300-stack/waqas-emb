@@ -52,6 +52,7 @@ export default function Dashboard() {
   const [dateRange, setDateRange] = useState('all');
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
+  const [hideAmounts, setHideAmounts] = useState(false);
   const customRange = useMemo(
     () => ({ start: customStart, end: customEnd }),
     [customStart, customEnd]
@@ -145,12 +146,12 @@ export default function Dashboard() {
       },
       {
         label: 'Paid to you',
-        display: `₨${paidTotal.toLocaleString()}`,
+        display: hideAmounts ? '****' : `₨${paidTotal.toLocaleString()}`,
         color: '#166534',
         sub: 'Payments from the business',
       },
     ];
-  }, [isParty, scopedLots, scopedPayments]);
+  }, [isParty, scopedLots, scopedPayments, hideAmounts]);
 
   const paidToNonOwnerParties = useMemo(() => {
     return scopedPayments
@@ -325,16 +326,30 @@ export default function Dashboard() {
               : 'Overview of all production and financial activity'}
           </div>
         </div>
-        <DateRangeSelect
-          value={dateRange}
-          onChange={setDateRange}
-          customStart={customStart}
-          customEnd={customEnd}
-          onCustomChange={({ start, end }) => {
-            setCustomStart(start);
-            setCustomEnd(end);
-          }}
-        />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          <button 
+            onClick={() => setHideAmounts(h => !h)} 
+            style={{ background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--text-muted)', fontWeight: 600, marginTop: 4 }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              {hideAmounts 
+                ? <><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></>
+                : <><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></>
+              }
+            </svg>
+            {hideAmounts ? 'Show Amounts' : 'Hide Amounts'}
+          </button>
+          <DateRangeSelect
+            value={dateRange}
+            onChange={setDateRange}
+            customStart={customStart}
+            customEnd={customEnd}
+            onCustomChange={({ start, end }) => {
+              setCustomStart(start);
+              setCustomEnd(end);
+            }}
+          />
+        </div>
       </div>
 
       {partyMiniStatsCards?.length ? (
@@ -424,7 +439,7 @@ export default function Dashboard() {
                 >
                   <div className="stat-label">{c.label}</div>
                   <div className="stat-value" style={{ color: c.color, fontSize: 24 }}>
-                    {c.signed ? formatSignedRupee(c.value) : formatRupee(c.value)}
+                    {hideAmounts ? '****' : (c.signed ? formatSignedRupee(c.value) : formatRupee(c.value))}
                   </div>
                   {c.note && <div className="stat-sub">{c.note}</div>}
                 </div>
@@ -499,7 +514,7 @@ export default function Dashboard() {
               <div className="card-header">
                 <span className="card-title">Billable to Owner</span>
                 <span style={{ fontSize: 13, fontWeight: 700, color: '#0369a1' }}>
-                  ₨{billableTotal.toLocaleString()}
+                  {hideAmounts ? '****' : `₨${billableTotal.toLocaleString()}`}
                 </span>
               </div>
               <div className="card-body" style={{ padding: billable.length ? 0 : 22 }}>
@@ -538,7 +553,7 @@ export default function Dashboard() {
                               {workspaceDisplayTitleForLot(l, businessOwners)}
                             </td>
                             <td style={{ textAlign: 'right', fontWeight: 600, color: '#0369a1' }}>
-                              ₨{Number(l.billAmount).toLocaleString()}
+                              {hideAmounts ? '****' : `₨${Number(l.billAmount).toLocaleString()}`}
                             </td>
                           </tr>
                         ))}

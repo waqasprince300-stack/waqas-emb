@@ -313,7 +313,7 @@ export default function StitchCalculator() {
           ))}
         </div>
 
-        <div className="row header calc-row">
+        <div className="row header calc-row desktop-only-calc-header">
           <div>Area / part</div>
 
           <div>Base stitches</div>
@@ -332,95 +332,85 @@ export default function StitchCalculator() {
 
           return (
             <div key={index} className="row box calc-row">
-              <div className="part-cell">
-                <select
-                  value={normalized.part || ''}
+              <div className="calc-cell">
+                <span className="mob-calc-label">Area</span>
+                <div className="part-cell">
+                  <select
+                    value={normalized.part || ''}
+                    onChange={(e) => onPartChange(index, e.target.value)}
+                    className="input"
+                    aria-label="Stitch area"
+                  >
+                    <option value="">— Select —</option>
+                    {allParts.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.label}
+                      </option>
+                    ))}
+                  </select>
 
-                  onChange={(e) => onPartChange(index, e.target.value)}
+                  {normalized.part === 'custom' ? (
+                    <input
+                      type="text"
+                      value={normalized.label}
+                      onChange={(e) => updateRow(index, { part: 'custom', label: e.target.value })}
+                      onBlur={(e) => commitCustomLabel(index, e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          commitCustomLabel(index, e.currentTarget.value);
+                          e.currentTarget.blur();
+                        }
+                      }}
+                      placeholder="Type area name…"
+                      className="input part-custom"
+                    />
+                  ) : null}
+                </div>
+              </div>
 
+              <div className="calc-cell">
+                <span className="mob-calc-label">Stitches</span>
+                <input
+                  type="number"
+                  value={normalized.baseStitches}
+                  onChange={(e) => updateRow(index, { baseStitches: e.target.value })}
+                  placeholder="e.g. 10000"
                   className="input"
+                  min={0}
+                />
+              </div>
 
-                  aria-label="Stitch area"
+              <div className="calc-cell">
+                <span className="mob-calc-label">Repeat</span>
+                <select
+                  value={normalized.repeat}
+                  onChange={(e) => updateRow(index, { repeat: Number(e.target.value) })}
+                  className="input"
                 >
-                  <option value="">— Select —</option>
-
-                  {allParts.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.label}
+                  {REPEAT_OPTIONS.map((r) => (
+                    <option key={r} value={r}>
+                      {r}
                     </option>
                   ))}
                 </select>
-
-                {normalized.part === 'custom' ? (
-                  <input
-                    type="text"
-
-                    value={normalized.label}
-
-                    onChange={(e) => updateRow(index, { part: 'custom', label: e.target.value })}
-
-                    onBlur={(e) => commitCustomLabel(index, e.target.value)}
-
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-
-                        commitCustomLabel(index, e.currentTarget.value);
-
-                        e.currentTarget.blur();
-                      }
-                    }}
-
-                    placeholder="Type area name…"
-
-                    className="input part-custom"
-                  />
-                ) : null}
               </div>
 
-              <input
-                type="number"
+              <div className="calc-cell horizontal">
+                <span className="mob-calc-label">Total</span>
+                <div className="total" style={{ color: '#0f172a' }}>{format(total)}</div>
+              </div>
 
-                value={normalized.baseStitches}
-
-                onChange={(e) => updateRow(index, { baseStitches: e.target.value })}
-
-                placeholder="e.g. 10000"
-
-                className="input"
-
-                min={0}
-              />
-
-              <select
-                value={normalized.repeat}
-
-                onChange={(e) => updateRow(index, { repeat: Number(e.target.value) })}
-
-                className="input"
-              >
-                {REPEAT_OPTIONS.map((r) => (
-                  <option key={r} value={r}>
-                    {r}
-                  </option>
-                ))}
-              </select>
-
-              <div className="total">{format(total)}</div>
-
-              <button
-                type="button"
-
-                onClick={() => removeRow(index)}
-
-                disabled={rows.length === 1}
-
-                className="deleteBtn"
-
-                aria-label="Remove row"
-              >
-                ✕
-              </button>
+              {rows.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() => removeRow(index)}
+                  className="deleteBtn"
+                  aria-label="Remove row"
+                >
+                  ✕
+                </button>
+              )}
             </div>
           );
         })}

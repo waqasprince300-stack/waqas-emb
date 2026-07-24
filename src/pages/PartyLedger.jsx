@@ -188,6 +188,7 @@ export default function PartyLedger() {
     businessOwners,
     initialDataLoading,
     patchLotImages,
+    patchLotReceipt,
   } = useApp();
 
   const { isAdmin, isParty, user } = useAuth();
@@ -226,6 +227,14 @@ export default function PartyLedger() {
   /** Split view: non-completed vs completed (same for admin & party) */
   const [ledgerLotsTab, setLedgerLotsTab] = useState('other');
   const [viewMode, setViewMode] = useState('tile');
+  const [showSummaryCards, setShowSummaryCards] = useState(() => {
+    const saved = localStorage.getItem('pl_show_summary_cards_v1');
+    return saved !== null ? saved === 'true' : true;
+  });
+
+  useEffect(() => {
+    localStorage.setItem('pl_show_summary_cards_v1', String(showSummaryCards));
+  }, [showSummaryCards]);
   /** Party: request a bill-amount change on a completed lot { lot, newAmount, reason } */
   const [revisionRequest, setRevisionRequest] = useState(null);
   const [revisionSaving, setRevisionSaving] = useState(false);
@@ -233,10 +242,52 @@ export default function PartyLedger() {
   const [revisionReview, setRevisionReview] = useState(null);
   const [revisionReviewSaving, setRevisionReviewSaving] = useState(false);
 
-  const workspaceNameForLot = (l) =>
-    workspaceDisplayTitleForLot(l, businessOwners, { shortIdFallback: true });
-
   const samePartyId = (a, b) => String(a ?? '').trim() === String(b ?? '').trim();
+
+  const currentPartyObj = useMemo(() => {
+    if (!isParty) return null;
+    return parties.find((p) => samePartyId(p.id, user?.partyId)) || null;
+  }, [isParty, parties, user?.partyId]);
+
+  const getWorkspaceOverrideForLot = (l) => {
+    if (!isParty || !currentPartyObj) return null;
+    const bizId = normalizedBusinessOwnerId(l?.businessOwnerId);
+    if (!bizId || !Array.isArray(currentPartyObj.workspaceOverrides)) return null;
+    return (
+      currentPartyObj.workspaceOverrides.find(
+        (o) => String(o.businessOwnerId ?? '').trim() === String(bizId).trim()
+      ) || null
+    );
+  };
+
+  const showWorkspaceColForLot = (l) => {
+    if (isParty) {
+      if (currentPartyObj?.showWorkspace === false) return false;
+      const ov = getWorkspaceOverrideForLot(l);
+      if (ov && ov.showWorkspace === false) return false;
+      return true;
+    }
+    return isAdmin && (workspaceFilter === 'All' || businessOwners.length > 1);
+  };
+
+  const workspaceNameForLot = (l) => {
+    if (isParty) {
+      const ov = getWorkspaceOverrideForLot(l);
+      if (ov && ov.alias) return ov.alias;
+      if (currentPartyObj?.workspaceAlias) return currentPartyObj.workspaceAlias;
+    }
+    return workspaceDisplayTitleForLot(l, businessOwners, { shortIdFallback: true });
+  };
+
+  const getPartyAllotDate = (l) => {
+    if (isParty) {
+      if (adminLotNotDispatched(l) || !l.dispatchDate) {
+        return null;
+      }
+      return l.dispatchDate || l.allotDate;
+    }
+    return l.allotDate;
+  };
 
   const lotWorkspaceOpts = (lot) => {
     const biz = normalizedBusinessOwnerId(lot?.businessOwnerId);
@@ -865,7 +916,7 @@ export default function PartyLedger() {
         : '';
 
     setEditForm({
-      allotDate: lot.allotDate || '',
+      allotDate: isParty ? (getPartyAllotDate(lot) || '') : (lot.allotDate || ''),
       completeDate:
         existingComplete ||
         (statusForForm === 'Completed' ? new Date().toISOString().slice(0, 10) : ''),
@@ -1099,11 +1150,15 @@ export default function PartyLedger() {
           });
           return;
         }
-        if (isParty && adminLotNotDispatched(lot) && editForm.status === 'In Progress') {
+        if (
+          isParty &&
+          (adminLotNotDispatched(lot) || getDisplayStatus(lot) === 'Pending') &&
+          editForm.status !== 'Pending'
+        ) {
           await Swal.fire({
             icon: 'info',
             title: 'Not available',
-            text: 'You cannot save In Progress until the business has sent this lot to you.',
+            text: 'You cannot change status until the business has dispatched this lot to you.',
           });
           return;
         }
@@ -1348,6 +1403,21 @@ export default function PartyLedger() {
     }
   };
 
+  const handleDirectBillUpload = async (lot, file) => {
+    try {
+      const stored = await readReceiptAsStoredValue(file);
+      const cropped = await finalizeLedgerReceiptStoredValue(stored);
+      await updatePartyEdit(lot.id, { receipt: cropped }, lotWorkspaceOpts(lot));
+      patchLotReceipt?.(lot.id, cropped);
+    } catch (err) {
+      await Swal.fire({
+        icon: 'error',
+        title: 'Could not upload bill',
+        text: err?.message || 'Try a smaller JPG/PNG.',
+      });
+    }
+  };
+
   const editingLot = ledgerLots.find((l) => l.id === editingId);
 
   if (initialDataLoading) {
@@ -1366,12 +1436,99 @@ export default function PartyLedger() {
     );
   }
 
+  const renderLotPicturesButton = (l, pe, options = {}) => {
+    const extraStyle = options.extraStyle || {};
+    const picsMax = lotPicturesMax(l);
+    const hydrated = Array.isArray(pe.lotImages) && pe.lotImages.length > 0 ? pe.lotImages.length : null;
+    const counted = Number(pe.lotImagesCount);
+    const picsCount = hydrated != null ? hydrated : Number.isFinite(counted) && counted >= 0 ? counted : pe.hasLotImages ? null : 0;
+    return (
+      <button
+        type="button"
+        onClick={() => void openLotPictures(l)}
+        title={`Lot pictures (max ${picsMax} — one per color)`}
+        style={{
+          fontSize: 11,
+          fontWeight: 600,
+          border: '1px solid #E0E7FF',
+          background: 'linear-gradient(180deg, #F8FAFF 0%, #EEF2FF 100%)',
+          color: '#3730a3',
+          cursor: 'pointer',
+          padding: '3px 8px',
+          borderRadius: 6,
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 5,
+          ...extraStyle,
+        }}
+      >
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+          <circle cx="8.5" cy="8.5" r="1.5" />
+          <polyline points="21 15 16 10 5 21" />
+        </svg>
+        <span>Pictures</span>
+        <span style={{
+          background: picsCount == null || picsCount > 0 ? '#4f46e5' : '#c7d2fe',
+          color: picsCount == null || picsCount > 0 ? '#fff' : '#4338ca',
+          borderRadius: 999,
+          padding: '1px 7px',
+          fontSize: 10,
+          fontWeight: 700,
+          lineHeight: 1.4,
+        }}>
+          {picsCount != null ? `${picsCount}/${picsMax}` : `•/${picsMax}`}
+        </span>
+      </button>
+    );
+  };
+
   return (
     <div>
-      <div className="page-header">
-        <div>
-          <div className="page-title">{isParty ? 'My Lots' : 'Party Ledger'}</div>
-          <div className="page-subtitle">
+      <div className="page-header pl-page-header">
+        <div style={{ width: '100%' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+            <div className="page-title" style={{ margin: 0, padding: 0 }}>{isParty ? 'My Lots' : 'Party Ledger'}</div>
+            <button
+              type="button"
+              onClick={() => setShowSummaryCards((prev) => !prev)}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                fontSize: 12,
+                fontWeight: 600,
+                color: showSummaryCards ? '#475569' : '#1e40af',
+                border: '1px solid var(--border)',
+                background: showSummaryCards ? 'var(--surface-card, #ffffff)' : '#eff6ff',
+                borderRadius: 20,
+                padding: '5px 14px',
+                cursor: 'pointer',
+                boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+                transition: 'all 0.15s ease',
+              }}
+              title={showSummaryCards ? 'Hide summary stat cards for privacy' : 'Show summary stat cards'}
+            >
+              {showSummaryCards ? (
+                <>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
+                    <line x1="1" y1="1" x2="23" y2="23" />
+                  </svg>
+                  <span>Hide Summary</span>
+                </>
+              ) : (
+                <>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                    <circle cx="12" cy="12" r="3" />
+                  </svg>
+                  <span>Show Summary</span>
+                </>
+              )}
+            </button>
+          </div>
+          <div className="page-subtitle desktop-only-table" style={{ margin: 0, marginTop: 4 }}>
             {isAdmin
               ? 'All workspaces by default — filter by party, workspace, dates, and status'
               : 'Your assigned lots — update status, amounts, and completion details'}
@@ -1409,111 +1566,111 @@ export default function PartyLedger() {
       )}
 
       {/* Summary — overall (Status filter does not affect these cards) */}
-      <div className="pl-grid">
-        {[
-          {
-            key: 'assigned',
-            label: isParty ? 'My lots' : 'Assigned Lots',
-            value: totals.lots,
-            color: '#1e40af',
-            sub: 'Overall (not limited by Status filter)',
-          },
-          {
-            key: 'bill',
-            label: isParty ? 'Your ledger total' : 'Total Bill Value',
-            value: `₨${totals.billTotal.toLocaleString()}`,
-            color: '#7c3aed',
-            sub: 'All lots in this view',
-          },
-          {
-            key: 'completed',
-            label: (
-              <>
-                Completed{' '}
-                <strong style={{ fontSize: 14, color: '#15803d' }}>({totals.completed})</strong>
-              </>
-            ),
-            value: `₨${totals.completedAmount.toLocaleString()}`,
-            color: '#15803d',
-          },
-          {
-            key: 'pending',
-            label: (
-              <>
-                {isParty ? 'Not received yet' : 'Pending'}{' '}
-                <strong style={{ fontSize: 14, color: '#d97706' }}>({totals.pending})</strong>
-              </>
-            ),
-            value: isParty ? 'Business has not sent this to you yet' : 'Awaiting dispatch',
-            color: '#d97706',
-          },
-          {
-            key: 'inprogress',
-            label: (
-              <>
-                {isParty ? 'With you / in progress' : 'In Progress'}{' '}
-                <strong style={{ fontSize: 14, color: '#d97706' }}>({totals.inProgress})</strong>
-              </>
-            ),
-            value: `₨${totals.inProgressAmount.toLocaleString()}`,
-            color: '#d97706',
-          },
-          {
-            key: 'other-status',
-            label: (
-              <>
-                {isParty ? 'Review / rework' : 'Pending review + Rejected'}{' '}
-                <strong style={{ fontSize: 14, color: '#a16207' }}>({totals.otherCount})</strong>
-              </>
-            ),
-            value: totals.otherCount > 0 ? `₨${totals.otherAmount.toLocaleString()}` : 'None',
-            color: '#a16207',
-            sub:
-              totals.otherCount > 0
-                ? `${totals.pendingReview} in review · ${totals.rejected} rejected`
-                : undefined,
-          },
-          {
-            key: 'completed-lots-balance',
-            label: `Completed lots ${
-              partyBalanceInfo.completedNet >= 0
-                ? `balance (${isParty ? 'owed to you' : 'still payable'})`
-                : '(advance)'
-            }`,
-            value: `₨${partyBalanceInfo.completedNet.toLocaleString()}`,
-            color: `${partyBalanceInfo.completedNet >= 0 ? '#0f766e' : '#dc2626'}`,
-            sub: partyBalanceInfo.hint,
-          },
-          {
-            key: 'balance',
-            label: `Overall balance ${
-              partyBalanceInfo.balance >= 0
-                ? `(${isParty ? 'owed to you' : 'payable'})`
-                : `(${isParty ? 'you owe' : 'advance'})`
-            }`,
-            value: `₨${partyBalanceInfo.balance.toLocaleString()}`,
-            color: partyBalanceInfo.balance >= 0 ? '#0f766e' : '#dc2626',
-            sub: partyBalanceInfo.hint,
-          },
-        ].map((c) => (
-          <div key={c.key} className="stat-card">
-            <div className="stat-label">{c.label}</div>
-            <div style={{ fontSize: 20, fontWeight: 700, color: c.color }}>{c.value}</div>
-            {c.sub && (
-              <div
-                style={{
-                  fontSize: 11,
-                  color: 'var(--text-muted)',
-                  marginTop: 6,
-                  lineHeight: 1.35,
-                }}
-              >
-                {c.sub}
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
+      {showSummaryCards && (
+        <div className="pl-grid">
+          {[
+            {
+              key: 'assigned',
+              label: isParty ? 'My lots' : 'Assigned Lots',
+              value: totals.lots,
+              color: '#1e40af',
+              sub: 'Overall (not limited by Status filter)',
+            },
+            {
+              key: 'bill',
+              label: isParty ? 'Your ledger total' : 'Total Bill Value',
+              value: `₨${(totals.billTotal ?? 0).toLocaleString()}`,
+              color: '#7c3aed',
+              sub: 'All lots in this view',
+            },
+            {
+              key: 'completed',
+              label: (
+                <>
+                  Completed{' '}
+                  <strong style={{ fontSize: 14, color: '#15803d' }}>({totals.completed ?? 0})</strong>
+                </>
+              ),
+              value: `₨${(totals.completedAmount ?? 0).toLocaleString()}`,
+              color: '#15803d',
+            },
+            {
+              key: 'pending',
+              label: (
+                <>
+                  {isParty ? 'Not received yet' : 'Pending'}{' '}
+                  <strong style={{ fontSize: 14, color: '#d97706' }}>({totals.pending ?? 0})</strong>
+                </>
+              ),
+              value: isParty ? 'Business has not sent this to you yet' : 'Awaiting dispatch',
+              color: '#d97706',
+            },
+            {
+              key: 'inprogress',
+              label: (
+                <>
+                  {isParty ? 'With you / in progress' : 'In Progress'}{' '}
+                  <strong style={{ fontSize: 14, color: '#d97706' }}>({totals.inProgress ?? 0})</strong>
+                </>
+              ),
+              value: `₨${(totals.inProgressAmount ?? 0).toLocaleString()}`,
+              color: '#d97706',
+            },
+            {
+              key: 'other-status',
+              label: (
+                <>
+                  {isParty ? 'Review / rework' : 'Pending review + Rejected'}{' '}
+                  <strong style={{ fontSize: 14, color: '#a16207' }}>({totals.otherCount ?? 0})</strong>
+                </>
+              ),
+              value: totals.otherCount > 0 ? `₨${(totals.otherAmount ?? 0).toLocaleString()}` : 'None',
+              color: '#a16207',
+              sub:
+                totals.otherCount > 0
+                  ? `${totals.pendingReview ?? 0} in review · ${totals.rejected ?? 0} rejected`
+                  : undefined,
+            },
+            {
+              key: 'completed-lots-balance',
+              label: `Completed lots ${(partyBalanceInfo?.completedNet ?? 0) >= 0
+                  ? `balance (${isParty ? 'owed to you' : 'still payable'})`
+                  : '(advance)'
+                }`,
+              value: `₨${(partyBalanceInfo?.completedNet ?? 0).toLocaleString()}`,
+              color: `${(partyBalanceInfo?.completedNet ?? 0) >= 0 ? '#0f766e' : '#dc2626'}`,
+              sub: isParty ? 'Your ledger (received - completed bill)' : undefined,
+            },
+            {
+              key: 'overall-balance',
+              label: `Overall balance ${(partyBalanceInfo?.balance ?? 0) >= 0
+                  ? `(${isParty ? 'owed to you' : 'still payable'})`
+                  : '(advance)'
+                }`,
+              value: `₨${(partyBalanceInfo?.balance ?? 0).toLocaleString()}`,
+              color: `${(partyBalanceInfo?.balance ?? 0) >= 0 ? '#0f766e' : '#dc2626'}`,
+              sub: 'Overall ledger (Status filter does not change these totals).',
+            },
+          ].map((c) => (
+            <div key={c.key} className="stat-card">
+              <div className="stat-label">{c.label}</div>
+              <div style={{ fontSize: 20, fontWeight: 700, color: c.color }}>{c.value}</div>
+              {c.sub && (
+                <div
+                  style={{
+                    fontSize: 11,
+                    color: 'var(--text-muted)',
+                    marginTop: 6,
+                    lineHeight: 1.35,
+                  }}
+                >
+                  {c.sub}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
 
       <div
         role="tablist"
@@ -1523,7 +1680,8 @@ export default function PartyLedger() {
           alignItems: 'center',
           justifyContent: 'space-between',
           gap: 8,
-          flexWrap: 'wrap',
+          flexWrap: 'nowrap',
+          overflowX: 'auto',
           marginBottom: 16,
           padding: 4,
           background: 'var(--surface-2, #f8fafc)',
@@ -1645,7 +1803,8 @@ export default function PartyLedger() {
             setCustomStart(start);
             setCustomEnd(end);
           }}
-          className="pl-toolbar-filter pl-toolbar-filter--date"
+          className="pl-toolbar-filter--date"
+          containerClassName="pl-toolbar-filter"
         />
         {ledgerLotsTab === 'other' && (
           <select
@@ -1684,534 +1843,476 @@ export default function PartyLedger() {
 
       {/* Table for Desktop & Tablet (Always visible on Desktop > 768px) */}
       <div className="table-wrapper desktop-only-table">
-          <div className="table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>Lot No</th>
-                  <th>Design No</th>
-                  <th>Description</th>
-                  <th>Fabric</th>
-                  <th>Colors</th>
-                  <th>Pieces</th>
-                  <th>Allot Date</th>
-                  <th>Complete Date</th>
-                  {showPartyNameCol ? <th>Party Name</th> : null}
-                  {showWorkspaceCol && (
-                    <th style={{ minWidth: 120 }} title="Business workspace">
-                      {isParty ? 'Business' : 'Workspace'}
-                    </th>
-                  )}
-                  <th>Status</th>
-                  <th style={{ textAlign: 'right' }}>
-                    {isParty ? 'Your ledger (₨)' : 'Bill Amount'}
+        <div className="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Lot No</th>
+                <th>Design No</th>
+                <th>Description</th>
+                <th>Fabric</th>
+                <th>Colors</th>
+                <th>Pieces</th>
+                <th>Allot Date</th>
+                <th>Complete Date</th>
+                {showPartyNameCol ? <th>Party Name</th> : null}
+                {showWorkspaceCol && (
+                  <th style={{ minWidth: 120 }} title="Business workspace">
+                    {isParty ? 'Business' : 'Workspace'}
                   </th>
-                  <th>Receipt</th>
-                  <th>Notes</th>
-                  <th>Actions</th>
+                )}
+                <th>Status</th>
+                <th style={{ textAlign: 'right' }}>
+                  {isParty ? 'Your ledger (₨)' : 'Bill Amount'}
+                </th>
+                <th>Receipt</th>
+                <th>Notes</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.length === 0 ? (
+                <tr>
+                  <td colSpan={ledgerTableColSpan}>
+                    <EmptyState message={isParty ? 'No lots found' : 'No assigned lots found'} />
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {filtered.length === 0 ? (
-                  <tr>
-                    <td colSpan={ledgerTableColSpan}>
-                      <EmptyState message={isParty ? 'No lots found' : 'No assigned lots found'} />
-                    </td>
-                  </tr>
-                ) : (
-                  paginatedLots.map((l) => {
-                    // console.log(l, 'l');
-                    const pe = ledgerPartyEdits[l.id] || {};
-                    const displayStatus = getDisplayStatus(l);
-                    const partyBillOnly = getPartyLedgerBillDisplay(pe);
-                    const displayComplete = getDisplayCompleteDate(l, pe);
-                    return (
-                      <tr
-                        key={l.id}
-                        id={`pl-lot-row-${l.id}`}
-                        style={
-                          String(highlightLotId) === String(l.id)
-                            ? { background: '#FEF3C7', outline: '2px solid #F59E0B' }
-                            : undefined
-                        }
-                      >
-                        <td style={{ fontWeight: 700, color: '#1e40af' }}>
-                          {l.lotNo || l.lotNumber}
-                        </td>
-                        <td style={{ fontWeight: 600 }}>{l.designNo}</td>
-                        <td>{l.description}</td>
-                        <td>
-                          <span
-                            style={{
-                              background: '#F0F9FF',
-                              color: '#0369a1',
-                              border: '1px solid #BAE6FD',
-                              borderRadius: 6,
-                              padding: '2px 8px',
-                              fontSize: 12,
-                            }}
-                          >
-                            {l.fabric || l.itemType}
-                          </span>
-                        </td>
-                        <td>{l.colors}</td>
-                        <td>{l.pieces}</td>
-                        <td>{formatDisplayDate(l.allotDate)}</td>
-                        <td style={{ fontWeight: 500 }}>
-                          {displayComplete ? (
-                            formatDisplayDate(displayComplete)
-                          ) : (
-                            <span style={{ color: 'var(--text-muted)' }}>—</span>
-                          )}
-                        </td>
-                        {showPartyNameCol ? (
-                          <td>{getPartyNameLocal(l.partyId, l.partyName)}</td>
-                        ) : null}
-                        {showWorkspaceCol && (
-                          <td
-                            style={{
-                              fontSize: 12,
-                              fontWeight: 600,
-                              color: 'var(--text-secondary)',
-                            }}
-                          >
-                            {workspaceNameForLot(l)}
-                          </td>
-                        )}
-                        <td>
-                          {displayStatus === 'Completed' ? (
-                            <span
-                              style={{
-                                fontSize: 12,
-                                color: 'green',
-                                marginTop: 3,
-                                fontWeight: '500',
-                                padding: '2px 8px',
-                                borderRadius: 6,
-                                background: '#DCFCE7',
-                                border: '1px solid #DCFCE7',
-                              }}
-                            >
-                              Completed
-                            </span>
-                          ) : displayStatus === 'Pending review' ? (
-                            <span
-                              style={{
-                                fontSize: 12,
-                                color: '#92400e',
-                                marginTop: 3,
-                                fontWeight: 600,
-                                padding: '2px 8px',
-                                borderRadius: 6,
-                                background: '#FEF3C7',
-                                border: '1px solid #FCD34D',
-                              }}
-                            >
-                              {partyFacingStatusLabel('Pending review', isParty)}
-                            </span>
-                          ) : displayStatus === 'Pending' && isParty ? (
-                            <span
-                              style={{
-                                fontSize: 12,
-                                color: '#b45309',
-                                marginTop: 3,
-                                fontWeight: 600,
-                                padding: '2px 8px',
-                                borderRadius: 6,
-                                background: '#FEF3C7',
-                                border: '1px solid #FCD34D',
-                              }}
-                            >
-                              {partyFacingStatusLabel('Pending', isParty)}
-                            </span>
-                          ) : (
-                            <select
-                              className="form-select"
-                              style={{
-                                width: 150,
-                                minWidth: 150,
-                                fontSize: 12,
-                                padding: '5px 8px',
-                              }}
-                              value={displayStatus === 'Rejected' ? 'Rejected' : displayStatus}
-                              onChange={(e) => handleRowStatusChange(l, e.target.value)}
-                            >
-                              {displayStatus === 'Rejected' && (
-                                <option
-                                  value="Rejected"
-                                  disabled
-                                  style={{ fontWeight: 600, color: '#b91c1c' }}
-                                >
-                                  {partyFacingStatusLabel('Rejected', isParty)}
-                                </option>
-                              )}
-                              {!(isParty && displayStatus === 'In Progress') ? (
-                                <option value="Pending">
-                                  {partyFacingStatusLabel('Pending', isParty)}
-                                </option>
-                              ) : null}
-                              {isParty &&
-                              adminLotNotDispatched(l) &&
-                              displayStatus === 'In Progress' ? (
-                                <option value="In Progress">
-                                  {partyFacingStatusLabel('In Progress', isParty)}
-                                </option>
-                              ) : null}
-                              {!(isParty && adminLotNotDispatched(l)) ? (
-                                <option value="In Progress">
-                                  {partyFacingStatusLabel('In Progress', isParty)}
-                                </option>
-                              ) : null}
-                              <option value="Completed">
-                                {isParty ? 'Submit for review' : 'Completed'}
-                              </option>
-                            </select>
-                          )}
-                        </td>
-                        <td
+              ) : (
+                paginatedLots.map((l) => {
+                  // console.log(l, 'l');
+                  const pe = ledgerPartyEdits[l.id] || {};
+                  const displayStatus = getDisplayStatus(l);
+                  const partyBillOnly = getPartyLedgerBillDisplay(pe);
+                  const displayComplete = getDisplayCompleteDate(l, pe);
+                  return (
+                    <tr
+                      key={l.id}
+                      id={`pl-lot-row-${l.id}`}
+                      style={
+                        String(highlightLotId) === String(l.id)
+                          ? { background: '#FEF3C7', outline: '2px solid #F59E0B' }
+                          : undefined
+                      }
+                    >
+                      <td style={{ fontWeight: 700, color: '#1e40af' }}>
+                        {l.lotNo || l.lotNumber}
+                      </td>
+                      <td style={{ fontWeight: 600 }}>{l.designNo}</td>
+                      <td>{l.description}</td>
+                      <td>
+                        <span
                           style={{
-                            textAlign: 'right',
-                            fontWeight: 700,
-                            color: '#1e40af',
+                            background: '#F0F9FF',
+                            color: '#0369a1',
+                            border: '1px solid #BAE6FD',
+                            borderRadius: 6,
+                            padding: '2px 8px',
+                            fontSize: 12,
                           }}
                         >
-                          {partyBillOnly == null ? (
-                            <span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>—</span>
-                          ) : (
-                            `₨${partyBillOnly.toLocaleString()}`
-                          )}
+                          {l.fabric || l.itemType}
+                        </span>
+                      </td>
+                      <td>{l.colors}</td>
+                      <td>{l.pieces}</td>
+                      <td>
+                        {getPartyAllotDate(l) ? (
+                          formatDisplayDate(getPartyAllotDate(l))
+                        ) : (
+                          <span style={{ color: 'var(--text-muted)' }}>—</span>
+                        )}
+                      </td>
+                      <td style={{ fontWeight: 500 }}>
+                        {displayComplete ? (
+                          formatDisplayDate(displayComplete)
+                        ) : (
+                          <span style={{ color: 'var(--text-muted)' }}>—</span>
+                        )}
+                      </td>
+                      {showPartyNameCol ? (
+                        <td>{getPartyNameLocal(l.partyId, l.partyName)}</td>
+                      ) : null}
+                      {showWorkspaceColForLot(l) && (
+                        <td
+                          style={{
+                            fontSize: 12,
+                            fontWeight: 600,
+                            color: 'var(--text-secondary)',
+                          }}
+                        >
+                          {workspaceNameForLot(l)}
                         </td>
-                        <td>
+                      )}
+                      <td>
+                        {displayStatus === 'Completed' ? (
+                          <span
+                            style={{
+                              fontSize: 12,
+                              color: 'green',
+                              marginTop: 3,
+                              fontWeight: '500',
+                              padding: '2px 8px',
+                              borderRadius: 6,
+                              background: '#DCFCE7',
+                              border: '1px solid #DCFCE7',
+                            }}
+                          >
+                            Completed
+                          </span>
+                        ) : displayStatus === 'Pending review' ? (
+                          <span
+                            style={{
+                              fontSize: 12,
+                              color: '#92400e',
+                              marginTop: 3,
+                              fontWeight: 600,
+                              padding: '2px 8px',
+                              borderRadius: 6,
+                              background: '#FEF3C7',
+                              border: '1px solid #FCD34D',
+                            }}
+                          >
+                            {partyFacingStatusLabel('Pending review', isParty)}
+                          </span>
+                        ) : displayStatus === 'Pending' && isParty ? (
+                          <span
+                            style={{
+                              fontSize: 12,
+                              color: '#b45309',
+                              marginTop: 3,
+                              fontWeight: 600,
+                              padding: '2px 8px',
+                              borderRadius: 6,
+                              background: '#FEF3C7',
+                              border: '1px solid #FCD34D',
+                            }}
+                          >
+                            {partyFacingStatusLabel('Pending', isParty)}
+                          </span>
+                        ) : (
+                          <select
+                            className="form-select"
+                            style={{
+                              width: 150,
+                              minWidth: 150,
+                              fontSize: 12,
+                              padding: '5px 8px',
+                            }}
+                            value={displayStatus === 'Rejected' ? 'Rejected' : displayStatus}
+                            onChange={(e) => handleRowStatusChange(l, e.target.value)}
+                          >
+                            {displayStatus === 'Rejected' && (
+                              <option
+                                value="Rejected"
+                                disabled
+                                style={{ fontWeight: 600, color: '#b91c1c' }}
+                              >
+                                {partyFacingStatusLabel('Rejected', isParty)}
+                              </option>
+                            )}
+                            {!(isParty && displayStatus === 'In Progress') ? (
+                              <option value="Pending">
+                                {partyFacingStatusLabel('Pending', isParty)}
+                              </option>
+                            ) : null}
+                            {isParty &&
+                              adminLotNotDispatched(l) &&
+                              displayStatus === 'In Progress' ? (
+                              <option value="In Progress">
+                                {partyFacingStatusLabel('In Progress', isParty)}
+                              </option>
+                            ) : null}
+                            {!(isParty && adminLotNotDispatched(l)) ? (
+                              <option value="In Progress">
+                                {partyFacingStatusLabel('In Progress', isParty)}
+                              </option>
+                            ) : null}
+                            <option value="Completed">
+                              {isParty ? 'Submit for review' : 'Completed'}
+                            </option>
+                          </select>
+                        )}
+                      </td>
+                      <td
+                        style={{
+                          textAlign: 'right',
+                          fontWeight: 700,
+                          color: '#1e40af',
+                        }}
+                      >
+                        {partyBillOnly == null ? (
+                          <span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>—</span>
+                        ) : (
+                          `₨${partyBillOnly.toLocaleString()}`
+                        )}
+                      </td>
+                      <td>
+                        <div
+                          style={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: 8,
+                            minWidth: 132,
+                            maxWidth: 200,
+                          }}
+                        >
                           <div
                             style={{
                               display: 'flex',
-                              flexDirection: 'column',
-                              gap: 8,
-                              minWidth: 132,
-                              maxWidth: 200,
+                              alignItems: 'center',
+                              gap: 6,
+                              flexWrap: 'wrap',
                             }}
                           >
-                            <div
-                              style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: 6,
-                                flexWrap: 'wrap',
-                              }}
-                            >
-                              <LazyReceiptThumb
-                                lotId={l.id}
-                                receipt={pe.receipt}
-                                hasReceipt={pe.hasReceipt}
-                                businessOwnerId={normalizedBusinessOwnerId(l.businessOwnerId)}
-                                lotLabel={l.lotNo || l.lotNumber}
-                                onOpen={setReceiptPreview}
-                                emptyLabel="No bill"
-                              />
-                              {pe.receipt && receiptPreviewKind(pe.receipt) === 'filename' && (
-                                <span
+                            <LazyReceiptThumb
+                              lotId={l.id}
+                              receipt={pe.receipt}
+                              hasReceipt={pe.hasReceipt}
+                              businessOwnerId={normalizedBusinessOwnerId(l.businessOwnerId)}
+                              lotLabel={l.lotNo || l.lotNumber}
+                              onOpen={setReceiptPreview}
+                              emptyLabel="No bill"
+                            />
+                            {pe.receipt && receiptPreviewKind(pe.receipt) === 'filename' && (
+                              <span
+                                style={{
+                                  fontSize: 11,
+                                  color: 'var(--text-secondary)',
+                                  maxWidth: 120,
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  whiteSpace: 'nowrap',
+                                }}
+                                title={pe.receipt}
+                              >
+                                {pe.receipt}
+                              </span>
+                            )}
+                            {isAdmin || (isParty && displayStatus !== 'Completed' && displayStatus !== 'Pending') ? (
+                              <>
+                                <input
+                                  id={`pl-bill-${l.id}`}
+                                  type="file"
+                                  accept="image/*,.pdf,application/pdf"
+                                  style={{ display: 'none' }}
+                                  disabled={billPicSavingLotId === l.id}
+                                  onChange={(e) => {
+                                    const f = e.target.files?.[0];
+                                    e.target.value = '';
+                                    if (f) void savePartyLotReceiptFromFile(l, f);
+                                  }}
+                                />
+                                <label
+                                  htmlFor={`pl-bill-${l.id}`}
                                   style={{
                                     fontSize: 11,
-                                    color: 'var(--text-secondary)',
-                                    maxWidth: 120,
-                                    overflow: 'hidden',
-                                    textOverflow: 'ellipsis',
-                                    whiteSpace: 'nowrap',
+                                    fontWeight: 700,
+                                    cursor: billPicSavingLotId === l.id ? 'wait' : 'pointer',
+                                    color: '#0369a1',
+                                    textDecoration: 'underline',
+                                    textUnderlineOffset: 2,
                                   }}
-                                  title={pe.receipt}
                                 >
-                                  {pe.receipt}
-                                </span>
-                              )}
-                              {isAdmin || (isParty && displayStatus !== 'Completed') ? (
-                                <>
-                                  <input
-                                    id={`pl-bill-${l.id}`}
-                                    type="file"
-                                    accept="image/*,.pdf,application/pdf"
-                                    style={{ display: 'none' }}
+                                  {billPicSavingLotId === l.id
+                                    ? 'Saving…'
+                                    : pe.receipt
+                                      ? 'Change'
+                                      : 'Add bill'}
+                                </label>
+                                {pe.receipt ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => removePartyLotReceipt(l)}
                                     disabled={billPicSavingLotId === l.id}
-                                    onChange={(e) => {
-                                      const f = e.target.files?.[0];
-                                      e.target.value = '';
-                                      if (f) void savePartyLotReceiptFromFile(l, f);
-                                    }}
-                                  />
-                                  <label
-                                    htmlFor={`pl-bill-${l.id}`}
                                     style={{
                                       fontSize: 11,
                                       fontWeight: 700,
+                                      border: 'none',
+                                      background: 'transparent',
+                                      color: '#b91c1c',
                                       cursor: billPicSavingLotId === l.id ? 'wait' : 'pointer',
-                                      color: '#0369a1',
-                                      textDecoration: 'underline',
-                                      textUnderlineOffset: 2,
+                                      padding: '2px 4px',
                                     }}
                                   >
-                                    {billPicSavingLotId === l.id
-                                      ? 'Saving…'
-                                      : pe.receipt
-                                        ? 'Change'
-                                        : 'Add bill'}
-                                  </label>
-                                  {pe.receipt ? (
-                                    <button
-                                      type="button"
-                                      onClick={() => removePartyLotReceipt(l)}
-                                      disabled={billPicSavingLotId === l.id}
-                                      style={{
-                                        fontSize: 11,
-                                        fontWeight: 700,
-                                        border: 'none',
-                                        background: 'transparent',
-                                        color: '#b91c1c',
-                                        cursor: billPicSavingLotId === l.id ? 'wait' : 'pointer',
-                                        padding: '2px 4px',
-                                      }}
-                                    >
-                                      Delete
-                                    </button>
-                                  ) : null}
-                                </>
-                              ) : null}
-                            </div>
-                            {(() => {
-                              const picsMax = lotPicturesMax(l);
-                              const hydrated =
-                                Array.isArray(pe.lotImages) && pe.lotImages.length > 0
-                                  ? pe.lotImages.length
-                                  : null;
-                              const counted = Number(pe.lotImagesCount);
-                              const picsCount =
-                                hydrated != null
-                                  ? hydrated
-                                  : Number.isFinite(counted) && counted >= 0
-                                    ? counted
-                                    : pe.hasLotImages
-                                      ? null
-                                      : 0;
-                              return (
-                                <button
-                                  type="button"
-                                  onClick={() => void openLotPictures(l)}
-                                  title={`Lot pictures (max ${picsMax} — one per color)`}
-                                  style={{
-                                    alignSelf: 'flex-start',
-                                    fontSize: 11,
-                                    fontWeight: 600,
-                                    border: '1px solid #E0E7FF',
-                                    background: 'linear-gradient(180deg, #F8FAFF 0%, #EEF2FF 100%)',
-                                    color: '#3730a3',
-                                    cursor: 'pointer',
-                                    padding: '3px 8px',
-                                    borderRadius: 6,
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: 5,
-                                  }}
-                                >
-                                  <svg
-                                    width="12"
-                                    height="12"
-                                    viewBox="0 0 24 24"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    strokeWidth="2"
-                                  >
-                                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                                    <circle cx="8.5" cy="8.5" r="1.5" />
-                                    <polyline points="21 15 16 10 5 21" />
-                                  </svg>
-                                  <span>Pictures</span>
-                                  <span
-                                    style={{
-                                      background:
-                                        picsCount == null || picsCount > 0 ? '#4f46e5' : '#c7d2fe',
-                                      color: picsCount == null || picsCount > 0 ? '#fff' : '#4338ca',
-                                      borderRadius: 999,
-                                      padding: '1px 7px',
-                                      fontSize: 10,
-                                      fontWeight: 700,
-                                      lineHeight: 1.4,
-                                    }}
-                                  >
-                                    {picsCount != null ? `${picsCount}/${picsMax}` : `•/${picsMax}`}
-                                  </span>
-                                </button>
-                              );
-                            })()}
+                                    Delete
+                                  </button>
+                                ) : null}
+                              </>
+                            ) : null}
                           </div>
-                        </td>
-                        <td>
-                          {pe.notes}
-                          {displayStatus === 'Rejected' && l.rejectionNote ? (
-                            <div
-                              style={{
-                                fontSize: 12,
-                                color: '#b91c1c',
-                                marginTop: 6,
-                                fontWeight: 600,
-                                lineHeight: 1.4,
-                              }}
-                            >
-                              {isParty ? 'Business: ' : 'Admin: '}
-                              {l.rejectionNote}
-                            </div>
-                          ) : null}
-                          {pe.amountChangeNote && (
-                            <div style={{ fontSize: 11, color: '#92400e', marginTop: 4 }}>
-                              Amount changed: ₨
-                              {Number(pe.amountChangeNote.previousAmount || 0).toLocaleString()} to ₨
-                              {Number(pe.amountChangeNote.updatedAmount || 0).toLocaleString()}
-                            </div>
-                          )}
-                          {isAdmin && pendingRevisionIsReal(pe) && (
+                          {renderLotPicturesButton(l, pe, { alignSelf: 'flex-start' })}
+                        </div>
+                      </td>
+                      <td>
+                        {pe.notes}
+                        {displayStatus === 'Rejected' && l.rejectionNote ? (
+                          <div
+                            style={{
+                              fontSize: 12,
+                              color: '#b91c1c',
+                              marginTop: 6,
+                              fontWeight: 600,
+                              lineHeight: 1.4,
+                            }}
+                          >
+                            {isParty ? 'Business: ' : 'Admin: '}
+                            {l.rejectionNote}
+                          </div>
+                        ) : null}
+                        {pe.amountChangeNote && (
+                          <div style={{ fontSize: 11, color: '#92400e', marginTop: 4 }}>
+                            Amount changed: ₨
+                            {Number(pe.amountChangeNote.previousAmount || 0).toLocaleString()} to ₨
+                            {Number(pe.amountChangeNote.updatedAmount || 0).toLocaleString()}
+                          </div>
+                        )}
+                        {isAdmin && pendingRevisionIsReal(pe) && (
+                          <div
+                            style={{
+                              fontSize: 11,
+                              color: '#0369a1',
+                              marginTop: 4,
+                              fontWeight: 600,
+                            }}
+                          >
+                            Party revised bill: ₨
+                            {Number(pe.pendingRevision.fromAmount || 0).toLocaleString()} → ₨
+                            {Number(pe.pendingRevision.toAmount || 0).toLocaleString()} (settle on
+                            approval)
+                          </div>
+                        )}
+                        {pe.billRevisionRequest &&
+                          String(pe.billRevisionRequest.status || '').toLowerCase() ===
+                          'pending' && (
                             <div
                               style={{
                                 fontSize: 11,
-                                color: '#0369a1',
+                                color: '#92400e',
                                 marginTop: 4,
                                 fontWeight: 600,
                               }}
                             >
-                              Party revised bill: ₨
-                              {Number(pe.pendingRevision.fromAmount || 0).toLocaleString()} → ₨
-                              {Number(pe.pendingRevision.toAmount || 0).toLocaleString()} (settle on
-                              approval)
+                              Bill change request: ₨
+                              {Number(pe.billRevisionRequest.fromAmount || 0).toLocaleString()} → ₨
+                              {Number(pe.billRevisionRequest.toAmount || 0).toLocaleString()}
+                              {pe.billRevisionRequest.reason
+                                ? ` — ${pe.billRevisionRequest.reason}`
+                                : ''}
                             </div>
                           )}
-                          {pe.billRevisionRequest &&
-                            String(pe.billRevisionRequest.status || '').toLowerCase() ===
-                              'pending' && (
-                              <div
+                        {pe.billRevisionRequest &&
+                          String(pe.billRevisionRequest.status || '').toLowerCase() ===
+                          'rejected' && (
+                            <div style={{ fontSize: 11, color: '#b91c1c', marginTop: 4 }}>
+                              Bill change request rejected
+                              {pe.billRevisionRequest.rejectionNote
+                                ? `: ${pe.billRevisionRequest.rejectionNote}`
+                                : ''}
+                            </div>
+                          )}
+                      </td>
+                      <td>
+                        {displayStatus === 'Completed' && isParty ? (
+                          (() => {
+                            const req = pe.billRevisionRequest;
+                            const st = String(req?.status || '').toLowerCase();
+                            if (st === 'pending') {
+                              return (
+                                <span style={{ fontSize: 12, color: '#92400e', fontWeight: 600 }}>
+                                  Change requested
+                                </span>
+                              );
+                            }
+                            return (
+                              <button
+                                onClick={() =>
+                                  setRevisionRequest({
+                                    lot: l,
+                                    newAmount: String(getPartyLedgerBillNumeric(pe) ?? ''),
+                                    reason: '',
+                                  })
+                                }
                                 style={{
-                                  fontSize: 11,
-                                  color: '#92400e',
-                                  marginTop: 4,
+                                  padding: '4px 12px',
+                                  fontSize: 12,
                                   fontWeight: 600,
+                                  borderRadius: 6,
+                                  cursor: 'pointer',
+                                  background: '#FFF7ED',
+                                  color: '#c2410c',
+                                  border: '1px solid #FED7AA',
+                                  fontFamily: 'Inter, sans-serif',
                                 }}
                               >
-                                Bill change request: ₨
-                                {Number(pe.billRevisionRequest.fromAmount || 0).toLocaleString()} → ₨
-                                {Number(pe.billRevisionRequest.toAmount || 0).toLocaleString()}
-                                {pe.billRevisionRequest.reason
-                                  ? ` — ${pe.billRevisionRequest.reason}`
-                                  : ''}
-                              </div>
-                            )}
-                          {pe.billRevisionRequest &&
-                            String(pe.billRevisionRequest.status || '').toLowerCase() ===
-                              'rejected' && (
-                              <div style={{ fontSize: 11, color: '#b91c1c', marginTop: 4 }}>
-                                Bill change request rejected
-                                {pe.billRevisionRequest.rejectionNote
-                                  ? `: ${pe.billRevisionRequest.rejectionNote}`
-                                  : ''}
-                              </div>
-                            )}
-                        </td>
-                        <td>
-                          {displayStatus === 'Completed' && isParty ? (
-                            (() => {
-                              const req = pe.billRevisionRequest;
-                              const st = String(req?.status || '').toLowerCase();
-                              if (st === 'pending') {
-                                return (
-                                  <span style={{ fontSize: 12, color: '#92400e', fontWeight: 600 }}>
-                                    Change requested
-                                  </span>
-                                );
-                              }
-                              return (
+                                {st === 'rejected' ? 'Request again' : 'Request bill change'}
+                              </button>
+                            );
+                          })()
+                        ) : displayStatus === 'Pending' && isParty ? (
+                          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>—</span>
+                        ) : (
+                          <div
+                            style={{
+                              display: 'flex',
+                              gap: 8,
+                              flexWrap: 'wrap',
+                              alignItems: 'center',
+                            }}
+                          >
+                            {isAdmin &&
+                              pe.billRevisionRequest &&
+                              String(pe.billRevisionRequest.status || '').toLowerCase() ===
+                              'pending' && (
                                 <button
                                   onClick={() =>
-                                    setRevisionRequest({
+                                    setRevisionReview({
                                       lot: l,
-                                      newAmount: String(getPartyLedgerBillNumeric(pe) ?? ''),
-                                      reason: '',
+                                      updateOwnerBill: true,
+                                      useCustomOwner: false,
+                                      customOwnerAmount: '',
+                                      rejectionNote: '',
                                     })
                                   }
                                   style={{
                                     padding: '4px 12px',
                                     fontSize: 12,
-                                    fontWeight: 600,
+                                    fontWeight: 700,
                                     borderRadius: 6,
                                     cursor: 'pointer',
-                                    background: '#FFF7ED',
-                                    color: '#c2410c',
-                                    border: '1px solid #FED7AA',
+                                    background: '#f59e0b',
+                                    color: '#fff',
+                                    border: 'none',
                                     fontFamily: 'Inter, sans-serif',
                                   }}
                                 >
-                                  {st === 'rejected' ? 'Request again' : 'Request bill change'}
+                                  Review request
                                 </button>
-                              );
-                            })()
-                          ) : displayStatus === 'Pending' && isParty ? (
-                            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>—</span>
-                          ) : (
-                            <div
+                              )}
+                            <button
+                              onClick={() => openEdit(l)}
                               style={{
-                                display: 'flex',
-                                gap: 8,
-                                flexWrap: 'wrap',
-                                alignItems: 'center',
+                                padding: '4px 12px',
+                                fontSize: 12,
+                                fontWeight: 500,
+                                borderRadius: 6,
+                                cursor: 'pointer',
+                                background: '#EFF6FF',
+                                color: '#1e40af',
+                                border: '1px solid #BFDBFE',
+                                fontFamily: 'Inter, sans-serif',
                               }}
                             >
-                              {isAdmin &&
-                                pe.billRevisionRequest &&
-                                String(pe.billRevisionRequest.status || '').toLowerCase() ===
-                                  'pending' && (
-                                  <button
-                                    onClick={() =>
-                                      setRevisionReview({
-                                        lot: l,
-                                        updateOwnerBill: true,
-                                        useCustomOwner: false,
-                                        customOwnerAmount: '',
-                                        rejectionNote: '',
-                                      })
-                                    }
-                                    style={{
-                                      padding: '4px 12px',
-                                      fontSize: 12,
-                                      fontWeight: 700,
-                                      borderRadius: 6,
-                                      cursor: 'pointer',
-                                      background: '#f59e0b',
-                                      color: '#fff',
-                                      border: 'none',
-                                      fontFamily: 'Inter, sans-serif',
-                                    }}
-                                  >
-                                    Review request
-                                  </button>
-                                )}
-                              <button
-                                onClick={() => openEdit(l)}
-                                style={{
-                                  padding: '4px 12px',
-                                  fontSize: 12,
-                                  fontWeight: 500,
-                                  borderRadius: 6,
-                                  cursor: 'pointer',
-                                  background: '#EFF6FF',
-                                  color: '#1e40af',
-                                  border: '1px solid #BFDBFE',
-                                  fontFamily: 'Inter, sans-serif',
-                                }}
-                              >
-                                Edit
-                              </button>
-                            </div>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
+                              Edit
+                            </button>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
 
@@ -2246,18 +2347,46 @@ export default function PartyLedger() {
                   </div>
 
                   <div className="lot-tile-body">
-                    <div className="lot-tile-chips">
+                    <div className="lot-tile-chips hide-scrollbar" style={{ display: 'flex', flexWrap: 'nowrap', overflowX: 'auto', gap: 6, whiteSpace: 'nowrap', paddingBottom: 4 }}>
                       <span className="fabric-chip">{l.fabric || l.itemType || 'Lawn'}</span>
                       <span className="info-chip">Colors: {l.colors || 0}</span>
                       <span className="info-chip">Pieces: {l.pieces || 0}</span>
                     </div>
 
-                    <div className="lot-tile-info">
+                    <div className="lot-tile-info" style={{ flex: 1, marginTop: 4, marginBottom: 8 }}>
                       {showPartyNameCol && <div>Party: <strong>{getPartyNameLocal(l.partyId, l.partyName)}</strong></div>}
-                      {showWorkspaceCol && <div>Workspace: <strong>{workspaceNameForLot(l)}</strong></div>}
-                      <div>Allot Date: {formatDisplayDate(l.allotDate)}</div>
+                      {showWorkspaceColForLot(l) && <div>Workspace: <strong>{workspaceNameForLot(l)}</strong></div>}
+                      <div>Allot Date: {getPartyAllotDate(l) ? formatDisplayDate(getPartyAllotDate(l)) : '—'}</div>
                       <div>Complete Date: {displayComplete ? formatDisplayDate(displayComplete) : '—'}</div>
                       {l.description && <div>Note: {l.description}</div>}
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 4 }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, marginBottom: 4 }}>
+                        <LazyReceiptThumb
+                          lotId={l.id}
+                          receipt={pe.receipt}
+                          hasReceipt={pe.hasReceipt}
+                          businessOwnerId={normalizedBusinessOwnerId(l.businessOwnerId)}
+                          lotLabel={l.lotNo || l.lotNumber}
+                          onOpen={setReceiptPreview}
+                          emptyLabel={isParty && displayStatus !== 'Pending' ? 'Add bill' : 'No bill'}
+                          onUpload={isParty && displayStatus !== 'Pending' ? (f) => handleDirectBillUpload(l, f) : undefined}
+                        />
+                        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                          {displayStatus !== 'Pending' && renderLotPicturesButton(l, pe)}
+                          {displayStatus !== 'Completed' && !(displayStatus === 'Pending' && isParty) && (
+                            <button
+                              type="button"
+                              className="btn-tile-action"
+                              style={{ height: 'auto', minHeight: 24, padding: '2px 12px' }}
+                              onClick={() => openEdit(l, displayStatus)}
+                            >
+                              Edit
+                            </button>
+                          )}
+                        </div>
+                      </div>
                     </div>
 
                     <div className="lot-tile-bill">
@@ -2268,38 +2397,25 @@ export default function PartyLedger() {
                     </div>
                   </div>
 
-                  <div className="lot-tile-footer">
-                    <LazyReceiptThumb
-                      lotId={l.id}
-                      receipt={pe.receipt}
-                      hasReceipt={pe.hasReceipt}
-                      businessOwnerId={normalizedBusinessOwnerId(l.businessOwnerId)}
-                      lotLabel={l.lotNo || l.lotNumber}
-                      onOpen={setReceiptPreview}
-                      emptyLabel="No bill"
-                    />
-
+                  <div className="lot-tile-footer" style={{ justifyContent: 'flex-end' }}>
                     {displayStatus !== 'Completed' && !(displayStatus === 'Pending' && isParty) && (
                       <select
                         className="form-select"
-                        style={{ fontSize: 12, padding: '4px 8px', borderRadius: 6, width: 'auto' }}
+                        style={{ fontSize: 12, padding: '4px 8px', borderRadius: 6, width: '100%', maxWidth: '100%', textAlign: 'center' }}
                         value={displayStatus === 'Rejected' ? 'Rejected' : displayStatus}
                         onChange={(e) => handleRowStatusChange(l, e.target.value)}
                       >
-                        <option value="Pending">{partyFacingStatusLabel('Pending', isParty)}</option>
+                        {displayStatus === 'Rejected' && (
+                          <option value="Rejected" disabled style={{ fontWeight: 600, color: '#b91c1c' }}>
+                            {partyFacingStatusLabel('Rejected', isParty)}
+                          </option>
+                        )}
+                        {!(isParty && displayStatus === 'In Progress') && (
+                          <option value="Pending">{partyFacingStatusLabel('Pending', isParty)}</option>
+                        )}
                         <option value="In Progress">{partyFacingStatusLabel('In Progress', isParty)}</option>
                         <option value="Completed">{isParty ? 'Submit for review' : 'Completed'}</option>
                       </select>
-                    )}
-
-                    {displayStatus !== 'Completed' && (
-                      <button
-                        type="button"
-                        className="btn btn-ghost btn-sm"
-                        onClick={() => openEdit(l, displayStatus)}
-                      >
-                        Edit
-                      </button>
                     )}
                   </div>
                 </div>
@@ -2337,18 +2453,44 @@ export default function PartyLedger() {
                   </div>
 
                   <div className="pl-mob-body">
-                    <div className="pl-mob-chips">
+                    <div className="pl-mob-chips hide-scrollbar" style={{ display: 'flex', flexWrap: 'nowrap', overflowX: 'auto', gap: 6, whiteSpace: 'nowrap', paddingBottom: 4 }}>
                       <span className="fabric-chip">{l.fabric || l.itemType || 'Lawn'}</span>
                       <span className="info-chip">Colors: {l.colors || 0}</span>
                       <span className="info-chip">Pieces: {l.pieces || 0}</span>
                     </div>
 
-                    <div className="pl-mob-info">
-                      {showPartyNameCol && <div>Party: <strong>{getPartyNameLocal(l.partyId, l.partyName)}</strong></div>}
-                      {showWorkspaceCol && <div>Workspace: <strong>{workspaceNameForLot(l)}</strong></div>}
-                      <div>Allot Date: {formatDisplayDate(l.allotDate)}</div>
-                      <div>Complete Date: {displayComplete ? formatDisplayDate(displayComplete) : '—'}</div>
-                      {l.description && <div>Note: {l.description}</div>}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                      <div className="pl-mob-info">
+                        {showPartyNameCol && <div>Party: <strong>{getPartyNameLocal(l.partyId, l.partyName)}</strong></div>}
+                        {showWorkspaceColForLot(l) && <div>Workspace: <strong>{workspaceNameForLot(l)}</strong></div>}
+                        <div>Allot Date: {getPartyAllotDate(l) ? formatDisplayDate(getPartyAllotDate(l)) : '—'}</div>
+                        <div>Complete Date: {displayComplete ? formatDisplayDate(displayComplete) : '—'}</div>
+                        {l.description && <div>Note: {l.description}</div>}
+                      </div>
+                      
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+                        <LazyReceiptThumb
+                          lotId={l.id}
+                          receipt={pe.receipt}
+                          hasReceipt={pe.hasReceipt}
+                          businessOwnerId={normalizedBusinessOwnerId(l.businessOwnerId)}
+                          lotLabel={l.lotNo || l.lotNumber}
+                          onOpen={setReceiptPreview}
+                          emptyLabel={isParty && displayStatus !== 'Pending' ? 'Add bill' : 'No bill'}
+                          onUpload={isParty && displayStatus !== 'Pending' ? (f) => handleDirectBillUpload(l, f) : undefined}
+                        />
+                        {displayStatus !== 'Pending' && renderLotPicturesButton(l, pe)}
+                        {displayStatus !== 'Completed' && !(displayStatus === 'Pending' && isParty) && (
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-sm"
+                            style={{ padding: '4px 12px', fontSize: 12, height: 'auto', minHeight: 28, background: '#f1f5f9' }}
+                            onClick={() => openEdit(l, displayStatus)}
+                          >
+                            Edit
+                          </button>
+                        )}
+                      </div>
                     </div>
 
                     <div className="pl-mob-bill-row">
@@ -2359,38 +2501,25 @@ export default function PartyLedger() {
                     </div>
                   </div>
 
-                  <div className="pl-mob-footer">
-                    <LazyReceiptThumb
-                      lotId={l.id}
-                      receipt={pe.receipt}
-                      hasReceipt={pe.hasReceipt}
-                      businessOwnerId={normalizedBusinessOwnerId(l.businessOwnerId)}
-                      lotLabel={l.lotNo || l.lotNumber}
-                      onOpen={setReceiptPreview}
-                      emptyLabel="No bill"
-                    />
-
+                  <div className="pl-mob-footer" style={{ justifyContent: 'flex-end' }}>
                     {displayStatus !== 'Completed' && !(displayStatus === 'Pending' && isParty) && (
                       <select
                         className="form-select"
-                        style={{ fontSize: 12, padding: '4px 8px', borderRadius: 6, width: 'auto' }}
+                        style={{ fontSize: 13, padding: '6px 10px', borderRadius: 6, width: '100%', maxWidth: '100%', textAlign: 'center' }}
                         value={displayStatus === 'Rejected' ? 'Rejected' : displayStatus}
                         onChange={(e) => handleRowStatusChange(l, e.target.value)}
                       >
-                        <option value="Pending">{partyFacingStatusLabel('Pending', isParty)}</option>
+                        {displayStatus === 'Rejected' && (
+                          <option value="Rejected" disabled style={{ fontWeight: 600, color: '#b91c1c' }}>
+                            {partyFacingStatusLabel('Rejected', isParty)}
+                          </option>
+                        )}
+                        {!(isParty && displayStatus === 'In Progress') && (
+                          <option value="Pending">{partyFacingStatusLabel('Pending', isParty)}</option>
+                        )}
                         <option value="In Progress">{partyFacingStatusLabel('In Progress', isParty)}</option>
                         <option value="Completed">{isParty ? 'Submit for review' : 'Completed'}</option>
                       </select>
-                    )}
-
-                    {displayStatus !== 'Completed' && (
-                      <button
-                        type="button"
-                        className="btn btn-ghost btn-sm"
-                        onClick={() => openEdit(l, displayStatus)}
-                      >
-                        Edit
-                      </button>
                     )}
                   </div>
                 </div>
@@ -2574,10 +2703,11 @@ export default function PartyLedger() {
                 )}
               </FormGroup>
             )}
-            <FormGroup label="Allot Date">
+            <FormGroup label={isParty ? "Dispatch / Allot Date" : "Allot Date"}>
               <input
                 className="form-input"
                 type="date"
+                disabled={isParty}
                 value={editForm.allotDate}
                 onChange={(e) => setEditForm((f) => ({ ...f, allotDate: e.target.value }))}
               />
@@ -2598,6 +2728,20 @@ export default function PartyLedger() {
                   Pending business review — you can update bill, receipt, and dates; the lot stays
                   under review until approved.
                 </div>
+              ) : isParty && editingLot && (adminLotNotDispatched(editingLot) || getDisplayStatus(editingLot) === 'Pending') ? (
+                <div
+                  style={{
+                    fontSize: 13,
+                    fontWeight: 600,
+                    color: '#b45309',
+                    padding: '8px 12px',
+                    background: '#FEF3C7',
+                    borderRadius: 8,
+                    border: '1px solid #FCD34D',
+                  }}
+                >
+                  Not received yet — status cannot be changed until dispatched
+                </div>
               ) : (
                 <select
                   className="form-select"
@@ -2616,9 +2760,9 @@ export default function PartyLedger() {
                     <option value="Pending">{partyFacingStatusLabel('Pending', isParty)}</option>
                   ) : null}
                   {isParty &&
-                  editingLot &&
-                  adminLotNotDispatched(editingLot) &&
-                  editForm.status === 'In Progress' ? (
+                    editingLot &&
+                    adminLotNotDispatched(editingLot) &&
+                    editForm.status === 'In Progress' ? (
                     <option value="In Progress">
                       {partyFacingStatusLabel('In Progress', isParty)}
                     </option>
@@ -3010,6 +3154,24 @@ export default function PartyLedger() {
               <p style={{ margin: '16px 0 0', fontSize: 13 }}>
                 Edit this lot and upload an image or PDF again to store a preview.
               </p>
+            </div>
+          )}
+          {isParty && (
+            <div style={{ marginTop: 16, display: 'flex', justifyContent: 'center' }}>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                style={{ color: '#dc2626', fontWeight: 600 }}
+                onClick={() => {
+                  const lotToEdit = ledgerLots.find((l) => (l.lotNo || l.lotNumber) === receiptPreview.title || l.id === receiptPreview.lotId);
+                  setReceiptPreview(null);
+                  if (lotToEdit) {
+                    openEdit(lotToEdit, getDisplayStatus(lotToEdit));
+                  }
+                }}
+              >
+                Change or Delete Bill (Open Edit)
+              </button>
             </div>
           )}
         </Modal>

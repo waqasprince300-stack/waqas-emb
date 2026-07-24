@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import Swal from 'sweetalert2';
 import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
@@ -247,6 +247,27 @@ export default function Payments() {
   const [errors, setErrors] = useState({});
   const [paymentSaving, setPaymentSaving] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
+  const [isScrolling, setIsScrolling] = useState(false);
+  const scrollTimeoutRef = useRef(null);
+  const [showSummaryCards, setShowSummaryCards] = useState(() => {
+    return localStorage.getItem('hidePaymentsSummary') !== 'true';
+  });
+
+  useEffect(() => {
+    const handleScroll = () => {
+      if (!isScrolling) setIsScrolling(true);
+      if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
+      scrollTimeoutRef.current = setTimeout(() => {
+        setIsScrolling(false);
+      }, 400); // Wait 400ms after scrolling stops
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+      if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
+    };
+  }, [isScrolling]);
 
   const visibleDbPayments = useMemo(() => {
     if (!isParty) return reportingPayments;
@@ -678,17 +699,100 @@ export default function Payments() {
   return (
     <div>
       <div className="page-header">
-        <div>
-          <div className="page-title">{isParty ? 'My Payments' : 'Payments'}</div>
-          <div className="page-subtitle">
+        <div style={{ width: '100%' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+            <div className="page-title">{isParty ? 'My Payments' : 'Payments'}</div>
+            <button
+              type="button"
+              onClick={() => {
+                const next = !showSummaryCards;
+                setShowSummaryCards(next);
+                localStorage.setItem('hidePaymentsSummary', !next ? 'true' : 'false');
+              }}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                fontSize: 12,
+                fontWeight: 600,
+                color: showSummaryCards ? '#475569' : '#1e40af',
+                border: '1px solid var(--border)',
+                background: showSummaryCards ? 'var(--surface-card, #ffffff)' : '#eff6ff',
+                borderRadius: 20,
+                padding: '5px 14px',
+                cursor: 'pointer',
+                boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+                transition: 'all 0.15s ease',
+              }}
+              title={showSummaryCards ? 'Hide summary stat cards for privacy' : 'Show summary stat cards'}
+            >
+              {showSummaryCards ? (
+                <>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
+                    <line x1="1" y1="1" x2="23" y2="23" />
+                  </svg>
+                  <span>Hide Summary</span>
+                </>
+              ) : (
+                <>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                    <circle cx="12" cy="12" r="3" />
+                  </svg>
+                  <span>Show Summary</span>
+                </>
+              )}
+            </button>
+          </div>
+          <div className="page-subtitle" style={{ marginTop: 4 }}>
             {isParty
               ? 'Your completed work bills, and payments sent to you by the business'
               : 'Track all money received from owner and paid to parties'}
           </div>
         </div>
+
         {isAdmin && (
+          <div className="desktop-only-action">
+            <button
+              className="btn btn-success"
+              onClick={() => {
+                setErrors({});
+                setForm({
+                  type: 'Received',
+                  amount: '',
+                  party: 'Owner',
+                  date: '',
+                  note: '',
+                  linkedLot: '',
+                  ownerWorkspaceId: activeBusinessOwnerId || '',
+                  receipt: '',
+                });
+                setModal(true);
+              }}
+            >
+              <svg
+                width="15"
+                height="15"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+              >
+                <line x1="12" y1="5" x2="12" y2="19" />
+                <line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
+              Record Payment
+            </button>
+          </div>
+        )}
+      </div>
+
+      {isAdmin && (
+        <div className={`mobile-only-sticky-action ${isScrolling ? 'is-scrolling' : ''}`}>
           <button
             className="btn btn-success"
+            style={{ width: '100%', boxShadow: '0 4px 12px rgba(21, 128, 61, 0.3)' }}
             onClick={() => {
               setErrors({});
               setForm({
@@ -711,26 +815,28 @@ export default function Payments() {
               fill="none"
               stroke="currentColor"
               strokeWidth="2.5"
+              style={{ marginRight: 6 }}
             >
               <line x1="12" y1="5" x2="12" y2="19" />
               <line x1="5" y1="12" x2="19" y2="12" />
             </svg>
             Record Payment
           </button>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Summary */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-          gap: 14,
-          marginBottom: 24,
-        }}
-      >
-        {isParty && partyStatementSummary
-          ? [
+      {showSummaryCards && (
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+            gap: 14,
+            marginBottom: 24,
+          }}
+        >
+          {isParty && partyStatementSummary
+            ? [
               {
                 label: 'Work billed (completed lots)',
                 value: partyStatementSummary.billed,
@@ -899,7 +1005,8 @@ export default function Payments() {
                 )}
               </div>
             ))}
-      </div>
+        </div>
+      )}
 
       {/* Balance visual */}
       {/* {visiblePayments.length > 0 && (

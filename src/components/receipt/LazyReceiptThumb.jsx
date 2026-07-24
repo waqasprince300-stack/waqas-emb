@@ -19,6 +19,7 @@ export default function LazyReceiptThumb({
   onOpen,
   emptyLabel = 'No bill',
   size = 44,
+  onUpload,
 }) {
   const { patchLotReceipt, ledgerReceiptsVersion } = useApp();
   const { isParty } = useAuth();
@@ -178,8 +179,29 @@ export default function LazyReceiptThumb({
     );
   }
 
+  if (typeof onUpload === 'function') {
+    return (
+      <label ref={containerRef} style={{ color: '#2563eb', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4, margin: 0, whiteSpace: 'nowrap' }}>
+        <input
+          type="file"
+          accept="image/*,.pdf,application/pdf"
+          style={{ display: 'none' }}
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) {
+              e.target.value = '';
+              onUpload(file);
+            }
+          }}
+        />
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+        {emptyLabel}
+      </label>
+    );
+  }
+
   return (
-    <span ref={containerRef} style={{ color: 'var(--text-muted)', fontSize: 12 }}>
+    <span ref={containerRef} style={{ color: 'var(--text-muted)', fontSize: 12, whiteSpace: 'nowrap' }}>
       {emptyLabel}
     </span>
   );

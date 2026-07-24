@@ -11,24 +11,75 @@ import {
   formatDisplayDateTime,
 } from '../utils/dateFilters';
 
-function toPartyFormFields(initial) {
-  if (!initial) return { name: '', phone: '', address: '' };
+function toPartyFormFields(initial, businessOwners = []) {
+  if (!initial) {
+    const overrides = (businessOwners || []).map((b) => ({
+      businessOwnerId: String(b.id || b._id),
+      showWorkspace: true,
+      alias: '',
+    }));
+    return { name: '', phone: '', address: '', showWorkspace: true, workspaceAlias: '', workspaceOverrides: overrides };
+  }
+  const existingMap = new Map();
+  for (const o of initial.workspaceOverrides || []) {
+    if (o.businessOwnerId) {
+      existingMap.set(String(o.businessOwnerId), o);
+    }
+  }
+  const overrides = (businessOwners || []).map((b) => {
+    const bid = String(b.id || b._id);
+    const prev = existingMap.get(bid);
+    return {
+      businessOwnerId: bid,
+      showWorkspace: prev ? prev.showWorkspace !== false : true,
+      alias: prev ? prev.alias ?? '' : '',
+    };
+  });
+
   return {
     name: initial.name ?? '',
     phone: initial.phone ?? '',
     address: initial.address ?? '',
+    showWorkspace: initial.showWorkspace !== false,
+    workspaceAlias: initial.workspaceAlias ?? '',
+    workspaceOverrides: overrides,
   };
 }
 
+const IOSSwitch = ({ checked, onChange }) => (
+  <div
+    onClick={() => onChange(!checked)}
+    style={{
+      width: 44, height: 24, background: checked ? '#34C759' : '#e2e8f0', borderRadius: 999,
+      position: 'relative', transition: 'background 0.3s', flexShrink: 0, cursor: 'pointer'
+    }}
+  >
+    <div style={{
+      width: 20, height: 20, background: '#fff', borderRadius: '50%',
+      position: 'absolute', top: 2, left: checked ? 22 : 2, transition: 'left 0.3s',
+      boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+    }} />
+  </div>
+);
+
 function PartyForm({ initial, onSave, onClose, saving }) {
-  const [form, setForm] = useState(() => toPartyFormFields(initial));
+  const { businessOwners } = useApp();
+  const [form, setForm] = useState(() => toPartyFormFields(initial, businessOwners));
   const [errors, setErrors] = useState({});
 
   useEffect(() => {
-    setForm(toPartyFormFields(initial));
-  }, [initial]);
+    setForm(toPartyFormFields(initial, businessOwners));
+  }, [initial, businessOwners]);
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+  const updateOverride = (index, field, value) => {
+    setForm((f) => {
+      const list = [...(f.workspaceOverrides || [])];
+      list[index] = { ...list[index], [field]: value };
+      return { ...f, workspaceOverrides: list };
+    });
+  };
+
   const validate = () => {
     const e = {};
     if (!form.name.trim()) e.name = 'Party name is required';
@@ -43,33 +94,95 @@ function PartyForm({ initial, onSave, onClose, saving }) {
         await onSave(form);
       }}
     >
-      <FormGroup label="Party Name *">
-        <input
-          className="form-input"
-          value={form.name}
-          onChange={(e) => set('name', e.target.value)}
-          placeholder="e.g. Al-Hamra Textiles"
-        />
-        {errors.name && <span style={{ color: '#dc2626', fontSize: 11 }}>{errors.name}</span>}
-      </FormGroup>
-      <FormGroup label="Phone Number">
-        <input
-          className="form-input"
-          value={form.phone}
-          onChange={(e) => set('phone', e.target.value)}
-          placeholder="e.g. 0300-1234567"
-        />
-      </FormGroup>
-      <FormGroup label="Address">
-        <textarea
-          className="form-textarea"
-          rows={3}
-          value={form.address}
-          onChange={(e) => set('address', e.target.value)}
-          placeholder="Full address..."
-          style={{ resize: 'vertical' }}
-        />
-      </FormGroup>
+      <div style={{ background: '#fff', borderRadius: 12, border: '1px solid #e2e8f0', padding: 16, boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
+        <FormGroup label="Party Name *">
+          <input
+            className="form-input"
+            value={form.name}
+            onChange={(e) => set('name', e.target.value)}
+            placeholder="e.g. Al-Hamra Textiles"
+          />
+          {errors.name && <span style={{ color: '#dc2626', fontSize: 11 }}>{errors.name}</span>}
+        </FormGroup>
+        <FormGroup label="Phone Number">
+          <input
+            className="form-input"
+            value={form.phone}
+            onChange={(e) => set('phone', e.target.value)}
+            placeholder="e.g. 0300-1234567"
+          />
+        </FormGroup>
+        <FormGroup label="Address" style={{ marginBottom: 0 }}>
+          <textarea
+            className="form-textarea"
+            rows={2}
+            value={form.address}
+            onChange={(e) => set('address', e.target.value)}
+            placeholder="Full address..."
+            style={{ resize: 'vertical' }}
+          />
+        </FormGroup>
+      </div>
+      <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
+        <div style={{ marginTop: 24, background: '#fff', borderRadius: 12, border: '1px solid #e2e8f0', padding: '16px 16px 8px', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: form.showWorkspace ? 16 : 8 }}>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: '#1e293b' }}>Global Workspace Visibility</div>
+              <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>Show workspace name to this party by default</div>
+            </div>
+            <IOSSwitch checked={form.showWorkspace} onChange={(c) => set('showWorkspace', c)} />
+          </div>
+          {form.showWorkspace && (
+            <FormGroup label="Custom Global Alias (Optional)" style={{ marginBottom: 8 }}>
+              <input
+                className="form-input"
+                style={{ background: '#f8fafc' }}
+                value={form.workspaceAlias}
+                onChange={(e) => set('workspaceAlias', e.target.value)}
+                placeholder="e.g. Ghausia Main Unit"
+              />
+              <span style={{ fontSize: 11, color: '#94a3b8', display: 'block', marginTop: 6 }}>
+                Replaces the internal workspace name globally for this party user.
+              </span>
+            </FormGroup>
+          )}
+        </div>
+
+        {businessOwners && businessOwners.length > 0 && (
+          <div style={{ marginTop: 24 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', color: '#94a3b8', marginBottom: 12, paddingLeft: 4 }}>
+              Per-Workspace Overrides
+            </div>
+            {form.workspaceOverrides?.map((ov, idx) => {
+              const bo = businessOwners.find((b) => String(b.id || b._id) === String(ov.businessOwnerId));
+              const boName = bo ? bo.name : `Workspace ${ov.businessOwnerId.slice(-6)}`;
+              return (
+                <div key={ov.businessOwnerId} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: 16, marginBottom: 12, boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: ov.showWorkspace ? 16 : 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <span style={{ fontSize: 18 }}>🏢</span>
+                      <span style={{ fontWeight: 600, fontSize: 14, color: '#1e293b' }}>{boName}</span>
+                    </div>
+                    <IOSSwitch checked={ov.showWorkspace} onChange={(c) => updateOverride(idx, 'showWorkspace', c)} />
+                  </div>
+                  {ov.showWorkspace && (
+                    <div style={{ marginTop: 8 }}>
+                      <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#64748b', marginBottom: 6 }}>Custom Alias</label>
+                      <input
+                        className="form-input"
+                        style={{ fontSize: 13, padding: '8px 12px', background: '#f8fafc', border: '1px solid #e2e8f0' }}
+                        value={ov.alias}
+                        onChange={(e) => updateOverride(idx, 'alias', e.target.value)}
+                        placeholder={`e.g. Branch A`}
+                      />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
       <div
         className="modal-footer"
         style={{ padding: '16px 0 0', borderTop: '1px solid var(--border)', marginTop: 8 }}
@@ -111,33 +224,32 @@ function paymentMatchesParty(p, party, getPartyName) {
   return String(p.party || '').trim() === pname;
 }
 
-function PartyStatTile({ label, count, amountStr, accent, borderTint, bgTint }) {
+function PartyStatTile({ label, count, amountStr, accent, bgTint, hideAmount }) {
   return (
     <div
       style={{
         background: bgTint,
-        border: `1px solid ${borderTint}`,
         borderRadius: 12,
         padding: '12px 14px',
         display: 'flex',
         flexDirection: 'column',
-        gap: 4,
+        gap: 6,
         minHeight: 86,
       }}
     >
       <div
         style={{
           fontSize: 11,
-          fontWeight: 600,
-          color: 'var(--text-muted)',
+          fontWeight: 700,
+          color: '#64748b',
           textTransform: 'uppercase',
-          letterSpacing: '0.06em',
+          letterSpacing: '0.04em',
         }}
       >
         {label}
       </div>
-      <div style={{ fontSize: 26, fontWeight: 800, color: accent, lineHeight: 1.1 }}>{count}</div>
-      <div style={{ fontSize: 13, fontWeight: 600, color: accent, opacity: 0.9 }}>{amountStr}</div>
+      <div style={{ fontSize: 26, fontWeight: 800, color: '#1e293b', lineHeight: 1 }}>{count}</div>
+      <div style={{ fontSize: 13, fontWeight: 600, color: accent, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{hideAmount ? '****' : amountStr}</div>
     </div>
   );
 }
@@ -170,6 +282,7 @@ export default function Parties() {
   );
   const [transactionParty, setTransactionParty] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
+  const [hideAmounts, setHideAmounts] = useState(false);
 
   const rangedLots = useMemo(
     () =>
@@ -311,17 +424,17 @@ export default function Parties() {
       const totalPaid = (paidByPartyId.get(pid) || 0) + (paidByPartyName.get(partyName) || 0);
       const receivedFromParty =
         (receivedByPartyId.get(pid) || 0) + (receivedByPartyName.get(partyName) || 0);
-      // Align with Party Ledger: remaining = bill − paid + received from party
+      // Align with Party Ledger: remaining = completed bill − paid + received from party
       result.set(pid, {
         total: lots.length,
         active,
         completed,
         activeAmount,
         completedAmount,
-        totalValue: totalPayable,
+        totalValue: completedAmount,
         paid: totalPaid,
         receivedFromParty,
-        remaining: totalPayable - totalPaid + receivedFromParty,
+        remaining: completedAmount - totalPaid + receivedFromParty,
       });
     }
     return result;
@@ -336,6 +449,13 @@ export default function Parties() {
         name: formData.name.trim(),
         phone: (formData.phone || '').trim(),
         address: (formData.address || '').trim(),
+        showWorkspace: !!formData.showWorkspace,
+        workspaceAlias: (formData.workspaceAlias || '').trim(),
+        workspaceOverrides: (formData.workspaceOverrides || []).map((ov) => ({
+          businessOwnerId: String(ov.businessOwnerId || ''),
+          showWorkspace: !!ov.showWorkspace,
+          alias: (ov.alias || '').trim(),
+        })),
       };
       if (editing) {
         const pid = editing.id ?? editing._id;
@@ -426,6 +546,21 @@ export default function Parties() {
       </div>
 
       {/* Summary */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 12, paddingRight: 4 }}>
+        <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Market Overview</div>
+        <button 
+          onClick={() => setHideAmounts(h => !h)} 
+          style={{ background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-muted)', fontWeight: 600 }}
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            {hideAmounts 
+              ? <><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></>
+              : <><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></>
+            }
+          </svg>
+          {hideAmounts ? 'Show Amounts' : 'Hide Amounts'}
+        </button>
+      </div>
       <div
         style={{
           display: 'grid',
@@ -451,7 +586,16 @@ export default function Parties() {
             value: rangedLots.filter((l) => String(l.partyId || '').trim()).length,
             color: '#7c3aed',
           },
-          // { label: 'Total Bill Value', value: `₨${ghausiaLots.reduce((s, l) => s + Number(l.billAmount || 0), 0).toLocaleString()}`, color: '#0284c7' },
+          {
+            label: 'Total Payable',
+            value: hideAmounts ? '****' : formatMoney(Array.from(statsByPartyId.values()).reduce((s, st) => s + (st.remaining > 0 ? st.remaining : 0), 0)),
+            color: '#dc2626',
+          },
+          {
+            label: 'Total Advance',
+            value: hideAmounts ? '****' : formatMoney(Array.from(statsByPartyId.values()).reduce((s, st) => s + (st.remaining < 0 ? Math.abs(st.remaining) : 0), 0)),
+            color: '#10b981',
+          },
         ].map((c) => (
           <div key={c.label} className="stat-card">
             <div className="stat-label">{c.label}</div>
@@ -632,123 +776,48 @@ export default function Parties() {
                       label="Active"
                       count={stats.active}
                       amountStr={stats.active > 0 ? formatMoney(stats.activeAmount) : '—'}
-                      accent="#c2410c"
-                      borderTint="#FDBA74"
-                      bgTint="#FFFBEB"
+                      accent="#f59e0b"
+                      bgTint="#fffbeb"
+                      hideAmount={hideAmounts}
                     />
                     <PartyStatTile
                       label="Completed"
                       count={stats.completed}
                       amountStr={stats.completed > 0 ? formatMoney(stats.completedAmount) : '—'}
-                      accent="#166534"
-                      borderTint="#86EFAC"
-                      bgTint="#F0FDF4"
+                      accent="#10b981"
+                      bgTint="#ecfdf5"
+                      hideAmount={hideAmounts}
                     />
                   </div>
                   <div
                     style={{
                       display: 'grid',
                       gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
-                      gap: 10,
+                      gap: 8,
                     }}
                   >
-                    <div
-                      style={{
-                        background: '#FAF5FF',
-                        border: '1px solid #E9D5FF',
-                        borderRadius: 12,
-                        padding: '10px 12px',
-                        minWidth: 0,
-                      }}
-                    >
-                      <div
-                        style={{
-                          fontSize: 10,
-                          fontWeight: 600,
-                          color: 'var(--text-muted)',
-                          textTransform: 'uppercase',
-                          letterSpacing: '0.05em',
-                        }}
-                      >
+                    <div style={{ background: '#f8fafc', borderRadius: 8, padding: '10px 8px', overflow: 'hidden' }}>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>
                         Total bill
                       </div>
-                      <div
-                        style={{
-                          fontSize: 15,
-                          fontWeight: 800,
-                          color: '#6d28d9',
-                          marginTop: 6,
-                          lineHeight: 1.2,
-                          wordBreak: 'break-word',
-                        }}
-                      >
-                        {stats.total > 0 ? formatMoney(stats.totalValue) : '—'}
+                      <div style={{ fontSize: 13, fontWeight: 800, color: '#1e293b', marginTop: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {stats.total > 0 ? (hideAmounts ? '****' : formatMoney(stats.totalValue)) : '—'}
                       </div>
                     </div>
-                    <div
-                      style={{
-                        background: '#ECFDF5',
-                        border: '1px solid #A7F3D0',
-                        borderRadius: 12,
-                        padding: '10px 12px',
-                        minWidth: 0,
-                      }}
-                    >
-                      <div
-                        style={{
-                          fontSize: 10,
-                          fontWeight: 600,
-                          color: 'var(--text-muted)',
-                          textTransform: 'uppercase',
-                          letterSpacing: '0.05em',
-                        }}
-                      >
+                    <div style={{ background: '#f8fafc', borderRadius: 8, padding: '10px 8px', overflow: 'hidden' }}>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>
                         Paid
                       </div>
-                      <div
-                        style={{
-                          fontSize: 15,
-                          fontWeight: 800,
-                          color: '#047857',
-                          marginTop: 6,
-                          lineHeight: 1.2,
-                          wordBreak: 'break-word',
-                        }}
-                      >
-                        {formatMoney(stats.paid)}
+                      <div style={{ fontSize: 13, fontWeight: 800, color: '#10b981', marginTop: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {hideAmounts ? '****' : formatMoney(stats.paid)}
                       </div>
                     </div>
-                    <div
-                      style={{
-                        background: stats.remaining >= 0 ? '#FEF2F2' : '#d1fae5',
-                        border: stats.remaining >= 0 ? '1px solid #FECACA' : '1px solid #A7F3D0',
-                        borderRadius: 12,
-                        padding: '10px 12px',
-                        minWidth: 0,
-                      }}
-                    >
-                      <div
-                        style={{
-                          fontSize: 10,
-                          fontWeight: 600,
-                          color: 'var(--text-muted)',
-                          textTransform: 'uppercase',
-                          letterSpacing: '0.05em',
-                        }}
-                      >
+                    <div style={{ background: stats.remaining > 0 ? '#fef2f2' : '#f8fafc', borderRadius: 8, padding: '10px 8px', overflow: 'hidden' }}>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>
                         {stats.remaining >= 0 ? 'Remaining' : 'Advance'}
                       </div>
-                      <div
-                        style={{
-                          fontSize: 15,
-                          fontWeight: 800,
-                          color: stats.remaining >= 0 ? '#b91c1c' : '#047857',
-                          marginTop: 6,
-                          lineHeight: 1.2,
-                          wordBreak: 'break-word',
-                        }}
-                      >
-                        {formatMoney(stats.remaining)}
+                      <div style={{ fontSize: 13, fontWeight: 800, color: stats.remaining > 0 ? '#ef4444' : '#10b981', marginTop: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {hideAmounts ? '****' : formatMoney(Math.abs(stats.remaining))}
                       </div>
                     </div>
                   </div>
@@ -758,66 +827,24 @@ export default function Parties() {
                 <div
                   style={{
                     display: 'flex',
-                    gap: 8,
-                    padding: '12px 14px 14px',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '12px 14px',
                     marginTop: 'auto',
-                    borderTop: '1px solid #F3F4F6',
+                    borderTop: '1px solid #f1f5f9',
+                    background: '#f8fafc'
                   }}
                 >
                   <button
                     onClick={() => setTransactionParty(party)}
-                    style={{
-                      flex: 1,
-                      padding: '7px',
-                      fontSize: 13,
-                      fontWeight: 500,
-                      borderRadius: 8,
-                      cursor: 'pointer',
-                      background: '#F0F9FF',
-                      color: '#0369a1',
-                      border: '1px solid #BAE6FD',
-                      fontFamily: 'Inter, sans-serif',
-                    }}
+                    style={{ color: '#0ea5e9', fontWeight: 600, fontSize: 13, background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}
                   >
-                    Transactions
+                    View Ledger &rarr;
                   </button>
-                  <button
-                    onClick={() => {
-                      setEditing(party);
-                      setModal('form');
-                    }}
-                    style={{
-                      flex: 1,
-                      padding: '7px',
-                      fontSize: 13,
-                      fontWeight: 500,
-                      borderRadius: 8,
-                      cursor: 'pointer',
-                      background: '#EFF6FF',
-                      color: '#1e40af',
-                      border: '1px solid #BFDBFE',
-                      fontFamily: 'Inter, sans-serif',
-                    }}
-                  >
-                    Edit
-                  </button>
-                  <button
-                    onClick={() => setDeleteTarget(party)}
-                    style={{
-                      flex: 1,
-                      padding: '7px',
-                      fontSize: 13,
-                      fontWeight: 500,
-                      borderRadius: 8,
-                      cursor: 'pointer',
-                      background: '#FEF2F2',
-                      color: '#dc2626',
-                      border: '1px solid #FECACA',
-                      fontFamily: 'Inter, sans-serif',
-                    }}
-                  >
-                    Delete
-                  </button>
+                  <div style={{ display: 'flex', gap: 14 }}>
+                    <button onClick={() => { setEditing(party); setModal('form'); }} style={{ color: '#64748b', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600, padding: 0 }}>Edit</button>
+                    <button onClick={() => setDeleteTarget(party)} style={{ color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600, padding: 0 }}>Delete</button>
+                  </div>
                 </div>
               </div>
             );
@@ -945,7 +972,7 @@ export default function Parties() {
                   designNo: l.designNo,
                   status: pe.overrideStatus || l.status,
                   diye: 0,
-                  liye: bill,
+                  liye: (pe.overrideStatus || l.status || '').toLowerCase() === 'completed' ? bill : 0,
                 });
               });
 
@@ -1021,7 +1048,7 @@ export default function Parties() {
                     style={{
                       display: 'grid',
                       gridTemplateColumns:
-                        'minmax(120px, 1fr) minmax(88px, 0.95fr) minmax(88px, 0.95fr)',
+                        'minmax(145px, 1.2fr) minmax(88px, 1fr) minmax(88px, 1fr)',
                       gap: 8,
                       padding: '8px 10px',
                       background: '#F8FAFC',
@@ -1065,6 +1092,11 @@ export default function Parties() {
                           : `Lot ${t.lotNo || '—'} / ${t.designNo || '—'} · ${t.status || ''}`;
                       const diye = t.diye > 0 ? t.diye : null;
                       const liye = t.liye > 0 ? t.liye : null;
+                      
+                      let formattedDate = '—';
+                      if (when) {
+                        formattedDate = formatDisplayDateTime(when).replace(/ pm/i, ' PM').replace(/ am/i, ' AM');
+                      }
 
                       return (
                         <div
@@ -1072,7 +1104,7 @@ export default function Parties() {
                           style={{
                             display: 'grid',
                             gridTemplateColumns:
-                              'minmax(120px, 1fr) minmax(88px, 0.95fr) minmax(88px, 0.95fr)',
+                              'minmax(145px, 1.2fr) minmax(88px, 1fr) minmax(88px, 1fr)',
                             gap: 8,
                             alignItems: 'stretch',
                             padding: '10px 10px',
@@ -1082,7 +1114,7 @@ export default function Parties() {
                         >
                           <div>
                             <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
-                              {when ? formatDisplayDateTime(when) : '—'}
+                              {formattedDate}
                             </div>
                             <div
                               style={{
