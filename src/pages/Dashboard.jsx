@@ -409,13 +409,13 @@ export default function Dashboard() {
             <div
               style={{
                 display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(168px, 1fr))',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))',
                 gap: 12,
               }}
             >
               <div className="stat-card" style={{ boxShadow: '0 1px 2px rgba(15,23,42,0.04)' }}>
                 <div className="stat-label">{activePartyStat.label}</div>
-                <div className="stat-value" style={{ color: activePartyStat.color, fontSize: 24, wordBreak: 'break-word' }}>
+                <div className="stat-value" style={{ color: activePartyStat.color, fontSize: 24 }}>
                   {activePartyStat.value}
                 </div>
                 <div className="stat-sub">{activePartyStat.sub}</div>
@@ -438,7 +438,7 @@ export default function Dashboard() {
                   }}
                 >
                   <div className="stat-label">{c.label}</div>
-                  <div className="stat-value" style={{ color: c.color, fontSize: 20, wordBreak: 'break-word' }}>
+                  <div className="stat-value" style={{ color: c.color, fontSize: 18, whiteSpace: 'nowrap' }}>
                     {hideAmounts ? '****' : (c.signed ? formatSignedRupee(c.value) : formatRupee(c.value))}
                   </div>
                   {c.note && <div className="stat-sub">{c.note}</div>}
