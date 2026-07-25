@@ -376,7 +376,7 @@ export default function ReviewLots() {
 
       <div className="table-wrapper desktop-only-table">
         <div className="table-scroll">
-          <table>
+          <table className="ledger-table">
             <thead>
               <tr>
                 <th>Lot</th>

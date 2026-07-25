@@ -1844,7 +1844,7 @@ export default function PartyLedger() {
       {/* Table for Desktop & Tablet (Always visible on Desktop > 768px) */}
       <div className="table-wrapper desktop-only-table">
         <div className="table-scroll">
-          <table>
+          <table className="ledger-table">
             <thead>
               <tr>
                 <th>Lot No</th>
@@ -1898,7 +1898,7 @@ export default function PartyLedger() {
                         {l.lotNo || l.lotNumber}
                       </td>
                       <td style={{ fontWeight: 600 }}>{l.designNo}</td>
-                      <td>{l.description}</td>
+                      <td className="desc-col">{l.description}</td>
                       <td>
                         <span
                           style={{

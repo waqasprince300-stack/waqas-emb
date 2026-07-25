@@ -304,6 +304,7 @@ export function AppProvider({ children }) {
 
     setBackgroundRefreshing(true);
     try {
+      const reqStart = Date.now();
       const full = await queryClient.fetchQuery({
         queryKey: [
           'bootstrap',
@@ -316,6 +317,7 @@ export function AppProvider({ children }) {
         staleTime: 0,
       });
       if (gen !== loadGenerationRef.current) return;
+      if (pendingWritesRef.current > 0 || lastWriteAtRef.current > reqStart) return;
 
       if (Array.isArray(full?.parties)) setParties(full.parties.map(normalizeParty));
       applyScoped(full || {});
@@ -478,11 +480,13 @@ export function AppProvider({ children }) {
 
       try {
         if (!isWorkspaceSwitch) {
+          const reqStart = Date.now();
           const minimal = await queryClient.fetchQuery({
             queryKey: ['bootstrap', user?._id, user?.role, 'minimal'],
             queryFn: () => apiService.getBootstrap({ minimal: true, ...partyOpts }),
           });
           if (gen !== loadGenerationRef.current) return;
+          if (pendingWritesRef.current > 0 || lastWriteAtRef.current > reqStart) return;
 
           if (Array.isArray(minimal?.parties)) setParties(minimal.parties.map(normalizeParty));
 
@@ -523,11 +527,13 @@ export function AppProvider({ children }) {
           setInitialDataPhase('minimal');
         }
 
+        const reqStart = Date.now();
         const full = await queryClient.fetchQuery({
           queryKey: fullBootstrapKey,
           queryFn: () => apiService.getBootstrap({ ...partyOpts }),
         });
         if (gen !== loadGenerationRef.current) return;
+        if (pendingWritesRef.current > 0 || lastWriteAtRef.current > reqStart) return;
 
         if (Array.isArray(full?.parties)) setParties(full.parties.map(normalizeParty));
         applyScoped(full || {});
