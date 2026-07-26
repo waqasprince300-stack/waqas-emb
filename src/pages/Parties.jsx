@@ -10,6 +10,7 @@ import {
   dateRangeLabel,
   formatDisplayDateTime,
 } from '../utils/dateFilters';
+import { getAdminLedgerOrBusinessBill } from '../utils/partyBillPrivacy';
 
 function toPartyFormFields(initial, businessOwners = []) {
   if (!initial) {
@@ -354,7 +355,7 @@ export default function Parties() {
   const lotBillAmount = useCallback(
     (l) => {
       const pe = reportingPartyEdits[l.id] || {};
-      return Number(pe.partyBillAmount !== undefined ? pe.partyBillAmount : l.billAmount || 0);
+      return getAdminLedgerOrBusinessBill(l, pe);
     },
     [reportingPartyEdits]
   );
@@ -950,9 +951,7 @@ export default function Parties() {
 
               partyLots.forEach((l) => {
                 const pe = reportingPartyEdits[l.id] || {};
-                const bill = Number(
-                  pe.partyBillAmount !== undefined ? pe.partyBillAmount : l.billAmount || 0
-                );
+                const bill = getAdminLedgerOrBusinessBill(l, pe);
                 const when = latestDateFrom(l, [
                   'updatedAt',
                   'createdAt',

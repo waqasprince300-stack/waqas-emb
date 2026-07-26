@@ -18,6 +18,7 @@ import {
   isOwnerBillSettlement,
 } from '../utils/paymentDisplay';
 import { partyFacingLotStatusLabel, lotStatusBadgeKey } from '../utils/partyFacingLabels';
+import { getAdminLedgerOrBusinessBill } from '../utils/partyBillPrivacy';
 
 function lotBelongsToPartyUser(lot, partyId, partyName) {
   const pid = String(partyId || '').trim();
@@ -47,6 +48,7 @@ export default function Dashboard() {
     partyCrossPayments,
     payments,
     businessOwners,
+    reportingPartyEdits,
   } = useApp();
   const { isParty, isAdmin, user } = useAuth();
   const [dateRange, setDateRange] = useState('all');
@@ -244,12 +246,43 @@ export default function Dashboard() {
       return {
         name: p.name,
         total: lots.length,
-        value: lots.reduce((s, l) => s + Number(l.billAmount || 0), 0),
+        value: lots.reduce((s, l) => s + Number(getAdminLedgerOrBusinessBill(l, reportingPartyEdits[l.id] || {}) || 0), 0),
         completed: lots.filter((l) => l.status === 'completed').length,
         pending: lots.filter((l) => l.status === 'pending').length,
       };
     })
     .filter((p) => p.total > 0);
+
+  const workspaceStats = businessOwners
+    .map((w) => {
+      const wId = String(w.id || w._id || '');
+      const lots = scopedLots.filter((l) => {
+        const lotWId = l.businessOwnerId || l.ownerWorkspaceId;
+        const normalized =
+          typeof lotWId === 'object' && lotWId
+            ? String(lotWId.id || lotWId._id || '')
+            : String(lotWId || '');
+        return normalized === wId;
+      });
+      const pendingLots = lots.filter(l => l.status === 'pending');
+      const dispatchedLots = lots.filter(l => l.status === 'dispatched');
+      const completedLots = lots.filter(l => l.status === 'completed');
+
+      return {
+        id: wId,
+        name: w.businessName || w.name || w.organizationName || 'Unnamed Workspace',
+        totalRevenue: lots.reduce((s, l) => s + Number(l.billAmount || 0), 0),
+        completedRevenue: completedLots.reduce((s, l) => s + Number(l.billAmount || 0), 0),
+        pendingRevenue: pendingLots.reduce((s, l) => s + Number(l.billAmount || 0), 0),
+        dispatchedRevenue: dispatchedLots.reduce((s, l) => s + Number(l.billAmount || 0), 0),
+        lotCount: lots.length,
+        completedCount: completedLots.length,
+        pendingCount: pendingLots.length,
+        dispatchedCount: dispatchedLots.length,
+      };
+    })
+    .filter((w) => w.lotCount > 0)
+    .sort((a, b) => b.totalRevenue - a.totalRevenue);
 
   const pipelineStatCards = [
     { label: 'Total Lots', value: scopedLots.length, color: '#1e40af', sub: 'All assigned lots' },
@@ -447,67 +480,91 @@ export default function Dashboard() {
             </div>
           </section>
 
-          <div className="dash-admin-split">
-            {/* Status Breakdown */}
-            <div className="card">
-              <div className="card-header">
-                <span className="card-title">Lot Status Breakdown</span>
-              </div>
-              <div className="card-body">
-                {[
-                  { label: 'Pending', count: byStatus('pending'), color: '#d97706' },
-                  { label: 'Dispatched', count: byStatus('dispatched'), color: '#0284c7' },
-                  { label: 'Received Back', count: byStatus('received back'), color: '#0d9488' },
-                  { label: 'Completed', count: byStatus('completed'), color: '#15803d' },
-                ].map((s) => (
-                  <div
-                    key={s.label}
-                    style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}
-                  >
-                    <div
-                      style={{
-                        width: 110,
-                        fontSize: 13,
-                        color: 'var(--text-secondary)',
-                        flexShrink: 0,
-                      }}
-                    >
-                      {s.label}
-                    </div>
-                    <div
-                      style={{
-                        flex: 1,
-                        background: '#F3F4F6',
-                        borderRadius: 6,
-                        height: 14,
-                        overflow: 'hidden',
-                      }}
-                    >
-                      <div
-                        style={{
-                          width: `${scopedLots.length ? (s.count / scopedLots.length) * 100 : 0}%`,
-                          background: s.color,
-                          height: '100%',
-                          borderRadius: 6,
-                          transition: 'width 0.6s ease',
-                        }}
-                      />
-                    </div>
-                    <div
-                      style={{
-                        width: 28,
-                        fontSize: 13,
-                        fontWeight: 700,
-                        color: s.color,
-                        textAlign: 'right',
-                      }}
-                    >
-                      {s.count}
+          <div className="dash-admin-split-2-1">
+            {/* Workspace Revenue Breakdown (replacing Lot Status Breakdown to save space) */}
+            {workspaceStats.length > 0 && (
+              <div className="card">
+                <div className="card-header">
+                  <span className="card-title">Workspace Revenue Breakdown</span>
+                </div>
+                <div className="card-body dash-recent" style={{ padding: 0 }}>
+                  <div className="dash-recent-desktop">
+                    <div className="table-scroll">
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>Workspace</th>
+                            <th style={{ textAlign: 'center' }}>Total</th>
+                            <th style={{ textAlign: 'center' }}>Done</th>
+                            <th style={{ textAlign: 'center' }}>Pending</th>
+                            <th style={{ textAlign: 'center' }}>Dispatched</th>
+                            <th style={{ textAlign: 'right' }}>Total Rev.</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {workspaceStats.map((w) => (
+                            <tr key={w.id}>
+                              <td style={{ fontWeight: 600 }}>{w.name}</td>
+                              <td style={{ textAlign: 'center' }}>
+                                <div style={{ fontSize: 13, fontWeight: 600 }}>{w.lotCount}</div>
+                                <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Total Lots</div>
+                              </td>
+                              <td style={{ textAlign: 'center', color: '#15803d' }}>
+                                <div style={{ fontSize: 13, fontWeight: 600 }}>{w.completedCount}</div>
+                                <div style={{ fontSize: 11 }}>{hideAmounts ? '****' : `₨${w.completedRevenue.toLocaleString()}`}</div>
+                              </td>
+                              <td style={{ textAlign: 'center', color: '#d97706' }}>
+                                <div style={{ fontSize: 13, fontWeight: 600 }}>{w.pendingCount}</div>
+                                <div style={{ fontSize: 11 }}>{hideAmounts ? '****' : `₨${w.pendingRevenue.toLocaleString()}`}</div>
+                              </td>
+                              <td style={{ textAlign: 'center', color: '#0284c7' }}>
+                                <div style={{ fontSize: 13, fontWeight: 600 }}>{w.dispatchedCount}</div>
+                                <div style={{ fontSize: 11 }}>{hideAmounts ? '****' : `₨${w.dispatchedRevenue.toLocaleString()}`}</div>
+                              </td>
+                              <td style={{ textAlign: 'right', fontWeight: 600, color: '#1e40af' }}>
+                                {hideAmounts ? '****' : `₨${w.totalRevenue.toLocaleString()}`}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
                     </div>
                   </div>
-                ))}
+                  <div className="dash-recent-mobile">
+                    <ul className="dash-recent-list">
+                      {workspaceStats.map((w) => (
+                        <li key={w.id} className="dash-recent-item" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
+                            <div className="dash-recent-item-title" style={{ fontWeight: 600 }}>{w.name}</div>
+                            <div className="dash-recent-amount" style={{ color: '#1e40af', fontWeight: 700 }}>
+                              {hideAmounts ? '****' : `₨${w.totalRevenue.toLocaleString()}`}
+                            </div>
+                          </div>
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 8 }}>
+                            <div style={{ textAlign: 'center' }}>
+                              <div style={{ fontSize: 13, fontWeight: 600 }}>{w.lotCount}</div>
+                              <div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>Total</div>
+                            </div>
+                            <div style={{ textAlign: 'center', color: '#15803d' }}>
+                              <div style={{ fontSize: 13, fontWeight: 600 }}>{w.completedCount}</div>
+                              <div style={{ fontSize: 10 }}>{hideAmounts ? '****' : `₨${w.completedRevenue.toLocaleString()}`}</div>
+                            </div>
+                            <div style={{ textAlign: 'center', color: '#0284c7' }}>
+                              <div style={{ fontSize: 13, fontWeight: 600 }}>{w.dispatchedCount}</div>
+                              <div style={{ fontSize: 10 }}>{hideAmounts ? '****' : `₨${w.dispatchedRevenue.toLocaleString()}`}</div>
+                            </div>
+                            <div style={{ textAlign: 'center', color: '#d97706' }}>
+                              <div style={{ fontSize: 13, fontWeight: 600 }}>{w.pendingCount}</div>
+                              <div style={{ fontSize: 10 }}>{hideAmounts ? '****' : `₨${w.pendingRevenue.toLocaleString()}`}</div>
+                            </div>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Billable Lots */}
             <div className="card">

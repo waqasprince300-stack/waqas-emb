@@ -253,6 +253,13 @@ export function rememberLotFormSave(form, { collectionId: _collectionId, bulkLot
   if (form.customFabric)
     mem.global.customFabrics = uniquePush(mem.global.customFabrics, form.customFabric);
 
+  if (form.suitType === '3-piece' && form.dupattaDetails) {
+    const dFinalType = form.dupattaDetails.itemType === '__custom' ? form.dupattaDetails.customFabric : form.dupattaDetails.itemType;
+    if (dFinalType) mem.global.itemTypes = uniquePush(mem.global.itemTypes, dFinalType);
+    if (form.dupattaDetails.customFabric)
+      mem.global.customFabrics = uniquePush(mem.global.customFabrics, form.dupattaDetails.customFabric);
+  }
+
   if (form.pieces !== '' && form.pieces != null) {
     mem.global.pieces = uniquePush(mem.global.pieces, String(form.pieces));
   }

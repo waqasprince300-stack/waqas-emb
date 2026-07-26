@@ -109,6 +109,7 @@ function LotForm({
   pickWorkspaceForNewLot,
   workspaceOwnerOptions,
   defaultNewLotOwnerId,
+  onJumpToLinkedLot,
 }) {
   const blank = {
     lotNumber: '',
@@ -133,6 +134,10 @@ function LotForm({
     dispatchDate: '',
     receivedBackDate: '',
     saveBusinessOwnerId: defaultNewLotOwnerId || '',
+    suitType: '2-piece',
+    isRework: false,
+    ownerBillingChoice: 'separate',
+    dupattaDetails: { partyId: '', partyName: '', itemType: '', customFabric: '', fabric: '', quantity: '', billAmount: '' },
   };
   const itemTypeOptions = useMemo(
     () => [...BASE_FABRICS, ...getRememberedItemTypes().filter((t) => !BASE_FABRICS.includes(t))],
@@ -172,6 +177,10 @@ function LotForm({
         initial.businessOwnerId != null && initial.businessOwnerId !== ''
           ? String(initial.businessOwnerId)
           : defaultNewLotOwnerId || '',
+      suitType: initial.suitType || '2-piece',
+      isRework: initial.isRework || false,
+      ownerBillingChoice: initial.ownerBillingChoice || 'separate',
+      dupattaDetails: initial.dupattaDetails || { partyId: '', partyName: '', rate: '', fabric: '', quantity: '', billAmount: '' },
     };
   });
   const [errors, setErrors] = useState({});
@@ -235,7 +244,6 @@ function LotForm({
 
   const validate = () => {
     const newErrors = {};
-    if (!form.lotNumber.trim()) newErrors.lotNumber = 'Lot Number is required';
     if (!form.designNo.trim()) newErrors.designNo = 'Design Number is required';
     if (pickWorkspaceForNewLot && !String(form.saveBusinessOwnerId || '').trim()) {
       newErrors.saveBusinessOwnerId = 'Select a business collection for this lot';
@@ -260,12 +268,72 @@ function LotForm({
 
   const handleSave = async () => {
     if (!validate()) return;
+    
+    const lotNumber = (form.lotNumber || form.lotNo || '').trim();
+    if (!lotNumber) {
+      const confirm = await Swal.fire({
+        title: 'Save without Lot Number?',
+        text: 'You have not entered a lot number. Are you sure you want to save this work as unnumbered?',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#4f46e5',
+        cancelButtonColor: '#94a3b8',
+        confirmButtonText: 'Yes, save without number',
+        cancelButtonText: 'Cancel'
+      });
+      if (!confirm.isConfirmed) return;
+    }
+    
     const finalType = form.itemType === '__custom' ? form.customFabric : form.itemType;
-    const lotNumber = form.lotNumber || form.lotNo;
+    let finalDupattaDetails = form.dupattaDetails;
+    if (form.suitType === '3-piece') {
+      const dFinalType = form.dupattaDetails.itemType === '__custom' ? form.dupattaDetails.customFabric : form.dupattaDetails.itemType;
+      finalDupattaDetails = {
+        ...form.dupattaDetails,
+        fabric: dFinalType,
+        itemType: dFinalType,
+      };
+    }
+
     const quantityValue = Number(form.quantity || form.pieces || 0);
     const selectedParty = parties.find((p) => p.id === form.partyId);
     const partyName = selectedParty?.name || form.partyName || '';
     const partyId = form.partyId || '';
+
+    let syncMainLotPieces = false;
+    if (initial && (initial.suitType === '3-piece' || form.suitType === '3-piece')) {
+      const initialPieces = Number(initial.quantity || initial.pieces || 0);
+      if (quantityValue !== initialPieces) {
+        if (initial.suitComponent === 'main' || !initial.suitComponent) {
+          const dQty = Number(finalDupattaDetails.quantity || 0);
+          if (dQty !== quantityValue && form.suitType === '3-piece') {
+            const res = await Swal.fire({
+              title: 'Sync Dupatta Pieces?',
+              text: `You changed the Main lot pieces to ${quantityValue}. Do you want to automatically update the Dupatta lot pieces to ${quantityValue} as well?`,
+              icon: 'question',
+              showCancelButton: true,
+              confirmButtonText: 'Yes, update Dupatta too',
+              cancelButtonText: 'No, leave it as is'
+            });
+            if (res.isConfirmed) {
+              finalDupattaDetails.quantity = String(quantityValue);
+            }
+          }
+        } else if (initial.suitComponent === 'dupatta') {
+          const res = await Swal.fire({
+            title: 'Sync Main Lot Pieces?',
+            text: `You changed the Dupatta pieces to ${quantityValue}. Do you want to automatically update the Main lot pieces to ${quantityValue} as well?`,
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonText: 'Yes, update Main lot too',
+            cancelButtonText: 'No, leave it as is'
+          });
+          if (res.isConfirmed) {
+            syncMainLotPieces = true;
+          }
+        }
+      }
+    }
 
     const basePayload = {
       ...form,
@@ -274,12 +342,21 @@ function LotForm({
       itemType: finalType,
       quantity: quantityValue,
       pieces: quantityValue,
-      rate: Number(form.rate || 0),
+      rate: 0,
       billAmount: Number(form.billAmount || 0),
       unit: form.unit || 'pieces',
       partyId,
       partyName,
       machineHead: selectedHead,
+      suitType: form.suitType,
+      isRework: form.isRework,
+      ...(form.suitType === '3-piece'
+        ? {
+            dupattaDetails: finalDupattaDetails,
+            ownerBillingChoice: form.ownerBillingChoice,
+          }
+        : {}),
+      ...(syncMainLotPieces ? { syncMainLotPieces } : {})
     };
 
     if (isNewLot && bulkMode && bulkLotNumbers && bulkLotNumbers.length > 1) {
@@ -473,6 +550,60 @@ function LotForm({
       }}
     >
       {compactToolbar}
+
+      {/* Linked Lot Navigation */}
+      {!isNewLot && form.linkedLotId && (
+        <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'flex-end' }}>
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: '#4f46e5', fontWeight: 600, background: '#eef2ff' }}
+            onClick={() => onJumpToLinkedLot && onJumpToLinkedLot(form.linkedLotId)}
+          >
+            {form.suitComponent === 'dupatta' ? '🔗 View Main Lot' : '🔗 View Dupatta'}
+          </button>
+        </div>
+      )}
+      
+      {/* Suit Type & Rework Controls */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 16 }}>
+        {(!initial || initial.suitComponent !== 'dupatta') && (
+          <div style={{ display: 'flex', gap: '8px' }}>
+            {['2-piece', '3-piece', 'dupatta-only'].map(type => (
+              <button
+                key={type}
+                type="button"
+                onClick={() => set('suitType', type)}
+                style={{
+                  flex: 1,
+                  padding: '8px 4px',
+                  borderRadius: '8px',
+                  border: form.suitType === type ? '2px solid #4f46e5' : '1px solid #e2e8f0',
+                  backgroundColor: form.suitType === type ? '#eef2ff' : 'transparent',
+                  color: form.suitType === type ? '#3730a3' : '#475569',
+                  fontWeight: form.suitType === type ? '600' : '400',
+                  cursor: 'pointer',
+                  fontSize: '13px',
+                  transition: 'all 0.2s'
+                }}
+              >
+                {type === '2-piece' ? '2-Piece' : type === '3-piece' ? '3-Piece' : 'Dupatta Only'}
+              </button>
+            ))}
+          </div>
+        )}
+        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#475569', fontWeight: 600, cursor: 'pointer' }}>
+          <input
+            type="checkbox"
+            checked={form.isRework}
+            onChange={(e) => set('isRework', e.target.checked)}
+            style={{ width: 16, height: 16, accentColor: '#b45309' }}
+            disabled={!isNewLot && initial?.suitComponent === 'dupatta' && initial?.linkedLotId}
+          />
+          Mark as Rework / Claim
+        </label>
+      </div>
+
       <div className="grid-2">
         {pickWorkspaceForNewLot && (
           <FormGroup label="Business collection *">
@@ -495,7 +626,7 @@ function LotForm({
             )}
           </FormGroup>
         )}
-        <FormGroup label={isNewLot && bulkMode ? 'Starting lot number *' : 'Lot Number *'}>
+        <FormGroup label={isNewLot && bulkMode ? 'Starting lot number' : 'Lot Number'}>
           <input
             className={`form-input${errors.lotNumber ? ' input-error' : ''}`}
             value={form.lotNumber}
@@ -504,12 +635,13 @@ function LotForm({
               set('lotNumber', v);
               set('lotNo', v);
             }}
-            placeholder={isNewLot && bulkMode ? 'e.g. L-10 (serials from here)' : 'e.g. L-10'}
+            placeholder={isNewLot && bulkMode ? 'e.g. L-10 (serials from here)' : 'e.g. L-10 (Leave blank if unnumbered)'}
             autoComplete="off"
+            disabled={!isNewLot && initial?.suitComponent === 'dupatta' && initial?.linkedLotId}
           />
-          {errors.lotNumber && (
-            <span style={{ color: '#dc2626', fontSize: 11, marginTop: 3, display: 'block' }}>
-              {errors.lotNumber}
+          {!isNewLot && initial?.suitComponent === 'dupatta' && initial?.linkedLotId && (
+            <span style={{ fontSize: 11, color: '#64748b', display: 'block', marginTop: 4 }}>
+              Edit from the Main Lot to change the suit&apos;s Lot Number.
             </span>
           )}
         </FormGroup>
@@ -521,6 +653,7 @@ function LotForm({
             placeholder="e.g. D-101"
             autoComplete="off"
             spellCheck={false}
+            disabled={!isNewLot && initial?.suitComponent === 'dupatta' && initial?.linkedLotId}
           />
           {errors.designNo && (
             <span style={{ color: '#dc2626', fontSize: 11, marginTop: 3, display: 'block' }}>
@@ -534,9 +667,10 @@ function LotForm({
             value={form.description}
             onChange={(e) => set('description', e.target.value)}
             placeholder="e.g. Floral Print"
+            disabled={!isNewLot && initial?.suitComponent === 'dupatta' && initial?.linkedLotId}
           />
         </FormGroup>
-        <FormGroup label="Item Type">
+        <FormGroup label="Fabric">
           <select
             className="form-select"
             value={form.itemType}
@@ -547,7 +681,7 @@ function LotForm({
                 {f}
               </option>
             ))}
-            <option value="__custom">+ New item type…</option>
+            <option value="__custom">+ New fabric…</option>
           </select>
           {form.itemType === '__custom' && (
             <input
@@ -555,7 +689,7 @@ function LotForm({
               style={{ marginTop: 6 }}
               value={form.customFabric}
               onChange={(e) => set('customFabric', e.target.value)}
-              placeholder="Enter new item type"
+              placeholder="Enter new fabric"
             />
           )}
         </FormGroup>
@@ -564,6 +698,7 @@ function LotForm({
             className="form-select"
             value={form.colors}
             onChange={(e) => setColorsAndPieces(e.target.value)}
+            disabled={!isNewLot && initial?.suitComponent === 'dupatta' && initial?.linkedLotId}
           >
             {COLOR_OPTIONS.map((n) => (
               <option key={n} value={n}>
@@ -588,6 +723,7 @@ function LotForm({
             type="date"
             value={form.allotDate}
             onChange={(e) => set('allotDate', e.target.value)}
+            disabled={!isNewLot && initial?.suitComponent === 'dupatta' && initial?.linkedLotId}
           />
         </FormGroup>
         <FormGroup label="Party">
@@ -624,6 +760,11 @@ function LotForm({
           <FormGroup label="Status">
             <select
               className="form-select"
+              style={
+                form.status === 'completed'
+                  ? { backgroundColor: '#dcfce7', color: '#166534', borderColor: '#bbf7d0', fontWeight: '600' }
+                  : {}
+              }
               value={form.status}
               onChange={(e) => set('status', e.target.value)}
             >
@@ -674,9 +815,169 @@ function LotForm({
           </FormGroup>
         )}
       </div>
+
+      {/* Dupatta Details Section for 3-Piece */}
+      {(!initial || initial.suitComponent !== 'dupatta') && form.suitType === '3-piece' && (
+        <div style={{ marginTop: 24, padding: 16, background: '#f8fafc', borderRadius: 8, border: '1px solid #e2e8f0' }}>
+          <h4 style={{ margin: '0 0 16px 0', color: '#334155', fontSize: 15, fontWeight: 700 }}>Dupatta Details</h4>
+          <div className="grid-2">
+            {!(isNewLot && bulkMode) && (
+              <FormGroup label="Dupatta Party">
+                <select
+                  className="form-select"
+                  value={form.dupattaDetails.partyId}
+                  onChange={(e) => {
+                    const selectedParty = parties.find(p => p.id === e.target.value);
+                    set('dupattaDetails', {
+                      ...form.dupattaDetails,
+                      partyId: e.target.value,
+                      partyName: selectedParty ? selectedParty.name : ''
+                    });
+                  }}
+                >
+                  <option value="">— Select Party —</option>
+                  {recentParties.length > 0 && (
+                    <optgroup label="Recent">
+                      {recentParties.map((p) => (
+                        <option key={`dupatta-recent-${p.id}`} value={p.id}>
+                          {p.name}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                  <optgroup label={recentParties.length > 0 ? 'All parties' : 'Parties'}>
+                    {(recentParties.length > 0 ? otherParties : parties).map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                </select>
+              </FormGroup>
+            )}
+            
+            <FormGroup label="Fabric">
+              <select
+                className="form-select"
+                value={form.dupattaDetails.itemType}
+                onChange={(e) => set('dupattaDetails', { ...form.dupattaDetails, itemType: e.target.value })}
+              >
+                <option value="">— Select Fabric —</option>
+                {itemTypeOptions.map((f) => (
+                  <option key={f} value={f}>
+                    {f}
+                  </option>
+                ))}
+                <option value="__custom">+ New fabric…</option>
+              </select>
+              {form.dupattaDetails.itemType === '__custom' && (
+                <input
+                  className="form-input"
+                  style={{ marginTop: 6 }}
+                  value={form.dupattaDetails.customFabric}
+                  onChange={(e) => set('dupattaDetails', { ...form.dupattaDetails, customFabric: e.target.value })}
+                  placeholder="Enter new fabric"
+                />
+              )}
+            </FormGroup>
+
+            <FormGroup label="Quantity / Pieces">
+              <input
+                className="form-input"
+                type="number"
+                min="0"
+                value={form.dupattaDetails.quantity !== '' ? form.dupattaDetails.quantity : form.pieces}
+                onChange={(e) => set('dupattaDetails', { ...form.dupattaDetails, quantity: e.target.value })}
+                placeholder="0"
+              />
+            </FormGroup>
+
+            {form.ownerBillingChoice === 'separate' && (
+              <FormGroup label="Dupatta Owner Bill (₨)">
+                <input
+                  className="form-input"
+                  type="number"
+                  min="0"
+                  value={form.dupattaDetails.billAmount || ''}
+                  onChange={(e) => set('dupattaDetails', { ...form.dupattaDetails, billAmount: e.target.value })}
+                  placeholder="e.g. 5000"
+                />
+              </FormGroup>
+            )}
+          </div>
+
+          <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px dashed #cbd5e1' }}>
+            <h5 style={{ margin: '0 0 10px 0', fontSize: 13, color: '#475569' }}>Owner Billing Preference</h5>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                type="button"
+                onClick={() => set('ownerBillingChoice', 'separate')}
+                style={{
+                  flex: 1,
+                  padding: '8px',
+                  borderRadius: '6px',
+                  border: form.ownerBillingChoice === 'separate' ? '1px solid #10b981' : '1px solid #e2e8f0',
+                  background: form.ownerBillingChoice === 'separate' ? '#ecfdf5' : '#fff',
+                  color: form.ownerBillingChoice === 'separate' ? '#065f46' : '#64748b',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  textAlign: 'left'
+                }}
+              >
+                <div style={{ marginBottom: 4 }}>Separate Bills</div>
+                <div style={{ fontSize: '10px', fontWeight: 400 }}>Main & Dupatta lots will each bill the owner their respective amounts.</div>
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  if (form.ownerBillingChoice === 'combined') return;
+                  const dupattaBill = Number(form.dupattaDetails.billAmount) || 0;
+                  if (dupattaBill > 0) {
+                    const result = await Swal.fire({
+                      title: 'Combine Bills?',
+                      text: `Do you want to add the Dupatta bill (Rs ${dupattaBill}) to the Main lot bill? The Dupatta bill will be set to 0.`,
+                      icon: 'question',
+                      showCancelButton: true,
+                      confirmButtonText: 'Yes, Combine',
+                      cancelButtonText: 'Cancel'
+                    });
+                    if (result.isConfirmed) {
+                      setForm(f => ({
+                        ...f,
+                        ownerBillingChoice: 'combined',
+                        billAmount: (Number(f.billAmount) || 0) + dupattaBill,
+                        dupattaDetails: { ...f.dupattaDetails, billAmount: 0 }
+                      }));
+                    }
+                  } else {
+                    set('ownerBillingChoice', 'combined');
+                  }
+                }}
+                style={{
+                  flex: 1,
+                  padding: '8px',
+                  borderRadius: '6px',
+                  border: form.ownerBillingChoice === 'combined' ? '1px solid #f59e0b' : '1px solid #e2e8f0',
+                  background: form.ownerBillingChoice === 'combined' ? '#fffbeb' : '#fff',
+                  color: form.ownerBillingChoice === 'combined' ? '#92400e' : '#64748b',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  textAlign: 'left'
+                }}
+              >
+                <div style={{ marginBottom: 4 }}>Combined Bill</div>
+                <div style={{ fontSize: '10px', fontWeight: 400 }}>Main lot will combine both bills. Dupatta lot will show ₨0 for owner.</div>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div
         className="modal-footer"
-        style={{ padding: '16px 0 0', borderTop: '1px solid var(--border)', marginTop: 8 }}
+        style={{ padding: '16px 0 0', borderTop: '1px solid var(--border)', marginTop: 24 }}
       >
         <button type="button" className="btn btn-ghost" onClick={onClose} disabled={saving}>
           Cancel
@@ -751,7 +1052,9 @@ export default function GhausiaCollection() {
   const [dateRange, setDateRange] = useState('all');
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
-  const [hideAmounts, setHideAmounts] = useState(false);
+  const [showSummaryCards, setShowSummaryCards] = useState(() => {
+    return localStorage.getItem('hideLotsSummary') !== 'true';
+  });
   const customRange = useMemo(
     () => ({ start: customStart, end: customEnd }),
     [customStart, customEnd]
@@ -999,6 +1302,10 @@ export default function GhausiaCollection() {
   };
 
   const setLotStatus = async (lot, newStatus) => {
+    if (newStatus === 'dispatched' && !lot.partyId) {
+      Swal.fire({ icon: 'warning', title: 'Select a Party', text: 'You must assign a party before dispatching this lot.' });
+      return;
+    }
     if (newStatus === 'completed') {
       const amount = await promptBillAmountForCompletion(lot);
       if (amount == null) return;
@@ -1198,8 +1505,34 @@ export default function GhausiaCollection() {
   const statsRefreshing = lotSaving || paymentSaving || deleteLoading || inlineSummaryBusy;
 
   const openEdit = (lot) => {
-    setEditing(lot);
+    let editPayload = lot;
+    if (lot.suitType === '3-piece' && lot.suitComponent === 'main' && lot.linkedLotId) {
+      const linkedDupatta = effectiveCollectionLots.find((l) => l.id === lot.linkedLotId || l._id === lot.linkedLotId);
+      if (linkedDupatta) {
+        editPayload = {
+          ...lot,
+          dupattaDetails: {
+            partyId: linkedDupatta.partyId || '',
+            partyName: linkedDupatta.partyName || '',
+            fabric: linkedDupatta.fabric || '',
+            itemType: linkedDupatta.itemType || linkedDupatta.fabric || '',
+            customFabric: linkedDupatta.customFabric || '',
+            quantity: linkedDupatta.quantity || '',
+            billAmount: linkedDupatta.billAmount || '',
+          }
+        };
+      }
+    }
+    setEditing(editPayload);
     setModal('form');
+  };
+  const openLinkedLot = (linkedId) => {
+    const linked = effectiveCollectionLots.find((lot) => lot.id === linkedId || lot._id === linkedId);
+    if (linked) {
+      openEdit(linked);
+    } else {
+      Swal.fire({ icon: 'info', title: 'Not found', text: 'The linked lot could not be found in current collection.' });
+    }
   };
   const openAdd = () => {
     setEditing(null);
@@ -1207,6 +1540,10 @@ export default function GhausiaCollection() {
   };
 
   const handleSave = async (form) => {
+    if (form.status === 'dispatched' && !form.partyId) {
+      Swal.fire({ icon: 'warning', title: 'Select a Party', text: 'You must select a party before dispatching this lot.' });
+      return;
+    }
     const bulkLotNumbers = Array.isArray(form.bulkLotNumbers) ? form.bulkLotNumbers : null;
 
     const prev = editing;
@@ -1322,7 +1659,15 @@ export default function GhausiaCollection() {
       const dupLocal = collectionLots.some((l) => {
         if (prev && String(l.id) === String(prev.id)) return false;
         if (String(l.businessOwnerId ?? '') !== targetBiz) return false;
-        return normalizeLotNumberKey(l.lotNumber ?? l.lotNo) === lotKey;
+        if (normalizeLotNumberKey(l.lotNumber ?? l.lotNo) !== lotKey) return false;
+        
+        // Allowed to have same lot number if they are different suit components or different rework status
+        const thisSuitComp = saveForm.suitComponent || 'main';
+        const thatSuitComp = l.suitComponent || 'main';
+        const thisRework = Boolean(saveForm.isRework);
+        const thatRework = Boolean(l.isRework);
+        
+        return thisSuitComp === thatSuitComp && thisRework === thatRework;
       });
       if (dupLocal) {
         lotSaveErrorToast(
@@ -1606,17 +1951,47 @@ export default function GhausiaCollection() {
             </p>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-            <button 
-              onClick={() => setHideAmounts(h => !h)} 
-              style={{ background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--text-muted)', fontWeight: 600 }}
+            <button
+              type="button"
+              onClick={() => {
+                const next = !showSummaryCards;
+                setShowSummaryCards(next);
+                localStorage.setItem('hideLotsSummary', !next ? 'true' : 'false');
+              }}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                fontSize: 12,
+                fontWeight: 600,
+                color: showSummaryCards ? '#475569' : '#1e40af',
+                border: '1px solid var(--border)',
+                background: showSummaryCards ? 'var(--surface-card, #ffffff)' : '#eff6ff',
+                borderRadius: 20,
+                padding: '5px 14px',
+                cursor: 'pointer',
+                boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+                transition: 'all 0.15s ease',
+              }}
+              title={showSummaryCards ? 'Hide summary stat cards for privacy' : 'Show summary stat cards'}
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                {hideAmounts 
-                  ? <><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></>
-                  : <><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></>
-                }
-              </svg>
-              {hideAmounts ? 'Show' : 'Hide'}
+              {showSummaryCards ? (
+                <>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
+                    <line x1="1" y1="1" x2="23" y2="23" />
+                  </svg>
+                  <span>Hide Summary</span>
+                </>
+              ) : (
+                <>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                    <circle cx="12" cy="12" r="3" />
+                  </svg>
+                  <span>Show Summary</span>
+                </>
+              )}
             </button>
             <button
               type="button"
@@ -1658,13 +2033,15 @@ export default function GhausiaCollection() {
             background: 'rgba(255,255,255,0.85)',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', width: '100%' }}>
             <span
-              style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', flexShrink: 0 }}
+              style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', flexShrink: 0, minWidth: '70px' }}
             >
-              Workspace
+              Workspace:
             </span>
-            <BusinessOwnerSwitcher compact />
+            <div style={{ flex: '1 1 300px' }}>
+              <BusinessOwnerSwitcher compact />
+            </div>
           </div>
         </div>
       </div>
@@ -1695,31 +2072,32 @@ export default function GhausiaCollection() {
             </span>
           </div>
         )}
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
-            gap: 12,
-          }}
-        >
+        {showSummaryCards && (
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
+              gap: 12,
+            }}
+          >
           {[
             { label: 'Total Lots', value: visibleLots.length, color: '#1e40af' },
             { label: 'Billable Lots', value: billable.length, color: '#dc2626' },
             {
               label: 'Billable Amount',
-              value: hideAmounts ? '****' : `₨${billableTotal.toLocaleString()}`,
+              value: `₨${billableTotal.toLocaleString()}`,
               color: '#dc2626',
             },
             {
               label: 'Received from Owner',
               value: ownerReceivedIsPending
                 ? 'Pending to owner'
-                : (hideAmounts ? '****' : `₨${ownerReceivedNet.toLocaleString()}`),
+                : `₨${ownerReceivedNet.toLocaleString()}`,
               color: ownerReceivedIsPending ? '#d97706' : '#15803d',
             },
             {
               label: `${billableTotal - ownerReceivedNet >= 0 ? 'Receivable from Owner' : 'Advance from Owner'}`,
-              value: hideAmounts ? '****' : `₨${(billableTotal - ownerReceivedNet).toLocaleString()}`,
+              value: `₨${(billableTotal - ownerReceivedNet).toLocaleString()}`,
               color: billableTotal - ownerReceivedNet >= 0 ? '#15803d' : '#dc2626',
             },
           ].map((c) => (
@@ -1729,6 +2107,7 @@ export default function GhausiaCollection() {
             </div>
           ))}
         </div>
+        )}
       </div>
 
       {/* Payment Panel */}
@@ -2117,7 +2496,7 @@ export default function GhausiaCollection() {
                 <th>Lot No</th>
                 <th>Design No</th>
                 <th>Description</th>
-                <th>Item Type</th>
+                <th>Fabric</th>
                 <th>Colors</th>
                 <th>Pieces</th>
                 <th>Allot Date</th>
@@ -2138,7 +2517,32 @@ export default function GhausiaCollection() {
               ) : (
                 paginatedLots.map((l) => (
                   <tr key={l.id}>
-                    <td style={{ fontWeight: 700, color: '#1e40af' }}>{l.lotNumber}</td>
+                    <td style={{ fontWeight: 700, color: '#1e40af' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        {l.lotNumber || <span style={{ color: '#94a3b8', fontStyle: 'italic', fontWeight: 500 }}>(No Lot)</span>}
+                        {l.suitComponent === 'dupatta' && (
+                          <button type="button" onClick={() => openEdit(l)} style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', background: '#fdf4ff', color: '#a21caf', border: '1px solid #f5d0fe', borderRadius: 4, cursor: 'pointer' }}>Dupatta</button>
+                        )}
+                        {l.suitComponent === 'main' && l.suitType === '3-piece' && (
+                          <button type="button" onClick={() => openEdit(l)} style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe', borderRadius: 4, cursor: 'pointer' }}>Main Lot</button>
+                        )}
+                        {l.isRework && (
+                          <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', background: '#fffbeb', color: '#b45309', border: '1px solid #fde68a', borderRadius: 4 }}>Rework</span>
+                        )}
+                        {l.linkedLotId && (
+                          <div title="Jump to linked lot">
+                            <button
+                              type="button"
+                              onClick={() => openLinkedLot(l.linkedLotId)}
+                              style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', background: '#f8fafc', color: '#334155', border: '1px solid #cbd5e1', borderRadius: 4, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}
+                            >
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
+                              {l.suitComponent === 'main' ? 'View Dupatta' : 'View Main'}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </td>
                     <td style={{ fontWeight: 600 }}>{l.designNo}</td>
                     <td className="desc-col">{l.description}</td>
                     <td>
@@ -2259,20 +2663,33 @@ export default function GhausiaCollection() {
             paginatedLots.map((l) => (
               <div key={`gh-tile-${l.id}`} className="lot-tile-card">
                 <div className="lot-tile-header">
-                  <div>
-                    <div className="lot-tile-number">Lot #{l.lotNumber || l.lotNo}</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
+                      <span className="lot-tile-number">Lot {l.lotNumber ? `#${l.lotNumber}` : <span style={{ fontStyle: 'italic', fontWeight: 500, color: '#94a3b8' }}>(No Lot)</span>}</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                      {l.suitComponent === 'dupatta' && <button type="button" onClick={() => openEdit(l)} style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', background: '#fdf4ff', color: '#a21caf', border: '1px solid #f5d0fe', borderRadius: 4, cursor: 'pointer' }}>Dupatta</button>}
+                      {l.suitComponent === 'main' && l.suitType === '3-piece' && <button type="button" onClick={() => openEdit(l)} style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe', borderRadius: 4, cursor: 'pointer' }}>Main Lot</button>}
+                      {l.linkedLotId && (
+                        <button type="button" onClick={() => openLinkedLot(l.linkedLotId)} style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', background: '#f8fafc', color: '#334155', border: '1px solid #cbd5e1', borderRadius: 4, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
+                          {l.suitComponent === 'main' ? 'View Dupatta' : 'View Main'}
+                        </button>
+                      )}
+                    </div>
+                    </div>
                     {l.designNo ? <div className="lot-tile-design">Design #{l.designNo}</div> : null}
                   </div>
-                  <div>
+                  <div style={{ flexBasis: '100%', marginTop: 4 }}>
                     {lotTableTab === 'completed' ? (
-                      <span className="badge-completed" style={{ fontSize: 10, padding: '1px 5px' }}>Done</span>
+                      <span className="badge-completed" style={{ display: 'block', textAlign: 'center', fontSize: 13, padding: '4px 0', borderRadius: 20 }}>Done</span>
                     ) : (
                       <LotStatusSelect
                         value={l.status}
                         options={STATUS_OPTIONS}
                         disabled={completionPersistingLotId === l.id || inlineSummaryBusy}
                         onChange={(next) => setLotStatus(l, next)}
-                        style={{ width: 'auto', minWidth: 0, maxWidth: 105, fontSize: 10.5, padding: '2px 18px 2px 6px', height: 22, backgroundPosition: 'right 4px center' }}
+                        wrapStyle={{ display: 'block', width: '100%' }}
+                        style={{ width: '100%', minWidth: 0, maxWidth: 'none', fontSize: 13, fontWeight: 700, padding: '4px 24px 4px 12px', height: 32, backgroundPosition: 'right 10px center', borderRadius: 20 }}
                       />
                     )}
                   </div>
@@ -2327,9 +2744,22 @@ export default function GhausiaCollection() {
             paginatedLots.map((l) => (
               <div key={`gh-mob-${l.id}`} className="ghausia-mobile-card">
                 <div className="gh-mob-header">
-                  <div>
-                    <span className="gh-mob-lot-no">Lot #{l.lotNumber}</span>
-                    {l.designNo ? <span style={{ fontSize: 13, fontWeight: 600, color: '#475569' }}> · Design #{l.designNo}</span> : null}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
+                      <span className="gh-mob-lot-no">Lot {l.lotNumber ? `#${l.lotNumber}` : <span style={{ fontStyle: 'italic', fontWeight: 500, color: '#94a3b8' }}>(No Lot)</span>}</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                        {l.suitComponent === 'dupatta' && <button type="button" onClick={() => openEdit(l)} style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', background: '#fdf4ff', color: '#a21caf', border: '1px solid #f5d0fe', borderRadius: 4, cursor: 'pointer' }}>Dupatta</button>}
+                        {l.suitComponent === 'main' && l.suitType === '3-piece' && <button type="button" onClick={() => openEdit(l)} style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe', borderRadius: 4, cursor: 'pointer' }}>Main Lot</button>}
+                        {l.isRework && <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', background: '#fffbeb', color: '#b45309', border: '1px solid #fde68a', borderRadius: 4 }}>Rework</span>}
+                        {l.linkedLotId && (
+                          <button type="button" onClick={() => openLinkedLot(l.linkedLotId)} style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', background: '#f8fafc', color: '#334155', border: '1px solid #cbd5e1', borderRadius: 4, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
+                            {l.suitComponent === 'main' ? 'View Dupatta' : 'View Main'}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    {l.designNo ? <span style={{ fontSize: 13, fontWeight: 600, color: '#475569' }}>Design #{l.designNo}</span> : null}
                   </div>
                   <div>
                     {lotTableTab === 'completed' ? (
@@ -2340,6 +2770,7 @@ export default function GhausiaCollection() {
                         options={STATUS_OPTIONS}
                         disabled={completionPersistingLotId === l.id || inlineSummaryBusy}
                         onChange={(next) => setLotStatus(l, next)}
+                        style={{ fontSize: 13, fontWeight: 700, borderRadius: 20 }}
                       />
                     )}
                   </div>
@@ -2423,7 +2854,7 @@ export default function GhausiaCollection() {
       {/* Lot Form Modal */}
       {modal === 'form' && (
         <Modal
-          title={editing ? 'Edit Lot' : 'Add New Lot'}
+          title={editing ? (editing.suitComponent === 'dupatta' ? 'Edit Lot (Dupatta)' : 'Edit Lot') : 'Add New Lot'}
           onClose={() => {
             if (!lotSaving) {
               setModal(null);
@@ -2446,6 +2877,7 @@ export default function GhausiaCollection() {
             pickWorkspaceForNewLot={viewAllWorkspaces && !editing}
             workspaceOwnerOptions={businessOwners}
             defaultNewLotOwnerId={activeBusinessOwnerId}
+            onJumpToLinkedLot={openLinkedLot}
           />
         </Modal>
       )}
@@ -2756,7 +3188,13 @@ export default function GhausiaCollection() {
       {/* Confirm Delete */}
       {deleteTarget && (
         <ConfirmDialog
-          message={`Delete lot ${deleteTarget.lotNumber || deleteTarget.lotNo} / ${deleteTarget.designNo}? This action cannot be undone.`}
+          message={
+            deleteTarget.suitComponent === 'main' && deleteTarget.linkedLotId
+              ? `Delete lot ${deleteTarget.lotNumber || deleteTarget.lotNo} / ${deleteTarget.designNo}? This will also delete the linked Dupatta lot. This action cannot be undone.`
+              : deleteTarget.suitComponent === 'dupatta' && deleteTarget.linkedLotId
+              ? `Delete lot ${deleteTarget.lotNumber || deleteTarget.lotNo} / ${deleteTarget.designNo}? This will downgrade the linked Main lot to a 2-piece suit. This action cannot be undone.`
+              : `Delete lot ${deleteTarget.lotNumber || deleteTarget.lotNo} / ${deleteTarget.designNo}? This action cannot be undone.`
+          }
           onConfirm={handleDelete}
           onCancel={() => setDeleteTarget(null)}
           confirming={deleteLoading}

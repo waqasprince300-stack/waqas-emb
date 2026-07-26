@@ -902,6 +902,12 @@ tbody tr:last-child td {
   gap: 18px;
   margin-bottom: 24px;
 }
+.dash-admin-split-2-1 {
+  display: grid;
+  grid-template-columns: 2fr 1.3fr;
+  gap: 24px;
+  margin-bottom: 24px;
+}
 
 .dash-recent-empty {
   padding: 20px;
@@ -1092,7 +1098,8 @@ tbody tr:last-child td {
 }
 
 @media (max-width: 768px) {
-  .dash-admin-split {
+  .dash-admin-split,
+  .dash-admin-split-2-1 {
     grid-template-columns: 1fr;
     gap: 14px;
   }
@@ -2380,7 +2387,8 @@ tbody tr:last-child td {
 .lot-tile-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
+  flex-wrap: wrap;
   gap: 6px;
   padding: 10px 12px 8px;
   background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
@@ -2390,17 +2398,29 @@ tbody tr:last-child td {
 .lot-tile-header .lot-status-select,
 .lot-tile-header select,
 .lot-tile-header button.lot-status-select {
-  width: auto !important;
-  min-width: 0 !important;
-  max-width: 105px !important;
-  font-size: 10px !important;
-  padding: 3px 18px 3px 8px !important;
-  height: 24px !important;
-  line-height: 1.1 !important;
-  border-radius: 20px !important;
+  width: 100% !important;
+  max-width: none !important;
+  font-size: 11px !important;
+  padding: 4px 24px 4px 10px !important;
+  height: 28px !important;
+  line-height: 1.2 !important;
+  border-radius: 4px !important;
   box-sizing: border-box !important;
-  background-position: right 5px center !important;
-  font-weight: 600 !important;
+  background-position: right 8px center !important;
+  font-weight: normal !important;
+}
+
+@media (max-width: 767px) {
+  .lot-tile-header .lot-status-select,
+  .lot-tile-header select,
+  .lot-tile-header button.lot-status-select {
+    font-size: 13px !important;
+    padding: 4px 24px 4px 12px !important;
+    height: 32px !important;
+    border-radius: 20px !important;
+    background-position: right 10px center !important;
+    font-weight: 700 !important;
+  }
 }
 
 .lot-tile-number {

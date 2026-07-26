@@ -19,6 +19,7 @@ export default function LotStatusSelect({
   disabled = false,
   className = '',
   style,
+  wrapStyle,
   labelFor = (s) => titleCaseStatus(s),
 }) {
   const [open, setOpen] = useState(false);
@@ -81,7 +82,7 @@ export default function LotStatusSelect({
     <>
       <div
         ref={wrapRef}
-        style={{ position: 'relative', display: 'inline-block', verticalAlign: 'middle' }}
+        style={{ position: 'relative', display: 'inline-block', verticalAlign: 'middle', ...wrapStyle }}
       >
         <button
           type="button"
