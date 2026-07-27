@@ -243,10 +243,15 @@ export default function PersonalKhata({ standalone = false } = {}) {
     let cancelled = false;
     const gen = ++khataHydrateGenRef.current;
 
-    const applyState = (data) => {
+    const applyState = (data, isFromServer = false) => {
       if (cancelled || gen !== khataHydrateGenRef.current) return;
       setBusinesses(data.businesses);
-      setActiveBusinessId(data.activeBusinessId);
+      setActiveBusinessId((prev) => {
+        if (isFromServer && prev && data.businesses.some((b) => b.id === prev)) {
+          return prev;
+        }
+        return data.activeBusinessId;
+      });
       setContacts(data.contacts);
       setEntries(data.entries);
       setKhataHydrated(true);
@@ -301,7 +306,7 @@ export default function PersonalKhata({ standalone = false } = {}) {
         } catch {
           /* ignore */
         }
-        applyState(state);
+        applyState(state, true);
       } catch {
         // Offline / server error — fall back to the local cache so the user is never blocked.
         applyState(loadKhataState(khataStorageScope));
@@ -345,7 +350,12 @@ export default function PersonalKhata({ standalone = false } = {}) {
           const state = normalizeKhataState(remote);
           saveKhataState(state, khataStorageScope);
           setBusinesses(state.businesses);
-          setActiveBusinessId(state.activeBusinessId);
+          setActiveBusinessId((prev) => {
+            if (prev && state.businesses.some((b) => b.id === prev)) {
+              return prev;
+            }
+            return state.activeBusinessId;
+          });
           setContacts(state.contacts);
           setEntries(state.entries);
         } catch {

@@ -326,14 +326,17 @@ export default function Sidebar({ sidebarOpen: _sidebarOpen, setSidebarOpen }) {
                   style={{
                     marginLeft: 'auto',
                     background: '#ef4444',
-                    color: '#fff',
-                    fontSize: 11,
-                    fontWeight: 700,
-                    lineHeight: 1,
+                    color: '#ffffff',
+                    fontSize: 12,
+                    fontWeight: 800,
+                    height: 22,
+                    minWidth: 22,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
                     borderRadius: 999,
-                    padding: '3px 7px',
-                    minWidth: 18,
-                    textAlign: 'center',
+                    padding: '0 6px',
+                    boxShadow: '0 0 0 1px rgba(255,255,255,0.1), 0 2px 4px rgba(0,0,0,0.2)',
                   }}
                 >
                   {reviewLotsCount > 99 ? '99+' : reviewLotsCount}
@@ -345,14 +348,17 @@ export default function Sidebar({ sidebarOpen: _sidebarOpen, setSidebarOpen }) {
                   style={{
                     marginLeft: 'auto',
                     background: '#f59e0b',
-                    color: '#fff',
-                    fontSize: 11,
-                    fontWeight: 700,
-                    lineHeight: 1,
+                    color: '#ffffff',
+                    fontSize: 12,
+                    fontWeight: 800,
+                    height: 22,
+                    minWidth: 22,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
                     borderRadius: 999,
-                    padding: '3px 7px',
-                    minWidth: 18,
-                    textAlign: 'center',
+                    padding: '0 6px',
+                    boxShadow: '0 0 0 1px rgba(255,255,255,0.1), 0 2px 4px rgba(0,0,0,0.2)',
                   }}
                 >
                   {billRevisionCount > 99 ? '99+' : billRevisionCount}
@@ -364,14 +370,17 @@ export default function Sidebar({ sidebarOpen: _sidebarOpen, setSidebarOpen }) {
                   style={{
                     marginLeft: 'auto',
                     background: '#ef4444',
-                    color: '#fff',
-                    fontSize: 11,
-                    fontWeight: 700,
-                    lineHeight: 1,
+                    color: '#ffffff',
+                    fontSize: 12,
+                    fontWeight: 800,
+                    height: 22,
+                    minWidth: 22,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
                     borderRadius: 999,
-                    padding: '3px 7px',
-                    minWidth: 18,
-                    textAlign: 'center',
+                    padding: '0 6px',
+                    boxShadow: '0 0 0 1px rgba(255,255,255,0.1), 0 2px 4px rgba(0,0,0,0.2)',
                   }}
                 >
                   {partyRejectedUnread > 99 ? '99+' : partyRejectedUnread}
