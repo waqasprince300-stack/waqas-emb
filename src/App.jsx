@@ -5,6 +5,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import Sidebar from './components/Sidebar';
 import LoaderDashboard from './components/LoaderDashboard';
 import NotificationBell, { LotNotificationListener } from './components/NotificationBell';
+import ErrorBoundary from './components/ErrorBoundary';
 
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const GhausiaCollection = lazy(() => import('./pages/GhausiaCollection'));
@@ -125,6 +126,7 @@ function Layout({ children, sidebarOpen, setSidebarOpen }) {
 
 function RequireAuth({ children, adminOnly = false }) {
   const { isAuthenticated, isAdmin, isSuperAdmin, isPersonalKhata } = useAuth();
+  const location = useLocation();
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
@@ -138,7 +140,7 @@ function RequireAuth({ children, adminOnly = false }) {
     return <Navigate to="/" replace />;
   }
 
-  if (isSuperAdmin) {
+  if (isSuperAdmin && location.pathname === '/') {
     return <Navigate to="/super-admin/pending-admins" replace />;
   }
 
@@ -308,7 +310,8 @@ function AppRoutes() {
           </div>
         }
       >
-        <Routes>
+        <ErrorBoundary>
+          <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
           <Route path="/personal-khata/account" element={<PersonalKhataAccount />} />
@@ -367,7 +370,7 @@ function AppRoutes() {
           <Route
             path="/rate-calculations"
             element={
-              <RequireAuth>
+              <RequireAuth adminOnly>
                 <Layout sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen}>
                   <RateCalculations />
                 </Layout>
@@ -425,7 +428,8 @@ function AppRoutes() {
             }
           />
           <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
+          </Routes>
+        </ErrorBoundary>
       </Suspense>
     </SuperAdminShell>
   );

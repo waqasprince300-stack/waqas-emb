@@ -199,6 +199,15 @@ export default function PartyLedger() {
   const ledgerPartyEdits = isParty ? partyCrossPartyEdits : reportingPartyEdits;
   const PAGE_SIZE = 10;
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [search]);
+
   const [workspaceFilter, setWorkspaceFilter] = useState('All');
   const [partyFilter, setPartyFilter] = useState('All');
   const [statusFilter, setStatusFilter] = useState('All');
@@ -411,26 +420,25 @@ export default function PartyLedger() {
       }
       return compareRowsByUpdatedNewestFirst(a, b, 'lot');
     });
-  }, [assignedLots, search, partyFilter, ledgerLotsTab, statusFilter, ledgerPartyEdits, isAdmin]);
+  }, [assignedLots, debouncedSearch, partyFilter, ledgerLotsTab, statusFilter, ledgerPartyEdits, isAdmin]);
 
   /** Summary cards ignore Status filter — only party / search / dates / workspace (via assignedLots). */
   const lotsForSummaryStats = useMemo(() => {
-    return assignedLots.filter((l) => {
-      const q = search.toLowerCase();
-      const lotLabel = (l.lotNo || l.lotNumber || '').toLowerCase();
-      const matchQ =
-        !q ||
-        lotLabel.includes(q) ||
-        String(l.designNo || '')
-          .toLowerCase()
-          .includes(q) ||
-        String(l.description || '')
-          .toLowerCase()
-          .includes(q);
-      const matchP = partyFilter === 'All' || samePartyId(l.partyId, partyFilter);
-      return matchQ && matchP;
+    return assignedLots.filter((lot) => {
+      if (partyFilter !== 'All' && !samePartyId(lot.partyId, partyFilter)) return false;
+
+      const q = debouncedSearch.toLowerCase();
+      if (q) {
+        let match = false;
+        if (lot.lotNo && String(lot.lotNo).toLowerCase().includes(q)) match = true;
+        if (lot.lotNumber && String(lot.lotNumber).toLowerCase().includes(q)) match = true;
+        if (lot.designNo && String(lot.designNo).toLowerCase().includes(q)) match = true;
+        if (lot.description && String(lot.description).toLowerCase().includes(q)) match = true;
+        if (!match) return false;
+      }
+      return true;
     });
-  }, [assignedLots, search, partyFilter, ledgerPartyEdits]);
+  }, [assignedLots, debouncedSearch, partyFilter, ledgerPartyEdits]);
 
   const otherLotsTabCount = useMemo(
     () => assignedLots.reduce((n, l) => n + (getDisplayStatus(l) !== 'Completed' ? 1 : 0), 0),
@@ -1894,10 +1902,10 @@ export default function PartyLedger() {
                           : undefined
                       }
                     >
-                      <td style={{ fontWeight: 700, color: '#1e40af' }}>
+                      <td style={{ fontWeight: 700, color: '#1e40af', whiteSpace: 'nowrap' }}>
                         {l.lotNo || l.lotNumber}
                       </td>
-                      <td style={{ fontWeight: 600 }}>{l.designNo}</td>
+                      <td style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{l.designNo}</td>
                       <td className="desc-col">{l.description}</td>
                       <td>
                         <span
@@ -2347,10 +2355,10 @@ export default function PartyLedger() {
                   </div>
 
                   <div className="lot-tile-body">
-                    <div className="lot-tile-chips hide-scrollbar" style={{ display: 'flex', flexWrap: 'nowrap', overflowX: 'auto', gap: 6, whiteSpace: 'nowrap', paddingBottom: 4 }}>
+                    <div className="lot-tile-chips hide-scrollbar" style={{ display: 'flex', flexWrap: 'nowrap', gap: 4, overflow: 'hidden', paddingBottom: 4 }}>
                       <span className="fabric-chip">{l.fabric || l.itemType || 'Lawn'}</span>
-                      <span className="info-chip">Colors: {l.colors || 0}</span>
-                      <span className="info-chip">Pieces: {l.pieces || 0}</span>
+                      <span className="info-chip">Col: {l.colors || 0}</span>
+                      <span className="info-chip">Pcs: {l.pieces || 0}</span>
                     </div>
 
                     <div className="lot-tile-info" style={{ flex: 1, marginTop: 4, marginBottom: 8 }}>
@@ -2453,10 +2461,10 @@ export default function PartyLedger() {
                   </div>
 
                   <div className="pl-mob-body">
-                    <div className="pl-mob-chips hide-scrollbar" style={{ display: 'flex', flexWrap: 'nowrap', overflowX: 'auto', gap: 6, whiteSpace: 'nowrap', paddingBottom: 4 }}>
+                    <div className="pl-mob-chips hide-scrollbar" style={{ display: 'flex', flexWrap: 'nowrap', gap: 4, overflow: 'hidden', paddingBottom: 4 }}>
                       <span className="fabric-chip">{l.fabric || l.itemType || 'Lawn'}</span>
-                      <span className="info-chip">Colors: {l.colors || 0}</span>
-                      <span className="info-chip">Pieces: {l.pieces || 0}</span>
+                      <span className="info-chip">Col: {l.colors || 0}</span>
+                      <span className="info-chip">Pcs: {l.pieces || 0}</span>
                     </div>
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>

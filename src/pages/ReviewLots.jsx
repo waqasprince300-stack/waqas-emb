@@ -411,8 +411,8 @@ export default function ReviewLots() {
                           : undefined
                       }
                     >
-                      <td style={{ fontWeight: 700 }}>{l.lotNo || l.lotNumber}</td>
-                      <td>{l.designNo}</td>
+                      <td style={{ fontWeight: 700, whiteSpace: 'nowrap' }}>{l.lotNo || l.lotNumber}</td>
+                      <td style={{ whiteSpace: 'nowrap' }}>{l.designNo}</td>
                       <td>{partyName(l.partyId, l.partyName)}</td>
                       <td style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
                         {businessName(l.businessOwnerId)}

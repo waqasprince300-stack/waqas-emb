@@ -700,18 +700,6 @@ class ApiService {
     });
   }
 
-  // Cash Flow
-  async getCashFlow() {
-    return this.request('/cashFlow');
-  }
-
-  async createCashFlowEntry(data) {
-    return this.request('/cashFlow', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
-  }
-
   // In-app notifications (lot reject / pending review)
   async getNotifications() {
     return this.request('/notifications');

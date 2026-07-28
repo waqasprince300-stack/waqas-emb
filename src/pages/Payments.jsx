@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import Swal from 'sweetalert2';
+import { useLocation } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
 import { Modal, FormGroup, EmptyState, SearchBar } from '../components/UI';
@@ -211,6 +212,7 @@ const paymentToast = (icon, title) => {
 };
 
 export default function Payments() {
+  const location = useLocation();
   const {
     payments,
     reportingPayments,
@@ -247,6 +249,13 @@ export default function Payments() {
   const [errors, setErrors] = useState({});
   const [paymentSaving, setPaymentSaving] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get('action') === 'new') {
+      setModal(true);
+    }
+  }, [location.search]);
   const [isScrolling, setIsScrolling] = useState(false);
   const scrollTimeoutRef = useRef(null);
   const [showSummaryCards, setShowSummaryCards] = useState(() => {

@@ -751,14 +751,22 @@ export function AppProvider({ children }) {
   const addLot = useCallback(
     async (lot, opts = {}) => {
       const { businessOwnerId } = opts;
-      const created = normalizeLotData(
-        await trackWrite(apiService.createGhausiaLot(lot, businessOwnerId))
-      );
-      setGhausiaLots((arr) => [...arr, created]);
-      if (user?.role === 'admin') {
-        setAdminReportingLots((arr) => [...arr, created]);
+      const response = await trackWrite(apiService.createGhausiaLot(lot, businessOwnerId));
+      if (Array.isArray(response)) {
+        const normArray = response.map(normalizeLotData);
+        setGhausiaLots((arr) => [...arr, ...normArray]);
+        if (user?.role === 'admin') {
+          setAdminReportingLots((arr) => [...arr, ...normArray]);
+        }
+        return normArray;
+      } else {
+        const created = normalizeLotData(response);
+        setGhausiaLots((arr) => [...arr, created]);
+        if (user?.role === 'admin') {
+          setAdminReportingLots((arr) => [...arr, created]);
+        }
+        return created;
       }
-      return created;
     },
     [trackWrite, user?.role]
   );

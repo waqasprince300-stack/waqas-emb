@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import Swal from 'sweetalert2';
+import { useLocation } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import BusinessOwnerSwitcher from '../components/BusinessOwnerSwitcher';
 import LotStatusSelect from '../components/LotStatusSelect';
@@ -32,6 +33,8 @@ import {
   getAllMachineHeads,
   addCustomMachineHead,
   setDefaultMachineHead,
+  removeCustomMachineHead,
+  BASE_MACHINE_HEADS,
   rememberLotFormSave,
 } from '../utils/lotFieldMemory';
 
@@ -223,6 +226,15 @@ function LotForm({
     const cfg = setDefaultMachineHead(headCount);
     setHeadConfig(cfg);
     selectHead(headCount);
+  };
+
+  const removeCustomHead = (headCount) => {
+    const cfg = removeCustomMachineHead(headCount);
+    setHeadConfig(cfg);
+    setHeadList(getAllMachineHeads());
+    if (selectedHead === headCount) {
+      selectHead(cfg.defaultHead);
+    }
   };
 
   const bulkLotNumbers = useMemo(() => {
@@ -473,6 +485,17 @@ function LotForm({
               onClick={() => makeDefaultHead(selectedHead)}
             >
               Default {selectedHead}
+            </button>
+          ) : null}
+          {!BASE_MACHINE_HEADS.includes(selectedHead) ? (
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              style={{ padding: '2px 8px', fontSize: 11, color: '#dc2626' }}
+              title={`Delete custom head ${selectedHead}`}
+              onClick={() => removeCustomHead(selectedHead)}
+            >
+              Delete {selectedHead}
             </button>
           ) : null}
         </>
@@ -817,12 +840,31 @@ function LotForm({
       </div>
 
       {/* Dupatta Details Section for 3-Piece */}
-      {(!initial || initial.suitComponent !== 'dupatta') && form.suitType === '3-piece' && (
-        <div style={{ marginTop: 24, padding: 16, background: '#f8fafc', borderRadius: 8, border: '1px solid #e2e8f0' }}>
+      {(!initial || initial.suitComponent !== 'dupatta') && (
+        <div 
+          style={{
+            display: 'grid',
+            gridTemplateRows: form.suitType === '3-piece' ? '1fr' : '0fr',
+            transition: 'grid-template-rows 0.4s cubic-bezier(0.4, 0, 0.2, 1), margin-top 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
+            marginTop: form.suitType === '3-piece' ? 24 : 0,
+            opacity: form.suitType === '3-piece' ? 1 : 0,
+            pointerEvents: form.suitType === '3-piece' ? 'auto' : 'none',
+          }}
+        >
+          <div style={{ overflow: 'hidden' }}>
+            <div
+              style={{
+                padding: 16,
+                background: '#f8fafc',
+                borderRadius: 8,
+                border: '1px solid #e2e8f0',
+                transform: form.suitType === '3-piece' ? 'translateY(0)' : 'translateY(-10px)',
+                transition: 'transform 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
+              }}
+            >
           <h4 style={{ margin: '0 0 16px 0', color: '#334155', fontSize: 15, fontWeight: 700 }}>Dupatta Details</h4>
           <div className="grid-2">
-            {!(isNewLot && bulkMode) && (
-              <FormGroup label="Dupatta Party">
+            <FormGroup label="Dupatta Party">
                 <select
                   className="form-select"
                   value={form.dupattaDetails.partyId}
@@ -854,7 +896,6 @@ function LotForm({
                   </optgroup>
                 </select>
               </FormGroup>
-            )}
             
             <FormGroup label="Fabric">
               <select
@@ -973,6 +1014,8 @@ function LotForm({
             </div>
           </div>
         </div>
+        </div>
+        </div>
       )}
 
       <div
@@ -1002,6 +1045,7 @@ function LotForm({
 }
 
 export default function GhausiaCollection() {
+  const location = useLocation();
   const {
     ghausiaLots,
     reportingLots,
@@ -1047,13 +1091,19 @@ export default function GhausiaCollection() {
   const [paymentSaving, setPaymentSaving] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(timer);
+  }, [search]);
   const [statusFilter, setStatusFilter] = useState('All');
+  const [stuckLotIdsFilter, setStuckLotIdsFilter] = useState([]);
   const [partyFilter, setPartyFilter] = useState('All');
   const [dateRange, setDateRange] = useState('all');
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
   const [showSummaryCards, setShowSummaryCards] = useState(() => {
-    return localStorage.getItem('hideLotsSummary') !== 'true';
+    return localStorage.getItem('hideLedgerSummary') !== 'true';
   });
   const customRange = useMemo(
     () => ({ start: customStart, end: customEnd }),
@@ -1082,10 +1132,25 @@ export default function GhausiaCollection() {
   const [currentPage, setCurrentPage] = useState(1);
   const [billableCollapsed, setBillableCollapsed] = useState(false);
   const [billableSearch, setBillableSearch] = useState('');
+  const [debouncedBillableSearch, setDebouncedBillableSearch] = useState('');
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedBillableSearch(billableSearch), 300);
+    return () => clearTimeout(timer);
+  }, [billableSearch]);
   const [billablePage, setBillablePage] = useState(1);
   const BILLABLE_PAGE_SIZE = 5;
   /** Instant UI while complete/settle API calls finish (removed when server state catches up). */
   const [optimisticCompletions, setOptimisticCompletions] = useState({});
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get('action') === 'new') {
+      setModal('form');
+    }
+    if (params.get('status')) {
+      setStatusFilter(params.get('status'));
+    }
+  }, [location.search]);
 
   const effectiveCollectionLots = useMemo(() => {
     if (!Object.keys(optimisticCompletions).length) return collectionLots;
@@ -1347,7 +1412,7 @@ export default function GhausiaCollection() {
 
   const filtered = useMemo(() => {
     const list = effectiveCollectionLots.filter((l) => {
-      const q = search.toLowerCase();
+      const q = debouncedSearch.toLowerCase();
       const lotLabel = (l.lotNumber || l.lotNo || '').toLowerCase();
       const matchQ =
         !q ||
@@ -1360,6 +1425,7 @@ export default function GhausiaCollection() {
           .includes(q);
       if (!matchQ) return false;
       if (partyFilter !== 'All' && String(l.partyId || '') !== String(partyFilter)) return false;
+      if (stuckLotIdsFilter.length > 0 && !stuckLotIdsFilter.includes(String(l.id))) return false;
       if (
         !isWithinDateRange(
           latestDateFrom(l, [
@@ -1382,11 +1448,12 @@ export default function GhausiaCollection() {
     return [...list].sort((a, b) => compareRowsByUpdatedNewestFirst(a, b, 'lot'));
   }, [
     effectiveCollectionLots,
-    search,
+    debouncedSearch,
     partyFilter,
     dateRange,
     customRange,
     statusFilter,
+    stuckLotIdsFilter,
     lotTableTab,
   ]);
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
@@ -1396,7 +1463,7 @@ export default function GhausiaCollection() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [search, partyFilter, dateRange, customRange, statusFilter, lotTableTab, viewAllWorkspaces]);
+  }, [debouncedSearch, partyFilter, dateRange, customRange, statusFilter, stuckLotIdsFilter, lotTableTab, viewAllWorkspaces]);
 
   useEffect(() => {
     if (currentPage > totalPages) {
@@ -1408,6 +1475,7 @@ export default function GhausiaCollection() {
     () =>
       effectiveCollectionLots.filter((l) => {
         if (partyFilter !== 'All' && String(l.partyId || '') !== String(partyFilter)) return false;
+        if (stuckLotIdsFilter.length > 0 && !stuckLotIdsFilter.includes(String(l.id))) return false;
         return isWithinDateRange(
           latestDateFrom(l, [
             'updatedAt',
@@ -1421,7 +1489,7 @@ export default function GhausiaCollection() {
           customRange
         );
       }),
-    [effectiveCollectionLots, partyFilter, dateRange, customRange]
+    [effectiveCollectionLots, partyFilter, dateRange, customRange, stuckLotIdsFilter]
   );
 
   const completedLotsCount = useMemo(
@@ -1460,7 +1528,7 @@ export default function GhausiaCollection() {
   const billableTotal = billable.reduce((s, l) => s + getOwnerBillableAmount(l), 0);
 
   const billableFiltered = useMemo(() => {
-    const q = billableSearch.trim().toLowerCase();
+    const q = debouncedBillableSearch.trim().toLowerCase();
     if (!q) return billable;
     return billable.filter((l) => {
       const lotNo = String(l.lotNumber || l.lotNo || '').toLowerCase();
@@ -1468,7 +1536,7 @@ export default function GhausiaCollection() {
       const party = String(l.partyName || '').toLowerCase();
       return lotNo.includes(q) || design.includes(q) || party.includes(q);
     });
-  }, [billable, billableSearch]);
+  }, [billable, debouncedBillableSearch]);
 
   const billablePageCount = Math.max(1, Math.ceil(billableFiltered.length / BILLABLE_PAGE_SIZE));
   const billableSafePage = Math.min(billablePage, billablePageCount);
@@ -1479,7 +1547,7 @@ export default function GhausiaCollection() {
 
   useEffect(() => {
     setBillablePage(1);
-  }, [billableSearch]);
+  }, [debouncedBillableSearch]);
 
   useEffect(() => {
     if (billablePage > billablePageCount) setBillablePage(billablePageCount);
@@ -2385,7 +2453,7 @@ export default function GhausiaCollection() {
           <select
             className="form-select pl-toolbar-filter pl-toolbar-filter--status"
             value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
+            onChange={(e) => { setStatusFilter(e.target.value); setStuckLotIdsFilter([]); }}
           >
             <option value="All">All Statuses</option>
             {STATUS_OPTIONS.filter((s) => s !== 'completed').map((s) => (
@@ -2433,7 +2501,7 @@ export default function GhausiaCollection() {
               role="tab"
               aria-selected={lotTableTab === tab.id}
               title={tab.hint}
-              onClick={() => setLotTableTab(tab.id)}
+              onClick={() => { setLotTableTab(tab.id); setStuckLotIdsFilter([]); }}
               style={{
                 padding: '8px 10px',
                 fontSize: 13,
@@ -2517,7 +2585,7 @@ export default function GhausiaCollection() {
               ) : (
                 paginatedLots.map((l) => (
                   <tr key={l.id}>
-                    <td style={{ fontWeight: 700, color: '#1e40af' }}>
+                    <td style={{ fontWeight: 700, color: '#1e40af', whiteSpace: 'nowrap' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                         {l.lotNumber || <span style={{ color: '#94a3b8', fontStyle: 'italic', fontWeight: 500 }}>(No Lot)</span>}
                         {l.suitComponent === 'dupatta' && (
@@ -2543,7 +2611,7 @@ export default function GhausiaCollection() {
                         )}
                       </div>
                     </td>
-                    <td style={{ fontWeight: 600 }}>{l.designNo}</td>
+                    <td style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{l.designNo}</td>
                     <td className="desc-col">{l.description}</td>
                     <td>
                       <span
@@ -2779,8 +2847,8 @@ export default function GhausiaCollection() {
                 <div className="gh-mob-body">
                   <div className="gh-mob-chips">
                     <span className="fabric-chip">{l.itemType || l.fabric || 'Lawn'}</span>
-                    <span className="info-chip">Colors: {l.colors || 0}</span>
-                    <span className="info-chip">Pieces: {l.pieces || 0}</span>
+                    <span className="info-chip">Col: {l.colors || 0}</span>
+                    <span className="info-chip">Pcs: {l.pieces || 0}</span>
                   </div>
 
                   <div style={{ marginTop: 4 }}>

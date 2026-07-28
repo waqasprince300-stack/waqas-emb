@@ -408,12 +408,10 @@ export default function Parties() {
       const partyName = String(party.name || 'Unknown').trim();
       let activeAmount = 0;
       let completedAmount = 0;
-      let totalPayable = 0;
       let active = 0;
       let completed = 0;
       for (const l of lots) {
         const amt = lotBillAmount(l);
-        totalPayable += amt;
         if (lotStatusKey(l) === 'completed') {
           completedAmount += amt;
           completed += 1;

@@ -184,6 +184,19 @@ export function addCustomMachineHead(value) {
   return getMachineHeadConfig();
 }
 
+export function removeCustomMachineHead(value) {
+  const n = normalizeHead(value);
+  if (!n) return getMachineHeadConfig();
+  const mem = readRaw();
+  if (mem.global.machineHeads && mem.global.machineHeads.custom) {
+    mem.global.machineHeads.custom = mem.global.machineHeads.custom.filter(
+      (h) => h !== n
+    );
+    writeRaw(mem);
+  }
+  return getMachineHeadConfig();
+}
+
 export function setDefaultMachineHead(value) {
   const n = normalizeHead(value);
   if (!n) return getMachineHeadConfig();
