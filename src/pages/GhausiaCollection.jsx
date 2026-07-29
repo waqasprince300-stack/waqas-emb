@@ -2656,20 +2656,25 @@ export default function GhausiaCollection() {
                     </td>
                     <td>
                       {lotTableTab === 'completed' ? (
-                        <span
-                          style={{
-                            fontSize: 12,
-                            color: 'green',
-                            marginTop: 3,
-                            fontWeight: '500',
-                            padding: '2px 8px',
-                            borderRadius: 6,
-                            background: '#DCFCE7',
-                            border: '1px solid #DCFCE7',
-                          }}
-                        >
-                          Completed
-                        </span>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                          <span
+                            style={{
+                              fontSize: 12,
+                              color: 'green',
+                              fontWeight: '500',
+                              padding: '2px 8px',
+                              borderRadius: 6,
+                              background: '#DCFCE7',
+                              border: '1px solid #DCFCE7',
+                              alignSelf: 'flex-start'
+                            }}
+                          >
+                            Completed
+                          </span>
+                          <div style={{ fontSize: 11, color: '#166534', fontWeight: 600 }}>
+                            Completed Date: {formatDisplayDate(l.completionApprovedAt || l.allotDate)}
+                          </div>
+                        </div>
                       ) : (
                         <>
                           <LotStatusSelect
@@ -2749,7 +2754,12 @@ export default function GhausiaCollection() {
                   </div>
                   <div style={{ flexBasis: '100%', marginTop: 4 }}>
                     {lotTableTab === 'completed' ? (
-                      <span className="badge-completed" style={{ display: 'block', textAlign: 'center', fontSize: 13, padding: '4px 0', borderRadius: 20 }}>Done</span>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        <span className="badge-completed" style={{ display: 'block', textAlign: 'center', fontSize: 13, padding: '4px 0', borderRadius: 20 }}>Done</span>
+                        <div style={{ fontSize: 11, color: '#166534', textAlign: 'center', fontWeight: 600 }}>
+                          Completed Date: {formatDisplayDate(l.completionApprovedAt || l.allotDate)}
+                        </div>
+                      </div>
                     ) : (
                       <LotStatusSelect
                         value={l.status}
@@ -2831,7 +2841,12 @@ export default function GhausiaCollection() {
                   </div>
                   <div>
                     {lotTableTab === 'completed' ? (
-                      <span className="badge-completed">Completed</span>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+                        <span className="badge-completed">Completed</span>
+                        <div style={{ fontSize: 11, color: '#166534', fontWeight: 600 }}>
+                          Completed Date: {formatDisplayDate(l.completionApprovedAt || l.allotDate)}
+                        </div>
+                      </div>
                     ) : (
                       <LotStatusSelect
                         value={l.status}

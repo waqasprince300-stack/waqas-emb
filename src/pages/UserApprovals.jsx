@@ -231,7 +231,7 @@ export default function UserApprovals() {
         ))}
       </div>
 
-      <div className="table-wrapper">
+      <div className="table-wrapper desktop-only-table">
         <div className="table-scroll">
           <table>
             <thead>
@@ -375,6 +375,97 @@ export default function UserApprovals() {
             </tbody>
           </table>
         </div>
+      </div>
+
+      {/* Mobile View */}
+      <div className="mobile-only-ghausia-cards" style={{ marginTop: 16 }}>
+        {sortedUsers.length === 0 ? (
+          <EmptyState message="No users found" />
+        ) : (
+          sortedUsers.map((user) => {
+            const id = getUserId(user);
+            const form = approvalForms[id] || { partyId: normalizedPartyIdFromUser(user) };
+            const isPending = user.status === 'pending';
+            const isApproved = user.status === 'approved';
+            const isDisabled = user.status === 'disabled';
+            const isRejected = user.status === 'rejected';
+            const isSaving = savingId === id;
+            const canEditParty = isPending || isApproved || isDisabled;
+            const partyChanged = !isPending && normalizePartyIdRef(form.partyId).trim() !== normalizedPartyIdFromUser(user);
+            const badge = STATUS_BADGES[user.status] || STATUS_BADGES.default;
+
+            return (
+              <div key={`mob-${id}`} className="ghausia-mobile-card" style={{ padding: '16px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: 15, color: '#1e293b' }}>{user.name}</div>
+                    <div style={{ fontSize: 13, color: '#64748b', marginTop: 2 }}>{user.email}</div>
+                  </div>
+                  <span
+                    style={{
+                      display: 'inline-block',
+                      padding: '3px 10px',
+                      borderRadius: 999,
+                      fontSize: 11,
+                      fontWeight: 700,
+                      color: badge.color,
+                      background: badge.bg,
+                      border: `1px solid ${badge.border}`,
+                      textTransform: 'capitalize',
+                    }}
+                  >
+                    {user.status}
+                  </span>
+                </div>
+                
+                <div style={{ marginBottom: 12 }}>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#475569', marginBottom: 4 }}>Party</label>
+                  <select
+                    className="form-select"
+                    value={form.partyId}
+                    disabled={!canEditParty || isSaving}
+                    onChange={(event) => setFormValue(id, 'partyId', event.target.value)}
+                    style={{
+                      width: '100%',
+                      fontSize: 13,
+                      padding: '6px 10px',
+                      ...(partyChanged
+                        ? {
+                            borderColor: '#6366f1',
+                            boxShadow: '0 0 0 2px rgba(99,102,241,0.15)',
+                            backgroundColor: '#f8fafc'
+                          }
+                        : {})
+                    }}
+                  >
+                    <option value="">Select party</option>
+                    {parties.map((party) => (
+                      <option key={party.id} value={party.id}>{party.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  {isPending && (
+                    <>
+                      <button className="btn btn-success btn-sm" disabled={isSaving} onClick={() => approveUser(user)} style={{ flex: 1 }}>Approve</button>
+                      <button className="btn btn-ghost btn-sm" style={{ color: '#b91c1c', borderColor: '#fecaca', flex: 1 }} disabled={isSaving} onClick={() => rejectUser(user)}>Reject</button>
+                    </>
+                  )}
+                  {(isApproved || isDisabled) && partyChanged && (
+                    <button className="btn btn-primary btn-sm" disabled={isSaving} onClick={() => saveParty(user)} style={{ flex: 1 }}>Save party</button>
+                  )}
+                  {isApproved && (
+                    <button className="btn btn-ghost btn-sm" style={{ color: '#b91c1c', borderColor: '#fecaca', flex: 1 }} disabled={isSaving} onClick={() => disableUser(user)}>Disable</button>
+                  )}
+                  {isDisabled && (
+                    <button className="btn btn-success btn-sm" disabled={isSaving} onClick={() => enableUser(user)} style={{ flex: 1 }}>Enable</button>
+                  )}
+                </div>
+              </div>
+            );
+          })
+        )}
       </div>
     </div>
   );

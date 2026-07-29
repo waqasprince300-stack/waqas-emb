@@ -369,6 +369,31 @@ export default function Dashboard() {
   const completedCount = byStatus('completed');
   const rejectedCount = byStatus('rejected');
 
+  // TAT Calculation
+  const completedLotsWithDates = scopedLots.filter(l => 
+    String(l.status || '').toLowerCase() === 'completed' && (l.completionApprovedAt || l.updatedAt) && (l.allotDate || l.createdAt)
+  );
+  let avgTatDisplay = 'N/A';
+  if (completedLotsWithDates.length > 0) {
+    const totalDays = completedLotsWithDates.reduce((sum, l) => {
+      const end = new Date(l.completionApprovedAt || l.updatedAt);
+      const start = new Date(l.allotDate || l.createdAt);
+      const diffTime = Math.abs(end - start);
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      return sum + diffDays;
+    }, 0);
+    const avgDays = (totalDays / completedLotsWithDates.length).toFixed(1);
+    avgTatDisplay = `${avgDays} Days`;
+  }
+
+  // WIP Value Calculation
+  const wipLots = scopedLots.filter(l => ['dispatched', 'pending approval', 'received back'].includes(String(l.status || '').toLowerCase()));
+  const wipValue = wipLots.reduce((sum, l) => {
+    const edit = reportingPartyEdits[l.id] || {};
+    const bill = getAdminLedgerOrBusinessBill(l, edit) || l.billAmount || 0;
+    return sum + Number(bill);
+  }, 0);
+
   const { billable, billableTotal, completedTotal, totalLotValue } = lotStats;
 
   const ownerIn = scopedPayments
@@ -545,6 +570,25 @@ export default function Dashboard() {
                 <div className="stat-label" style={{ textTransform: 'uppercase' }}>Completed</div>
                 <div className="stat-value" style={{ color: '#22c55e' }}>{completedCount}</div>
                 <div className="stat-sub">Fully done</div>
+              </div>
+              <div className="stat-card-modern" style={{ '--card-accent': '#ec4899' }}>
+                <div className="stat-label" style={{ textTransform: 'uppercase' }}>Average TAT</div>
+                <div className="stat-value" style={{ color: '#ec4899' }}>{avgTatDisplay}</div>
+                <div className="stat-sub">Pending to Complete</div>
+              </div>
+              <div className="stat-card-modern" style={{ '--card-accent': '#0ea5e9' }}>
+                <div className="stat-label" style={{ textTransform: 'uppercase' }}>WIP Value</div>
+                <div 
+                  className="stat-value" 
+                  style={{ 
+                    color: '#0ea5e9',
+                    fontSize: hideAmounts ? 24 : (wipValue >= 1000000 ? 18 : 24),
+                    wordBreak: 'break-word'
+                  }}
+                >
+                  {hideAmounts ? '***' : formatRupee(wipValue)}
+                </div>
+                <div className="stat-sub">Value of active work</div>
               </div>
             </div>
           </section>

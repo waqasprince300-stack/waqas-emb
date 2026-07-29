@@ -83,8 +83,8 @@ function avatarColor(name) {
   return AVATAR_COLORS[h];
 }
 
-/** Target max stored size (~2.5MB binary); larger images are compressed with canvas */
-const PK_IMAGE_TARGET_BYTES = 2.5 * 1024 * 1024;
+/** Target max stored size (~150KB binary); larger images are compressed with canvas */
+const PK_IMAGE_TARGET_BYTES = 150 * 1024;
 
 function approxBytesFromDataUrl(dataUrl) {
   const i = String(dataUrl || '').indexOf(',');
@@ -147,6 +147,19 @@ async function compressImageDataUrl(dataUrl, maxBytes = PK_IMAGE_TARGET_BYTES) {
     }
   }
   return out;
+}
+
+async function compressState(data) {
+  let modified = false;
+  const newEntries = Array.isArray(data.entries) ? [...data.entries] : [];
+  for (let i = 0; i < newEntries.length; i++) {
+    const e = newEntries[i];
+    if (e.imageUrl && approxBytesFromDataUrl(e.imageUrl) > PK_IMAGE_TARGET_BYTES) {
+      e.imageUrl = await compressImageDataUrl(e.imageUrl, PK_IMAGE_TARGET_BYTES);
+      modified = true;
+    }
+  }
+  return { ...data, entries: newEntries, _modified: modified };
 }
 
 export default function PersonalKhata({ standalone = false } = {}) {
@@ -243,18 +256,26 @@ export default function PersonalKhata({ standalone = false } = {}) {
     let cancelled = false;
     const gen = ++khataHydrateGenRef.current;
 
-    const applyState = (data, isFromServer = false) => {
+    const applyState = async (data, isFromServer = false) => {
       if (cancelled || gen !== khataHydrateGenRef.current) return;
-      setBusinesses(data.businesses);
+
+      const compressedData = await compressState(data);
+      if (cancelled || gen !== khataHydrateGenRef.current) return;
+
+      setBusinesses(compressedData.businesses);
       setActiveBusinessId((prev) => {
-        if (isFromServer && prev && data.businesses.some((b) => b.id === prev)) {
+        if (isFromServer && prev && compressedData.businesses.some((b) => b.id === prev)) {
           return prev;
         }
-        return data.activeBusinessId;
+        return compressedData.activeBusinessId;
       });
-      setContacts(data.contacts);
-      setEntries(data.entries);
+      setContacts(compressedData.contacts);
+      setEntries(compressedData.entries);
       setKhataHydrated(true);
+      
+      if (compressedData._modified && !isFromServer) {
+        saveKhataState(compressedData, khataStorageScope);
+      }
     };
 
     setKhataHydrated(false);
@@ -292,7 +313,11 @@ export default function PersonalKhata({ standalone = false } = {}) {
             }
           }
           if (local.contacts.length > 0 || local.entries.length > 0) {
-            state = local;
+            const compressedLocal = await compressState(local);
+            state = compressedLocal;
+            if (compressedLocal._modified) {
+              saveKhataState(compressedLocal, khataStorageScope);
+            }
             try {
               await apiService.savePersonalKhata(state);
             } catch {
@@ -331,9 +356,14 @@ export default function PersonalKhata({ standalone = false } = {}) {
     // Debounce server writes so rapid edits don't spam the API.
     const t = setTimeout(() => {
       if (scopeForRun !== khataScopeRef.current) return;
-      apiService.savePersonalKhata(payload).catch(() => {
-        /* local cache already saved; will retry on next change */
-      });
+      (async () => {
+        try {
+          const compressedPayload = await compressState(payload);
+          await apiService.savePersonalKhata(compressedPayload);
+        } catch (err) {
+          console.error("Personal Khata sync failed:", err);
+        }
+      })();
     }, 800);
     return () => clearTimeout(t);
   }, [khataHydrated, khataStorageScope, businesses, activeBusinessId, contacts, entries]);
