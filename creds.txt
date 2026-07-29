@@ -1,4 +1,0 @@
-mzeeshan02959_db_user
-y6jWirPYuR97rTHe
-
-mongodb+srv://mzeeshan02959_db_user:y6jWirPYuR97rTHe@cluster0.pfpmgah.mongodb.net/
