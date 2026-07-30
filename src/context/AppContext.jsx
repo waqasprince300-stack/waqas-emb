@@ -36,7 +36,7 @@ export const ADMIN_ALL_WORKSPACES_ID = '__all_workspaces__';
 const FULL_REFRESH_INTERVAL_MS = 45_000;
 const NAV_REFRESH_MIN_INTERVAL_MS = 10_000;
 const REALTIME_MIN_INTERVAL_MS = 2_500;
-const WRITE_SETTLE_MS = 1_500;
+const WRITE_SETTLE_MS = 3_200;
 
 export function AppProvider({ children }) {
   const { isAuthenticated, user } = useAuth();

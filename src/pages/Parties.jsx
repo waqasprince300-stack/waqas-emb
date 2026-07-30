@@ -959,18 +959,19 @@ export default function Parties() {
                   'receivedDate',
                 ]);
                 const sortMs = when ? when.getTime() : 0;
-                raw.push({
-                  rowKey: `lot-${l.id}`,
-                  kind: 'lot',
-                  id: l.id,
-                  sortMs,
-                  whenDate: when,
-                  lotNo: l.lotNo || l.lotNumber,
-                  designNo: l.designNo,
-                  status: pe.overrideStatus || l.status,
-                  diye: 0,
-                  liye: (pe.overrideStatus || l.status || '').toLowerCase() === 'completed' ? bill : 0,
-                });
+                  const statusLower = (pe.overrideStatus || l.status || '').toLowerCase().trim();
+                  raw.push({
+                    rowKey: `lot-${l.id}`,
+                    kind: 'lot',
+                    id: l.id,
+                    sortMs,
+                    whenDate: when,
+                    lotNo: l.lotNo || l.lotNumber,
+                    designNo: l.designNo,
+                    status: pe.overrideStatus || l.status,
+                    diye: 0,
+                    liye: ['completed', 'received back', 'billable'].includes(statusLower) ? bill : 0,
+                  });
               });
 
               raw.sort((a, b) => {

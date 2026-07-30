@@ -1384,6 +1384,8 @@ export default function GhausiaCollection() {
       const lotUpdate = { status: newStatus };
       if (newStatus === 'dispatched') lotUpdate.dispatchDate = today;
       if (newStatus === 'received back') lotUpdate.receivedBackDate = today;
+      if (newStatus === 'rejected') lotUpdate.rejectedDate = today;
+      if (newStatus === 'pending approval') lotUpdate.pendingReviewSubmittedAt = today;
 
       try {
         await updateLot(lot.id, lotUpdate, { businessOwnerId: lotBizId(lot) });
@@ -1435,6 +1437,8 @@ export default function GhausiaCollection() {
             'dispatchDate',
             'allotDate',
             'receivedDate',
+            'rejectedDate',
+            'pendingReviewSubmittedAt',
           ]),
           dateRange,
           customRange
@@ -1484,6 +1488,8 @@ export default function GhausiaCollection() {
             'dispatchDate',
             'allotDate',
             'receivedDate',
+            'rejectedDate',
+            'pendingReviewSubmittedAt',
           ]),
           dateRange,
           customRange
@@ -2695,7 +2701,7 @@ export default function GhausiaCollection() {
                               Dispatch: {formatDisplayDate(l.dispatchDate)}
                             </div>
                           )}
-                          {l.receivedBackDate && (
+                          {l.receivedBackDate && ['received back', 'pending approval'].includes(l.status) && (
                             <div
                               style={{
                                 fontSize: 12,
@@ -2705,6 +2711,30 @@ export default function GhausiaCollection() {
                               }}
                             >
                               Received: {formatDisplayDate(l.receivedBackDate)}
+                            </div>
+                          )}
+                          {l.rejectedDate && l.status === 'rejected' && (
+                            <div
+                              style={{
+                                fontSize: 12,
+                                color: '#b91c1c',
+                                marginTop: 1,
+                                fontWeight: '500',
+                              }}
+                            >
+                              Rejected: {formatDisplayDate(l.rejectedDate)}
+                            </div>
+                          )}
+                          {l.pendingReviewSubmittedAt && l.status === 'pending approval' && (
+                            <div
+                              style={{
+                                fontSize: 12,
+                                color: '#ca8a04',
+                                marginTop: 1,
+                                fontWeight: '500',
+                              }}
+                            >
+                              Pending: {formatDisplayDate(l.pendingReviewSubmittedAt)}
                             </div>
                           )}
                         </>
