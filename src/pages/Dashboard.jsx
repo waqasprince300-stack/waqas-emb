@@ -309,12 +309,21 @@ export default function Dashboard() {
   const fabricStats = useMemo(() => {
     const fabricMap = {};
     scopedLots.forEach(l => {
-      const fabric = String(l.itemType || l.fabric || 'Unknown').trim();
+      const fabric = String(l.itemType || l.fabric || l.customFabric || 'Unknown').trim() || 'Unknown';
       if (!fabricMap[fabric]) fabricMap[fabric] = { name: fabric, count: 0, revenue: 0 };
       fabricMap[fabric].count += 1;
       fabricMap[fabric].revenue += Number(l.billAmount || 0);
     });
-    return Object.values(fabricMap).sort((a, b) => b.count - a.count).slice(0, 4);
+    const sorted = Object.values(fabricMap).sort((a, b) => b.count - a.count);
+    // Show top 4, group remaining into "Others" so pie chart total always matches Total Lots
+    if (sorted.length <= 5) return sorted;
+    const top = sorted.slice(0, 4);
+    const rest = sorted.slice(4);
+    const others = rest.reduce(
+      (acc, f) => { acc.count += f.count; acc.revenue += f.revenue; return acc; },
+      { name: 'Others', count: 0, revenue: 0 }
+    );
+    return [...top, others];
   }, [scopedLots]);
 
   if (initialDataLoading) {
@@ -414,7 +423,7 @@ export default function Dashboard() {
 
 
   // Donut chart colors
-  const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
+  const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#64748b'];
 
   const activePartyStat = {
     label: 'Active Parties',
@@ -846,16 +855,18 @@ export default function Dashboard() {
                 {[
                   { label: 'Pending', count: byStatus('pending'), color: '#d97706' },
                   { label: 'Dispatched', count: byStatus('dispatched'), color: '#0284c7' },
+                  { label: 'Pending Approval', count: byStatus('pending approval'), color: '#eab308' },
+                  { label: 'Rejected', count: byStatus('rejected'), color: '#ef4444' },
                   { label: 'Received Back', count: byStatus('received back'), color: '#0d9488' },
                   { label: 'Completed', count: byStatus('completed'), color: '#15803d' },
-                ].map((s) => (
+                ].filter((s) => s.count > 0).map((s) => (
                   <div
                     key={s.label}
                     style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}
                   >
                     <div
                       style={{
-                        width: 110,
+                        width: 120,
                         fontSize: 13,
                         color: 'var(--text-secondary)',
                         flexShrink: 0,
