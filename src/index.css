@@ -115,10 +115,12 @@ tbody tr:last-child td {
   font-size: 11px;
   line-height: 1.2;
 }
+
 .ledger-table td {
   padding: 8px 8px;
   font-size: 12.5px;
 }
+
 .ledger-table .desc-col {
   max-width: 160px;
   white-space: normal;
@@ -902,6 +904,7 @@ tbody tr:last-child td {
   gap: 18px;
   margin-bottom: 24px;
 }
+
 .dash-admin-split-2-1 {
   display: grid;
   grid-template-columns: 2fr 1.3fr;
@@ -1098,6 +1101,7 @@ tbody tr:last-child td {
 }
 
 @media (max-width: 768px) {
+
   .dash-admin-split,
   .dash-admin-split-2-1 {
     grid-template-columns: 1fr;
@@ -1217,7 +1221,7 @@ tbody tr:last-child td {
   .desktop-only-action {
     display: none !important;
   }
-  
+
   .mobile-only-sticky-action {
     display: block;
     position: fixed;
@@ -1226,7 +1230,7 @@ tbody tr:last-child td {
     z-index: 999;
     transition: opacity 0.3s ease, transform 0.3s ease;
   }
-  
+
   .mobile-only-sticky-action.is-scrolling {
     opacity: 0.3;
     pointer-events: none;
@@ -2047,7 +2051,7 @@ tbody tr:last-child td {
   border-radius: 20px;
   padding: 5px 14px;
   cursor: pointer;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
   transition: all 0.15s ease;
 }
 
@@ -2414,6 +2418,7 @@ tbody tr:last-child td {
 }
 
 @media (max-width: 767px) {
+
   .lot-tile-header .lot-status-select,
   .lot-tile-header select,
   .lot-tile-header button.lot-status-select {
@@ -2652,13 +2657,23 @@ tbody tr:last-child td {
 }
 
 @keyframes ppOverlayIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
 }
 
 @keyframes ppOverlayOut {
-  from { opacity: 1; }
-  to { opacity: 0; }
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0;
+  }
 }
 
 /* Popup card */
@@ -2684,6 +2699,7 @@ tbody tr:last-child td {
     opacity: 0;
     transform: scale(0.9) translateY(16px);
   }
+
   to {
     opacity: 1;
     transform: scale(1) translateY(0);
@@ -2695,6 +2711,7 @@ tbody tr:last-child td {
     opacity: 1;
     transform: scale(1) translateY(0);
   }
+
   to {
     opacity: 0;
     transform: scale(0.92) translateY(12px);
@@ -2779,8 +2796,15 @@ tbody tr:last-child td {
 .party-picker-cancel:active {
   background: #f1f5f9;
 }
-.hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-.hide-scrollbar::-webkit-scrollbar { display: none; }
+
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
 
 /* Admin Dashboard Modern Redesign */
 .dash-modern-header {
@@ -2998,6 +3022,7 @@ tbody tr:last-child td {
   grid-template-columns: 1fr 1fr;
   gap: 20px;
 }
+
 @media (max-width: 768px) {
   .dash-grid-2 {
     grid-template-columns: 1fr;
@@ -3013,7 +3038,8 @@ tbody tr:last-child td {
   gap: 12px;
 }
 
-.dash-btn-primary, .dash-btn-secondary {
+.dash-btn-primary,
+.dash-btn-secondary {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -3120,8 +3146,15 @@ tbody tr:last-child td {
   width: 100%;
 }
 
-@media (max-width: 768px) { .dash-desktop-only { display: none !important; } }
+@media (max-width: 768px) {
+  .dash-desktop-only {
+    display: none !important;
+  }
+}
 
 
-@media (min-width: 769px) { .dash-mobile-only { display: none !important; } }
-
+@media (min-width: 769px) {
+  .dash-mobile-only {
+    display: none !important;
+  }
+}

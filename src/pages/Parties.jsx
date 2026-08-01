@@ -683,10 +683,11 @@ export default function Parties() {
                       >
                         <div
                           style={{
-                            fontWeight: 700,
-                            fontSize: 16,
+                            fontWeight: 800,
+                            fontSize: 19,
                             color: 'var(--text-primary)',
                             lineHeight: 1.25,
+                            letterSpacing: '-0.01em',
                           }}
                         >
                           {party.name}

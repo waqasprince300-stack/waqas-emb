@@ -188,7 +188,7 @@ export default function Dashboard() {
     if (isParty) return [];
     const now = new Date();
     const alertList = [];
-    
+
     // Dispatched too long
     const dispatchedLots = scopedLots.filter(l => l.status === 'dispatched');
     let stuckLots = [];
@@ -232,7 +232,7 @@ export default function Dashboard() {
     if (isParty) return [];
     const monthsMap = {};
     const completedLots = scopedLots.filter(l => l.status === 'completed' || l.status === 'received back');
-    
+
     // Initialize last 6 months
     for (let i = 5; i >= 0; i--) {
       const d = new Date();
@@ -243,7 +243,7 @@ export default function Dashboard() {
     }
 
     completedLots.forEach(l => {
-      const dStr = latestDateFrom(l, ['receivedBackDate', 'updatedAt', 'createdAt']);
+      const dStr = latestDateFrom(l, ['completionApprovedAt', 'receivedBackDate', 'createdAt']);
       if (!dStr) return;
       const d = new Date(dStr);
       const mLabel = d.toLocaleString('default', { month: 'short', year: '2-digit' });
@@ -379,7 +379,7 @@ export default function Dashboard() {
   const rejectedCount = byStatus('rejected');
 
   // TAT Calculation
-  const completedLotsWithDates = scopedLots.filter(l => 
+  const completedLotsWithDates = scopedLots.filter(l =>
     String(l.status || '').toLowerCase() === 'completed' && (l.completionApprovedAt || l.updatedAt) && (l.allotDate || l.createdAt)
   );
   let avgTatDisplay = 'N/A';
@@ -488,12 +488,12 @@ export default function Dashboard() {
               </Link>
             </div>
           )}
-          <button 
-            onClick={() => setHideAmounts(h => !h)} 
+          <button
+            onClick={() => setHideAmounts(h => !h)}
             style={{ background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--text-muted)', fontWeight: 600, marginTop: 4 }}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              {hideAmounts 
+              {hideAmounts
                 ? <><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></>
                 : <><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></>
               }
@@ -587,9 +587,9 @@ export default function Dashboard() {
               </div>
               <div className="stat-card-modern" style={{ '--card-accent': '#0ea5e9' }}>
                 <div className="stat-label" style={{ textTransform: 'uppercase' }}>WIP Value</div>
-                <div 
-                  className="stat-value" 
-                  style={{ 
+                <div
+                  className="stat-value"
+                  style={{
                     color: '#0ea5e9',
                     fontSize: hideAmounts ? 24 : (wipValue >= 1000000 ? 18 : 24),
                     wordBreak: 'break-word'
@@ -626,12 +626,12 @@ export default function Dashboard() {
                     '--card-accent': c.color,
                     ...(c.highlight
                       ? {
-                          borderColor: netOwnerVsParties >= 0 ? '#86efac' : '#fecaca',
-                          background:
-                            netOwnerVsParties >= 0
-                              ? 'linear-gradient(145deg, #ffffff 0%, #f0fdf4 100%)'
-                              : 'linear-gradient(145deg, #ffffff 0%, #fef2f2 100%)',
-                        }
+                        borderColor: netOwnerVsParties >= 0 ? '#86efac' : '#fecaca',
+                        background:
+                          netOwnerVsParties >= 0
+                            ? 'linear-gradient(145deg, #ffffff 0%, #f0fdf4 100%)'
+                            : 'linear-gradient(145deg, #ffffff 0%, #fef2f2 100%)',
+                      }
                       : {}),
                   }}
                 >
@@ -639,12 +639,12 @@ export default function Dashboard() {
                     <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                       {c.label}
                       {c.tooltip && (
-                        <span 
+                        <span
                           title={c.tooltip}
-                          style={{ 
+                          style={{
                             display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                             width: 16, height: 16, borderRadius: '50%', background: '#e2e8f0', color: '#64748b',
-                            fontSize: 10, fontWeight: 'bold', cursor: 'help' 
+                            fontSize: 10, fontWeight: 'bold', cursor: 'help'
                           }}
                         >
                           i
@@ -730,7 +730,7 @@ export default function Dashboard() {
                                 <Cell key={'cell-' + index} fill={COLORS[index % COLORS.length]} />
                               ))}
                             </Pie>
-                            <RechartsTooltip 
+                            <RechartsTooltip
                               formatter={(value, name, props) => [value + ' Lots (' + (hideAmounts ? '****' : '₨' + props.payload.revenue.toLocaleString()) + ')', name]}
                               contentStyle={{ borderRadius: 8, border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
                             />
@@ -767,13 +767,13 @@ export default function Dashboard() {
                       <LineChart data={revenueTrendData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
                         <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} dy={10} />
-                        <YAxis 
-                          axisLine={false} 
-                          tickLine={false} 
+                        <YAxis
+                          axisLine={false}
+                          tickLine={false}
                           tick={{ fill: '#64748b', fontSize: 12 }}
                           tickFormatter={(value) => hideAmounts ? '***' : ((value / 1000).toFixed(0) + 'k')}
                         />
-                        <RechartsTooltip 
+                        <RechartsTooltip
                           contentStyle={{ borderRadius: 8, border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
                           formatter={(value) => [hideAmounts ? '****' : ('₨ ' + value.toLocaleString()), 'Revenue']}
                           labelStyle={{ color: '#0f172a', fontWeight: 600, marginBottom: 4 }}
@@ -800,10 +800,10 @@ export default function Dashboard() {
                 <div className="card-header" style={{ borderBottom: '1px solid #f1f5f9', padding: '20px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span className="card-title" style={{ fontSize: 16, fontWeight: 700 }}>Needs Attention</span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#64748b' }}>
-                    Threshold: 
-                    <input 
-                      type="number" 
-                      value={alertDaysThreshold} 
+                    Threshold:
+                    <input
+                      type="number"
+                      value={alertDaysThreshold}
                       onChange={(e) => setAlertDaysThreshold(Number(e.target.value) || 7)}
                       style={{ width: 40, padding: '2px 4px', border: '1px solid #cbd5e1', borderRadius: 4, textAlign: 'center' }}
                       min="1"
@@ -819,10 +819,10 @@ export default function Dashboard() {
                   ) : (
                     <div className="dash-alert-container">
                       {alerts.map((alert, idx) => (
-                        <Link 
-                          key={idx} 
-                          to={alert.link || '#'} 
-                          className={'dash-alert-item ' + (alert.type === 'danger' ? 'alert-danger' : '')} 
+                        <Link
+                          key={idx}
+                          to={alert.link || '#'}
+                          className={'dash-alert-item ' + (alert.type === 'danger' ? 'alert-danger' : '')}
                           style={{ textDecoration: 'none', display: 'flex' }}
                         >
                           <div className="dash-alert-icon">
@@ -1121,11 +1121,10 @@ export default function Dashboard() {
                           </div>
                         </div>
                         <div
-                          className={`dash-recent-amount ${
-                            p.type === 'Received'
+                          className={`dash-recent-amount ${p.type === 'Received'
                               ? 'dash-recent-amount--in'
                               : 'dash-recent-amount--out'
-                          }`}
+                            }`}
                         >
                           {hideAmounts ? '****' : `₨${Number(p.amount || 0).toLocaleString()}`}
                         </div>
