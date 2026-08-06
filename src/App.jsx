@@ -266,7 +266,7 @@ function BackgroundRefreshIndicator() {
         transform: 'translateX(-50%)',
         zIndex: 400,
         background: 'var(--text-primary, #1e293b)',
-        color: '#fff',
+        color: 'var(--body-bg, #fff)',
         fontSize: 12,
         fontWeight: 600,
         padding: '6px 14px',

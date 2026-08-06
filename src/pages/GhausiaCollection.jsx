@@ -1132,6 +1132,7 @@ export default function GhausiaCollection() {
   const [currentPage, setCurrentPage] = useState(1);
   const [billableCollapsed, setBillableCollapsed] = useState(false);
   const [billableSearch, setBillableSearch] = useState('');
+  const [highlightedBillableLotId, setHighlightedBillableLotId] = useState(null);
   const [debouncedBillableSearch, setDebouncedBillableSearch] = useState('');
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedBillableSearch(billableSearch), 300);
@@ -2267,10 +2268,11 @@ export default function GhausiaCollection() {
           <div
             style={{
               margin: '0',
-              background: 'var(--warning-bg, #fffbeb)',
-              border: '1px solid #FDE68A',
+              background: 'var(--card-bg)',
+              border: '1px solid var(--primary)',
               borderRadius: 10,
               padding: 14,
+              boxShadow: '0 4px 14px rgba(0,0,0,0.05)',
             }}
           >
             <div
@@ -2280,11 +2282,11 @@ export default function GhausiaCollection() {
                 justifyContent: 'space-between',
                 gap: 10,
                 flexWrap: 'wrap',
-                marginBottom: 10,
+                marginBottom: 12,
               }}
             >
-              <div style={{ fontSize: 13, fontWeight: 700, color: '#92600A' }}>
-                Billable to Owner — {billable.length} lots · Total: ₨
+              <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
+                Billable to Owner — <span style={{ color: 'var(--primary)' }}>{billable.length} lots</span> · Total: ₨
                 {billableTotal.toLocaleString()}
               </div>
               <input
@@ -2296,8 +2298,8 @@ export default function GhausiaCollection() {
                   fontSize: 12.5,
                   padding: '6px 10px',
                   borderRadius: 8,
-                  border: '1px solid #FDE68A',
-                  background: 'var(--card-bg, #fff)',
+                  border: '1px solid var(--border)',
+                  background: 'var(--body-bg)',
                   color: 'var(--text-primary)',
                   minWidth: 200,
                   flex: '0 1 240px',
@@ -2306,34 +2308,41 @@ export default function GhausiaCollection() {
             </div>
 
             {billableFiltered.length === 0 ? (
-              <div style={{ fontSize: 13, color: '#92600A', padding: '8px 0' }}>
+              <div style={{ fontSize: 13, color: 'var(--text-secondary)', padding: '8px 0' }}>
                 No billable lots match “{billableSearch}”.
               </div>
             ) : (
               <>
-                {billablePageItems.map((l) => (
-                  <div
-                    key={l.id}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      gap: 12,
-                      flexWrap: 'wrap',
-                      fontSize: 13,
-                      padding: '8px 0',
-                      borderBottom: '1px solid #FDE68A',
-                    }}
-                  >
-                    <span style={{ flex: '1 1 160px', minWidth: 0 }}>
-                      {l.lotNumber || l.lotNo} / {l.designNo} —{' '}
-                      <span style={{ color: '#92600A' }}>{l.partyName || '—'}</span>
-                    </span>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+                <div style={{ marginTop: 8 }}>
+                  {billablePageItems.map((l) => {
+                    const isHighlighted = highlightedBillableLotId === l.id;
+                    return (
+                      <div
+                        key={l.id}
+                        onClick={() => setHighlightedBillableLotId(isHighlighted ? null : l.id)}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          gap: 8,
+                          flexWrap: 'nowrap',
+                          fontSize: 12,
+                          padding: '10px 8px',
+                          cursor: 'pointer',
+                          background: isHighlighted ? 'color-mix(in srgb, var(--primary) 20%, transparent)' : 'transparent',
+                          borderBottom: isHighlighted ? '1px solid var(--primary)' : '1px solid var(--border)',
+                          transition: 'background 0.2s',
+                        }}
+                      >
+                      <span style={{ flex: '1 1 auto', minWidth: 0, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {l.lotNumber || l.lotNo} / {l.designNo} —{' '}
+                        <span style={{ color: 'var(--text-secondary)' }}>{l.partyName || '—'}</span>
+                      </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
                       {partyEdits[l.id]?.amountChangeNote ? (
-                        <div style={{ textAlign: 'right', color: '#92600A' }}>
+                        <div style={{ textAlign: 'right', color: 'var(--text-primary)' }}>
                           <strong>₨{getOwnerBillableAmount(l).toLocaleString()}</strong>
-                          <div style={{ fontSize: 11, color: 'var(--warning, #92400e)', marginTop: 2 }}>
+                          <div style={{ fontSize: 10, color: 'var(--warning)', marginTop: 2 }}>
                             Party ledger: Previous ₨
                             {Number(
                               partyEdits[l.id].amountChangeNote.previousAmount || 0
@@ -2345,28 +2354,33 @@ export default function GhausiaCollection() {
                           </div>
                         </div>
                       ) : (
-                        <strong style={{ color: '#92600A' }}>
+                        <strong style={{ color: 'var(--text-primary)' }}>
                           ₨{getOwnerBillableAmount(l).toLocaleString()}
                         </strong>
                       )}
                       <button
                         type="button"
-                        className="responsive-btn"
+                        className="btn btn-sm"
                         disabled={completionPersistingLotId === l.id}
-                        onClick={() => handleCompleteFromBillable(l)}
-                        style={{ whiteSpace: 'nowrap' }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleCompleteFromBillable(l);
+                        }}
+                        style={{ whiteSpace: 'nowrap', background: 'var(--primary)', color: '#000', border: 'none', fontWeight: 600, padding: '4px 10px', fontSize: 11.5 }}
                       >
                         {completionPersistingLotId === l.id ? (
                           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                            <Loader /> Completing…
+                            <Loader /> ...
                           </span>
                         ) : (
-                          'Make Complete'
+                          'Complete'
                         )}
                       </button>
                     </div>
                   </div>
-                ))}
+                );
+              })}
+              </div>
 
                 {billablePageCount > 1 && (
                   <div
@@ -2379,7 +2393,7 @@ export default function GhausiaCollection() {
                       marginTop: 12,
                     }}
                   >
-                    <span style={{ fontSize: 12, color: '#92600A' }}>
+                    <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
                       Showing {(billableSafePage - 1) * BILLABLE_PAGE_SIZE + 1}–
                       {Math.min(billableSafePage * BILLABLE_PAGE_SIZE, billableFiltered.length)} of{' '}
                       {billableFiltered.length}
@@ -2391,15 +2405,15 @@ export default function GhausiaCollection() {
                         disabled={billableSafePage <= 1}
                         onClick={() => setBillablePage((p) => Math.max(1, p - 1))}
                         style={{
-                          background: 'var(--card-bg, #fff)',
-                          border: '1px solid #FDE68A',
-                          color: '#92600A',
+                          background: 'var(--card-bg)',
+                          border: '1px solid var(--border)',
+                          color: 'var(--text-primary)',
                           opacity: billableSafePage <= 1 ? 0.5 : 1,
                         }}
                       >
                         ‹ Prev
                       </button>
-                      <span style={{ fontSize: 12.5, fontWeight: 600, color: '#92600A' }}>
+                      <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-primary)' }}>
                         {billableSafePage} / {billablePageCount}
                       </span>
                       <button
@@ -2408,9 +2422,9 @@ export default function GhausiaCollection() {
                         disabled={billableSafePage >= billablePageCount}
                         onClick={() => setBillablePage((p) => Math.min(billablePageCount, p + 1))}
                         style={{
-                          background: 'var(--card-bg, #fff)',
-                          border: '1px solid #FDE68A',
-                          color: '#92600A',
+                          background: 'var(--card-bg)',
+                          border: '1px solid var(--border)',
+                          color: 'var(--text-primary)',
                           opacity: billableSafePage >= billablePageCount ? 0.5 : 1,
                         }}
                       >
@@ -2645,8 +2659,8 @@ export default function GhausiaCollection() {
                         style={{
                           width: '100%',
                           fontSize: 13,
-                          padding: '4px 8px',
-                          border: '1px solid var(--border)',
+                          paddingTop: 4,
+                          paddingBottom: 4,
                           borderRadius: 4,
                         }}
                         value={l.partyId || ''}
