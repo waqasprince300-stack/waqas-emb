@@ -1,0 +1,16 @@
+{
+  "short_name": "Seam Grace",
+  "name": "Seam Grace Embroidery",
+  "icons": [
+    {
+      "src": "seam-grace-logo.png",
+      "sizes": "192x192 512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#1f1b1a",
+  "background_color": "#1f1b1a"
+}

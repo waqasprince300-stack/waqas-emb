@@ -45,7 +45,7 @@ export default function LedgerFilterBar({
                 className="select-input"
                 value={workspaceFilter}
                 onChange={(e) => setWorkspaceFilter(e.target.value)}
-                style={{ padding: '8px 12px', borderRadius: 6, border: '1px solid #cbd5e1' }}
+                style={{ padding: '8px 12px', borderRadius: 6, border: '1px solid var(--border, #cbd5e1)' }}
               >
                 <option value="All">All Workspaces</option>
                 {businessOwners.map((owner) => (
@@ -59,7 +59,7 @@ export default function LedgerFilterBar({
                 className="select-input"
                 value={partyFilter}
                 onChange={(e) => setPartyFilter(e.target.value)}
-                style={{ padding: '8px 12px', borderRadius: 6, border: '1px solid #cbd5e1' }}
+                style={{ padding: '8px 12px', borderRadius: 6, border: '1px solid var(--border, #cbd5e1)' }}
               >
                 <option value="All">All Parties</option>
                 {parties.map((p) => (

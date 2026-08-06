@@ -28,10 +28,10 @@ function statusLabel(status) {
 
 function statusStyle(status) {
   const s = String(status || '').toLowerCase();
-  if (s === 'pending') return { color: '#b45309', fontWeight: 700 };
-  if (s === 'approved') return { color: '#15803d', fontWeight: 700 };
-  if (s === 'rejected') return { color: '#b91c1c', fontWeight: 700 };
-  if (s === 'disabled') return { color: '#64748b', fontWeight: 700 };
+  if (s === 'pending') return { color: 'var(--warning, #b45309)', fontWeight: 700 };
+  if (s === 'approved') return { color: 'var(--success, #15803d)', fontWeight: 700 };
+  if (s === 'rejected') return { color: 'var(--danger, #b91c1c)', fontWeight: 700 };
+  if (s === 'disabled') return { color: 'var(--text-muted, #64748b)', fontWeight: 700 };
   return { fontWeight: 600 };
 }
 
@@ -167,11 +167,11 @@ export default function SuperAdminApprovals() {
       <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 18 }}>
         <div className="stat-card" style={{ flex: '1 1 180px' }}>
           <div className="stat-label">Pending requests</div>
-          <div style={{ fontSize: 28, fontWeight: 800, color: '#b45309' }}>{pendingCount}</div>
+          <div style={{ fontSize: 28, fontWeight: 800, color: 'var(--warning, #b45309)' }}>{pendingCount}</div>
         </div>
         <div className="stat-card" style={{ flex: '1 1 180px' }}>
           <div className="stat-label">Total administrator accounts</div>
-          <div style={{ fontSize: 28, fontWeight: 800, color: '#1e40af' }}>{admins.length}</div>
+          <div style={{ fontSize: 28, fontWeight: 800, color: 'var(--primary, #1e40af)' }}>{admins.length}</div>
         </div>
       </div>
 

@@ -126,7 +126,7 @@ async function compressPartyLedgerBillImage(dataUrl, maxBytes = LEDGER_BILL_IMG_
     canvas.width = tw;
     canvas.height = th;
     const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#ffffff';
+    ctx.fillStyle = 'var(--card-bg, #ffffff)';
     ctx.fillRect(0, 0, tw, th);
     ctx.drawImage(img, 0, 0, tw, th);
     return canvas.toDataURL(mime, q);
@@ -983,8 +983,8 @@ export default function PartyLedger() {
             ? `<div><strong>Business / owner bill on lot:</strong> ₨${ghausiaAmount.toLocaleString()}</div>`
             : '';
           const footnote = isParty
-            ? `<div style="margin-top:10px;color:#92400e">This lot stays <strong>under business review</strong>. The business reconciles your ledger separately — you do not see the business-side bill.</div>`
-            : `<div style="margin-top:10px;color:#92400e">This lot stays <strong>under admin review</strong>. If the owner was already billed for this lot, the admin will choose how to update the business bill when approving.</div>`;
+            ? `<div style="margin-top:10px;color:var(--warning, #92400e)">This lot stays <strong>under business review</strong>. The business reconciles your ledger separately — you do not see the business-side bill.</div>`
+            : `<div style="margin-top:10px;color:var(--warning, #92400e)">This lot stays <strong>under admin review</strong>. If the owner was already billed for this lot, the admin will choose how to update the business bill when approving.</div>`;
           const result = await Swal.fire({
             title: isParty ? 'Ledger amount change' : 'Party bill amount change',
             icon: 'question',
@@ -1104,8 +1104,8 @@ export default function PartyLedger() {
               <div><strong>Current party ledger amount:</strong> ₨${previousLedgerAmount.toLocaleString()}</div>
               <div><strong>Updated party ledger amount:</strong> ₨${nextLedgerAmount.toLocaleString()}</div>
               <div><strong>Difference:</strong> ₨${difference.toLocaleString()}</div>
-              <div style="margin-top:10px;color:#92400e">Only the party ledger is updated. The business (Ghausia) bill on the lot is <strong>not</strong> changed — edit it in the collection workspace or when reviewing completion so the owner sees the correct amount.</div>
-              <div style="margin-top:8px;color:#64748b;font-size:12px">No payment transaction will be created automatically.</div>
+              <div style="margin-top:10px;color:var(--warning, #92400e)">Only the party ledger is updated. The business (Ghausia) bill on the lot is <strong>not</strong> changed — edit it in the collection workspace or when reviewing completion so the owner sees the correct amount.</div>
+              <div style="margin-top:8px;color:var(--text-muted, #64748b);font-size:12px">No payment transaction will be created automatically.</div>
             </div>
           `,
           showCancelButton: true,
@@ -1459,8 +1459,8 @@ export default function PartyLedger() {
           fontSize: 11,
           fontWeight: 600,
           border: '1px solid #E0E7FF',
-          background: 'linear-gradient(180deg, #F8FAFF 0%, #EEF2FF 100%)',
-          color: '#3730a3',
+          background: 'linear-gradient(180deg, #F8FAFF 0%, var(--primary-bg, #eef2ff) 100%)',
+          color: 'var(--primary, #3730a3)',
           cursor: 'pointer',
           padding: '3px 8px',
           borderRadius: 6,
@@ -1477,8 +1477,8 @@ export default function PartyLedger() {
         </svg>
         <span>Pictures</span>
         <span style={{
-          background: picsCount == null || picsCount > 0 ? '#4f46e5' : '#c7d2fe',
-          color: picsCount == null || picsCount > 0 ? '#fff' : '#4338ca',
+          background: picsCount == null || picsCount > 0 ? 'var(--purple, #4f46e5)' : 'var(--border, #c7d2fe)',
+          color: picsCount == null || picsCount > 0 ? 'var(--card-bg, #ffffff)' : 'var(--purple, #4338ca)',
           borderRadius: 999,
           padding: '1px 7px',
           fontSize: 10,
@@ -1506,9 +1506,9 @@ export default function PartyLedger() {
                 gap: 6,
                 fontSize: 12,
                 fontWeight: 600,
-                color: showSummaryCards ? '#475569' : '#1e40af',
+                color: showSummaryCards ? 'var(--text-secondary, #475569)' : 'var(--primary, #1e40af)',
                 border: '1px solid var(--border)',
-                background: showSummaryCards ? 'var(--surface-card, #ffffff)' : '#eff6ff',
+                background: showSummaryCards ? 'var(--card-bg, #ffffff)' : 'var(--primary-bg, #eff6ff)',
                 borderRadius: 20,
                 padding: '5px 14px',
                 cursor: 'pointer',
@@ -1551,21 +1551,21 @@ export default function PartyLedger() {
             justifyContent: 'space-between',
             gap: 12,
             flexWrap: 'wrap',
-            background: '#fffbeb',
-            border: '1px solid #fcd34d',
+            background: 'var(--primary-bg, #fffbeb)',
+            border: '1px solid var(--warning-bg, #fcd34d)',
             borderRadius: 10,
             padding: '12px 16px',
             marginBottom: 16,
           }}
         >
-          <div style={{ fontSize: 13, color: '#92400e', fontWeight: 600 }}>
+          <div style={{ fontSize: 13, color: 'var(--warning, #92400e)', fontWeight: 600 }}>
             {pendingRevisionRequestCount} bill change request
             {pendingRevisionRequestCount === 1 ? '' : 's'} pending party bill-change review.
           </div>
           <button
             type="button"
             className="btn btn-sm"
-            style={{ background: '#f59e0b', color: '#fff', border: 'none' }}
+            style={{ background: 'var(--warning, #f59e0b)', color: 'var(--card-bg, #ffffff)', border: 'none' }}
             onClick={jumpToPendingBillRevision}
           >
             Open request
@@ -1581,14 +1581,14 @@ export default function PartyLedger() {
               key: 'assigned',
               label: isParty ? 'My lots' : 'Assigned Lots',
               value: totals.lots,
-              color: '#1e40af',
+              color: 'var(--primary, #1e40af)',
               sub: 'Overall (not limited by Status filter)',
             },
             {
               key: 'bill',
               label: isParty ? 'Your ledger total' : 'Total Bill Value',
               value: `₨${(totals.billTotal ?? 0).toLocaleString()}`,
-              color: '#7c3aed',
+              color: 'var(--purple, #7c3aed)',
               sub: 'All lots in this view',
             },
             {
@@ -1596,33 +1596,33 @@ export default function PartyLedger() {
               label: (
                 <>
                   Completed{' '}
-                  <strong style={{ fontSize: 14, color: '#15803d' }}>({totals.completed ?? 0})</strong>
+                  <strong style={{ fontSize: 14, color: 'var(--success, #15803d)' }}>({totals.completed ?? 0})</strong>
                 </>
               ),
               value: `₨${(totals.completedAmount ?? 0).toLocaleString()}`,
-              color: '#15803d',
+              color: 'var(--success, #15803d)',
             },
             {
               key: 'pending',
               label: (
                 <>
                   {isParty ? 'Not received yet' : 'Pending'}{' '}
-                  <strong style={{ fontSize: 14, color: '#d97706' }}>({totals.pending ?? 0})</strong>
+                  <strong style={{ fontSize: 14, color: 'var(--warning, #d97706)' }}>({totals.pending ?? 0})</strong>
                 </>
               ),
               value: isParty ? 'Business has not sent this to you yet' : 'Awaiting dispatch',
-              color: '#d97706',
+              color: 'var(--warning, #d97706)',
             },
             {
               key: 'inprogress',
               label: (
                 <>
                   {isParty ? 'With you / in progress' : 'In Progress'}{' '}
-                  <strong style={{ fontSize: 14, color: '#d97706' }}>({totals.inProgress ?? 0})</strong>
+                  <strong style={{ fontSize: 14, color: 'var(--warning, #d97706)' }}>({totals.inProgress ?? 0})</strong>
                 </>
               ),
               value: `₨${(totals.inProgressAmount ?? 0).toLocaleString()}`,
-              color: '#d97706',
+              color: 'var(--warning, #d97706)',
             },
             {
               key: 'other-status',
@@ -1646,7 +1646,7 @@ export default function PartyLedger() {
                   : '(advance)'
                 }`,
               value: `₨${(partyBalanceInfo?.completedNet ?? 0).toLocaleString()}`,
-              color: `${(partyBalanceInfo?.completedNet ?? 0) >= 0 ? '#0f766e' : '#dc2626'}`,
+              color: `${(partyBalanceInfo?.completedNet ?? 0) >= 0 ? 'var(--success, #0f766e)' : 'var(--danger, #dc2626)'}`,
               sub: isParty ? 'Your ledger (received - completed bill)' : undefined,
             },
             {
@@ -1656,7 +1656,7 @@ export default function PartyLedger() {
                   : '(advance)'
                 }`,
               value: `₨${(partyBalanceInfo?.balance ?? 0).toLocaleString()}`,
-              color: `${(partyBalanceInfo?.balance ?? 0) >= 0 ? '#0f766e' : '#dc2626'}`,
+              color: `${(partyBalanceInfo?.balance ?? 0) >= 0 ? 'var(--success, #0f766e)' : 'var(--danger, #dc2626)'}`,
               sub: 'Overall ledger (Status filter does not change these totals).',
             },
           ].map((c) => (
@@ -1692,9 +1692,9 @@ export default function PartyLedger() {
           overflowX: 'auto',
           marginBottom: 16,
           padding: 4,
-          background: 'var(--surface-2, #f8fafc)',
+          background: 'var(--primary-bg, #f8fafc)',
           borderRadius: 10,
-          border: '1px solid var(--border-subtle, #e2e8f0)',
+          border: '1px solid var(--border, #e2e8f0)',
         }}
       >
         <div style={{ display: 'flex', gap: 4 }}>
@@ -1721,9 +1721,9 @@ export default function PartyLedger() {
                 style={{
                   padding: '10px 16px',
                   borderRadius: 8,
-                  border: active ? '1px solid #15803d' : '1px solid transparent',
-                  background: active ? '#fff' : 'transparent',
-                  color: active ? '#15803d' : 'var(--text-secondary, #64748b)',
+                  border: active ? '1px solid var(--success, #15803d)' : '1px solid transparent',
+                  background: active ? 'var(--card-bg, #fff)' : 'transparent',
+                  color: active ? 'var(--success, #15803d)' : 'var(--text-secondary, #64748b)',
                   fontWeight: active ? 700 : 600,
                   fontSize: 14,
                   cursor: 'pointer',
@@ -1837,10 +1837,10 @@ export default function PartyLedger() {
             marginBottom: 12,
             padding: '10px 14px',
             borderRadius: 10,
-            background: '#EFF6FF',
-            border: '1px solid #BFDBFE',
+            background: 'var(--primary-bg, #eff6ff)',
+            border: '1px solid var(--border, #bfdbfe)',
             fontSize: 13,
-            color: '#1e40af',
+            color: 'var(--primary, #1e40af)',
             lineHeight: 1.4,
           }}
         >
@@ -1898,11 +1898,11 @@ export default function PartyLedger() {
                       id={`pl-lot-row-${l.id}`}
                       style={
                         String(highlightLotId) === String(l.id)
-                          ? { background: '#FEF3C7', outline: '2px solid #F59E0B' }
+                          ? { background: 'var(--warning-bg, #fef3c7)', outline: '2px solid var(--warning, #f59e0b)' }
                           : undefined
                       }
                     >
-                      <td style={{ fontWeight: 700, color: '#1e40af', whiteSpace: 'nowrap' }}>
+                      <td style={{ fontWeight: 700, color: 'var(--primary, #1e40af)', whiteSpace: 'nowrap' }}>
                         {l.lotNo || l.lotNumber}
                       </td>
                       <td style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{l.designNo}</td>
@@ -1910,9 +1910,9 @@ export default function PartyLedger() {
                       <td>
                         <span
                           style={{
-                            background: '#F0F9FF',
-                            color: '#0369a1',
-                            border: '1px solid #BAE6FD',
+                            background: 'var(--primary-bg, #f0f9ff)',
+                            color: 'var(--primary-light, #0369a1)',
+                            border: '1px solid var(--border, #bae6fd)',
                             borderRadius: 6,
                             padding: '2px 8px',
                             fontSize: 12,
@@ -1961,8 +1961,8 @@ export default function PartyLedger() {
                               fontWeight: '500',
                               padding: '2px 8px',
                               borderRadius: 6,
-                              background: '#DCFCE7',
-                              border: '1px solid #DCFCE7',
+                              background: 'var(--success-bg, #dcfce7)',
+                              border: '1px solid var(--success-bg, #dcfce7)',
                             }}
                           >
                             Completed
@@ -1971,13 +1971,13 @@ export default function PartyLedger() {
                           <span
                             style={{
                               fontSize: 12,
-                              color: '#92400e',
+                              color: 'var(--warning, #92400e)',
                               marginTop: 3,
                               fontWeight: 600,
                               padding: '2px 8px',
                               borderRadius: 6,
-                              background: '#FEF3C7',
-                              border: '1px solid #FCD34D',
+                              background: 'var(--warning-bg, #fef3c7)',
+                              border: '1px solid var(--warning-bg, #fcd34d)',
                             }}
                           >
                             {partyFacingStatusLabel('Pending review', isParty)}
@@ -1986,13 +1986,13 @@ export default function PartyLedger() {
                           <span
                             style={{
                               fontSize: 12,
-                              color: '#b45309',
+                              color: 'var(--warning, #b45309)',
                               marginTop: 3,
                               fontWeight: 600,
                               padding: '2px 8px',
                               borderRadius: 6,
-                              background: '#FEF3C7',
-                              border: '1px solid #FCD34D',
+                              background: 'var(--warning-bg, #fef3c7)',
+                              border: '1px solid var(--warning-bg, #fcd34d)',
                             }}
                           >
                             {partyFacingStatusLabel('Pending', isParty)}
@@ -2013,7 +2013,7 @@ export default function PartyLedger() {
                               <option
                                 value="Rejected"
                                 disabled
-                                style={{ fontWeight: 600, color: '#b91c1c' }}
+                                style={{ fontWeight: 600, color: 'var(--danger, #b91c1c)' }}
                               >
                                 {partyFacingStatusLabel('Rejected', isParty)}
                               </option>
@@ -2045,7 +2045,7 @@ export default function PartyLedger() {
                         style={{
                           textAlign: 'right',
                           fontWeight: 700,
-                          color: '#1e40af',
+                          color: 'var(--primary, #1e40af)',
                         }}
                       >
                         {partyBillOnly == null ? (
@@ -2116,7 +2116,7 @@ export default function PartyLedger() {
                                     fontSize: 11,
                                     fontWeight: 700,
                                     cursor: billPicSavingLotId === l.id ? 'wait' : 'pointer',
-                                    color: '#0369a1',
+                                    color: 'var(--primary-light, #0369a1)',
                                     textDecoration: 'underline',
                                     textUnderlineOffset: 2,
                                   }}
@@ -2137,7 +2137,7 @@ export default function PartyLedger() {
                                       fontWeight: 700,
                                       border: 'none',
                                       background: 'transparent',
-                                      color: '#b91c1c',
+                                      color: 'var(--danger, #b91c1c)',
                                       cursor: billPicSavingLotId === l.id ? 'wait' : 'pointer',
                                       padding: '2px 4px',
                                     }}
@@ -2157,7 +2157,7 @@ export default function PartyLedger() {
                           <div
                             style={{
                               fontSize: 12,
-                              color: '#b91c1c',
+                              color: 'var(--danger, #b91c1c)',
                               marginTop: 6,
                               fontWeight: 600,
                               lineHeight: 1.4,
@@ -2168,7 +2168,7 @@ export default function PartyLedger() {
                           </div>
                         ) : null}
                         {pe.amountChangeNote && (
-                          <div style={{ fontSize: 11, color: '#92400e', marginTop: 4 }}>
+                          <div style={{ fontSize: 11, color: 'var(--warning, #92400e)', marginTop: 4 }}>
                             Amount changed: ₨
                             {Number(pe.amountChangeNote.previousAmount || 0).toLocaleString()} to ₨
                             {Number(pe.amountChangeNote.updatedAmount || 0).toLocaleString()}
@@ -2178,7 +2178,7 @@ export default function PartyLedger() {
                           <div
                             style={{
                               fontSize: 11,
-                              color: '#0369a1',
+                              color: 'var(--primary-light, #0369a1)',
                               marginTop: 4,
                               fontWeight: 600,
                             }}
@@ -2195,7 +2195,7 @@ export default function PartyLedger() {
                             <div
                               style={{
                                 fontSize: 11,
-                                color: '#92400e',
+                                color: 'var(--warning, #92400e)',
                                 marginTop: 4,
                                 fontWeight: 600,
                               }}
@@ -2211,7 +2211,7 @@ export default function PartyLedger() {
                         {pe.billRevisionRequest &&
                           String(pe.billRevisionRequest.status || '').toLowerCase() ===
                           'rejected' && (
-                            <div style={{ fontSize: 11, color: '#b91c1c', marginTop: 4 }}>
+                            <div style={{ fontSize: 11, color: 'var(--danger, #b91c1c)', marginTop: 4 }}>
                               Bill change request rejected
                               {pe.billRevisionRequest.rejectionNote
                                 ? `: ${pe.billRevisionRequest.rejectionNote}`
@@ -2226,7 +2226,7 @@ export default function PartyLedger() {
                             const st = String(req?.status || '').toLowerCase();
                             if (st === 'pending') {
                               return (
-                                <span style={{ fontSize: 12, color: '#92400e', fontWeight: 600 }}>
+                                <span style={{ fontSize: 12, color: 'var(--warning, #92400e)', fontWeight: 600 }}>
                                   Change requested
                                 </span>
                               );
@@ -2246,9 +2246,9 @@ export default function PartyLedger() {
                                   fontWeight: 600,
                                   borderRadius: 6,
                                   cursor: 'pointer',
-                                  background: '#FFF7ED',
-                                  color: '#c2410c',
-                                  border: '1px solid #FED7AA',
+                                  background: 'var(--primary-bg, #FFF7ED)',
+                                  color: 'var(--warning, #c2410c)',
+                                  border: '1px solid var(--warning-bg, #fed7aa)',
                                   fontFamily: 'Inter, sans-serif',
                                 }}
                               >
@@ -2287,8 +2287,8 @@ export default function PartyLedger() {
                                     fontWeight: 700,
                                     borderRadius: 6,
                                     cursor: 'pointer',
-                                    background: '#f59e0b',
-                                    color: '#fff',
+                                    background: 'var(--warning, #f59e0b)',
+                                    color: 'var(--card-bg, #ffffff)',
                                     border: 'none',
                                     fontFamily: 'Inter, sans-serif',
                                   }}
@@ -2304,9 +2304,9 @@ export default function PartyLedger() {
                                 fontWeight: 500,
                                 borderRadius: 6,
                                 cursor: 'pointer',
-                                background: '#EFF6FF',
-                                color: '#1e40af',
-                                border: '1px solid #BFDBFE',
+                                background: 'var(--primary-bg, #eff6ff)',
+                                color: 'var(--primary, #1e40af)',
+                                border: '1px solid var(--border, #bfdbfe)',
                                 fontFamily: 'Inter, sans-serif',
                               }}
                             >
@@ -2398,8 +2398,8 @@ export default function PartyLedger() {
                     </div>
 
                     <div className="lot-tile-bill">
-                      <span style={{ fontSize: 13, color: '#64748b' }}>{isParty ? 'Your ledger:' : 'Bill Amount:'}</span>
-                      <strong style={{ fontSize: 16, color: '#1e40af' }}>
+                      <span style={{ fontSize: 13, color: 'var(--text-muted, #64748b)' }}>{isParty ? 'Your ledger:' : 'Bill Amount:'}</span>
+                      <strong style={{ fontSize: 16, color: 'var(--primary, #1e40af)' }}>
                         {partyBillOnly == null ? '—' : `₨${partyBillOnly.toLocaleString()}`}
                       </strong>
                     </div>
@@ -2414,7 +2414,7 @@ export default function PartyLedger() {
                         onChange={(e) => handleRowStatusChange(l, e.target.value)}
                       >
                         {displayStatus === 'Rejected' && (
-                          <option value="Rejected" disabled style={{ fontWeight: 600, color: '#b91c1c' }}>
+                          <option value="Rejected" disabled style={{ fontWeight: 600, color: 'var(--danger, #b91c1c)' }}>
                             {partyFacingStatusLabel('Rejected', isParty)}
                           </option>
                         )}
@@ -2447,7 +2447,7 @@ export default function PartyLedger() {
                   <div className="pl-mob-header">
                     <div>
                       <span className="pl-mob-lot-no">Lot #{l.lotNo || l.lotNumber}</span>
-                      {l.designNo ? <span style={{ fontSize: 13, fontWeight: 600, color: '#475569' }}> · Design #{l.designNo}</span> : null}
+                      {l.designNo ? <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary, #475569)' }}> · Design #{l.designNo}</span> : null}
                     </div>
                     <div>
                       {displayStatus === 'Completed' ? (
@@ -2492,7 +2492,7 @@ export default function PartyLedger() {
                           <button
                             type="button"
                             className="btn btn-ghost btn-sm"
-                            style={{ padding: '4px 12px', fontSize: 12, height: 'auto', minHeight: 28, background: '#f1f5f9' }}
+                            style={{ padding: '4px 12px', fontSize: 12, height: 'auto', minHeight: 28, background: 'var(--border, #f1f5f9)' }}
                             onClick={() => openEdit(l, displayStatus)}
                           >
                             Edit
@@ -2502,8 +2502,8 @@ export default function PartyLedger() {
                     </div>
 
                     <div className="pl-mob-bill-row">
-                      <span style={{ fontSize: 13, color: '#64748b' }}>{isParty ? 'Your ledger:' : 'Bill Amount:'}</span>
-                      <strong style={{ fontSize: 15, color: '#1e40af' }}>
+                      <span style={{ fontSize: 13, color: 'var(--text-muted, #64748b)' }}>{isParty ? 'Your ledger:' : 'Bill Amount:'}</span>
+                      <strong style={{ fontSize: 15, color: 'var(--primary, #1e40af)' }}>
                         {partyBillOnly == null ? '—' : `₨${partyBillOnly.toLocaleString()}`}
                       </strong>
                     </div>
@@ -2518,7 +2518,7 @@ export default function PartyLedger() {
                         onChange={(e) => handleRowStatusChange(l, e.target.value)}
                       >
                         {displayStatus === 'Rejected' && (
-                          <option value="Rejected" disabled style={{ fontWeight: 600, color: '#b91c1c' }}>
+                          <option value="Rejected" disabled style={{ fontWeight: 600, color: 'var(--danger, #b91c1c)' }}>
                             {partyFacingStatusLabel('Rejected', isParty)}
                           </option>
                         )}
@@ -2621,7 +2621,7 @@ export default function PartyLedger() {
           {/* Read-only info */}
           <div
             style={{
-              background: '#F8FAFC',
+              background: 'var(--primary-bg, #f8fafc)',
               border: '1px solid var(--border)',
               borderRadius: 10,
               padding: '14px 16px',
@@ -2707,7 +2707,7 @@ export default function PartyLedger() {
                   ))}
                 </select>
                 {ledgerFormErrors.partyId && (
-                  <span style={{ color: '#dc2626', fontSize: 11 }}>{ledgerFormErrors.partyId}</span>
+                  <span style={{ color: 'var(--danger, #dc2626)', fontSize: 11 }}>{ledgerFormErrors.partyId}</span>
                 )}
               </FormGroup>
             )}
@@ -2726,11 +2726,11 @@ export default function PartyLedger() {
                   style={{
                     fontSize: 13,
                     fontWeight: 600,
-                    color: '#92400e',
+                    color: 'var(--warning, #92400e)',
                     padding: '8px 10px',
-                    background: '#FEF3C7',
+                    background: 'var(--warning-bg, #fef3c7)',
                     borderRadius: 8,
-                    border: '1px solid #FCD34D',
+                    border: '1px solid var(--warning-bg, #fcd34d)',
                   }}
                 >
                   Pending business review — you can update bill, receipt, and dates; the lot stays
@@ -2741,11 +2741,11 @@ export default function PartyLedger() {
                   style={{
                     fontSize: 13,
                     fontWeight: 600,
-                    color: '#b45309',
+                    color: 'var(--warning, #b45309)',
                     padding: '8px 12px',
-                    background: '#FEF3C7',
+                    background: 'var(--warning-bg, #fef3c7)',
                     borderRadius: 8,
-                    border: '1px solid #FCD34D',
+                    border: '1px solid var(--warning-bg, #fcd34d)',
                   }}
                 >
                   Not received yet — status cannot be changed until dispatched
@@ -2803,7 +2803,7 @@ export default function PartyLedger() {
                   }}
                 />
                 {ledgerFormErrors.completeDate && (
-                  <span style={{ color: '#dc2626', fontSize: 11 }}>
+                  <span style={{ color: 'var(--danger, #dc2626)', fontSize: 11 }}>
                     {ledgerFormErrors.completeDate}
                   </span>
                 )}
@@ -2905,9 +2905,9 @@ export default function PartyLedger() {
                         minHeight: 24,
                         padding: 0,
                         borderRadius: '50%',
-                        border: '1px solid #e2e8f0',
-                        background: '#fff',
-                        color: '#64748b',
+                        border: '1px solid var(--border, #e2e8f0)',
+                        background: 'var(--card-bg, #fff)',
+                        color: 'var(--text-muted, #64748b)',
                         cursor: 'pointer',
                         display: 'flex',
                         alignItems: 'center',
@@ -2955,8 +2955,8 @@ export default function PartyLedger() {
                         minWidth: 28,
                         padding: 0,
                         borderRadius: '50%',
-                        border: '1px solid #e2e8f0',
-                        color: '#64748b',
+                        border: '1px solid var(--border, #e2e8f0)',
+                        color: 'var(--text-muted, #64748b)',
                         fontSize: 18,
                         fontWeight: 700,
                         lineHeight: 1,
@@ -2966,7 +2966,7 @@ export default function PartyLedger() {
                     </button>
                   </div>
                 )}
-                <span style={{ fontSize: 12, color: '#15803d' }}>
+                <span style={{ fontSize: 12, color: 'var(--success, #15803d)' }}>
                   {receiptPreviewKind(editForm.receipt) === 'filename'
                     ? `📎 ${editForm.receipt}`
                     : receiptPreviewKind(editForm.receipt) === 'pdf'
@@ -2986,8 +2986,8 @@ export default function PartyLedger() {
                       minWidth: 28,
                       padding: 0,
                       borderRadius: '50%',
-                      border: '1px solid #e2e8f0',
-                      color: '#64748b',
+                      border: '1px solid var(--border, #e2e8f0)',
+                      color: 'var(--text-muted, #64748b)',
                       fontSize: 18,
                       fontWeight: 700,
                       lineHeight: 1,
@@ -3123,7 +3123,7 @@ export default function PartyLedger() {
                 height: '78vh',
                 border: 'none',
                 borderRadius: 8,
-                background: '#f9fafb',
+                background: 'var(--primary-bg, #f9fafb)',
               }}
             />
           )}
@@ -3169,7 +3169,7 @@ export default function PartyLedger() {
               <button
                 type="button"
                 className="btn btn-ghost"
-                style={{ color: '#dc2626', fontWeight: 600 }}
+                style={{ color: 'var(--danger, #dc2626)', fontWeight: 600 }}
                 onClick={() => {
                   const lotToEdit = ledgerLots.find((l) => (l.lotNo || l.lotNumber) === receiptPreview.title || l.id === receiptPreview.lotId);
                   setReceiptPreview(null);
@@ -3284,7 +3284,7 @@ export default function PartyLedger() {
                   <button
                     type="button"
                     className="btn btn-ghost"
-                    style={{ color: '#b91c1c', borderColor: '#fecaca' }}
+                    style={{ color: 'var(--danger, #b91c1c)', borderColor: 'var(--danger-bg, #fecaca)' }}
                     disabled={revisionReviewSaving}
                     onClick={() => void rejectRevision()}
                   >
@@ -3310,7 +3310,7 @@ export default function PartyLedger() {
             >
               <div
                 style={{
-                  background: '#F8FAFC',
+                  background: 'var(--primary-bg, #f8fafc)',
                   border: '1px solid var(--border)',
                   borderRadius: 10,
                   padding: '14px 16px',
@@ -3330,7 +3330,7 @@ export default function PartyLedger() {
                   </strong>{' '}
                   <span
                     style={{
-                      color: delta === 0 ? '#64748b' : toA - fromA >= 0 ? '#0f766e' : '#dc2626',
+                      color: delta === 0 ? 'var(--text-muted, #64748b)' : toA - fromA >= 0 ? 'var(--success, #0f766e)' : 'var(--danger, #dc2626)',
                     }}
                   >
                     ({toA - fromA >= 0 ? '+' : '−'}₨{Math.abs(toA - fromA).toLocaleString()})
@@ -3349,11 +3349,11 @@ export default function PartyLedger() {
                 <div>
                   <span style={{ color: 'var(--text-muted)' }}>Settlement: </span>
                   {settled ? (
-                    <span style={{ color: '#92400e', fontWeight: 600 }}>
+                    <span style={{ color: 'var(--warning, #92400e)', fontWeight: 600 }}>
                       Payment settled for this lot
                     </span>
                   ) : (
-                    <span style={{ color: '#64748b' }}>No settlement payment</span>
+                    <span style={{ color: 'var(--text-muted, #64748b)' }}>No settlement payment</span>
                   )}
                 </div>
               </div>
@@ -3414,12 +3414,12 @@ export default function PartyLedger() {
 
               <div
                 style={{
-                  background: revisionReview.updateOwnerBill ? '#eff6ff' : '#f8fafc',
+                  background: revisionReview.updateOwnerBill ? 'var(--primary-bg, #eff6ff)' : 'var(--primary-bg, #f8fafc)',
                   border: '1px solid var(--border)',
                   borderRadius: 10,
                   padding: '12px 14px',
                   fontSize: 12.5,
-                  color: '#334155',
+                  color: 'var(--text-secondary, #334155)',
                   lineHeight: 1.6,
                 }}
               >
@@ -3427,17 +3427,17 @@ export default function PartyLedger() {
                   New owner bill: <strong>₨{Number(newOwner).toLocaleString()}</strong>
                   {revisionReview.updateOwnerBill ? (
                     <span
-                      style={{ color: delta === 0 ? '#64748b' : delta > 0 ? '#0f766e' : '#dc2626' }}
+                      style={{ color: delta === 0 ? 'var(--text-muted, #64748b)' : delta > 0 ? 'var(--success, #0f766e)' : 'var(--danger, #dc2626)' }}
                     >
                       {' '}
                       ({delta >= 0 ? '+' : '−'}₨{Math.abs(delta).toLocaleString()})
                     </span>
                   ) : (
-                    <span style={{ color: '#64748b' }}> (unchanged)</span>
+                    <span style={{ color: 'var(--text-muted, #64748b)' }}> (unchanged)</span>
                   )}
                 </div>
                 {revisionReview.updateOwnerBill && settled && delta !== 0 && (
-                  <div style={{ marginTop: 6, color: '#92400e', fontWeight: 600 }}>
+                  <div style={{ marginTop: 6, color: 'var(--warning, #92400e)', fontWeight: 600 }}>
                     {delta > 0
                       ? `Adjustment: extra Paid → Owner payment of ₨${delta.toLocaleString()} will be recorded.`
                       : `Adjustment: reversing Received ← Owner payment of ₨${Math.abs(delta).toLocaleString()} will be recorded.`}

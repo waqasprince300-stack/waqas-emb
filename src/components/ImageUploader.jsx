@@ -194,10 +194,10 @@ export default function ImageUploader({
     width: thumbSize,
     height: thumbSize,
     borderRadius: 10,
-    border: '1px dashed #C7D2FE',
+    border: '1px dashed var(--border, #c7d2fe)',
     background: '#F8FAFF',
     cursor: busy ? 'wait' : 'pointer',
-    color: '#4338ca',
+    color: 'var(--purple, #4338ca)',
     fontSize: 12,
     display: 'flex',
     flexDirection: 'column',
@@ -235,7 +235,7 @@ export default function ImageUploader({
                 borderRadius: 10,
                 border: '1px solid #E5E7EB',
                 overflow: 'hidden',
-                background: '#f8fafc',
+                background: 'var(--primary-bg, #f8fafc)',
                 boxShadow: '0 1px 2px rgba(15,23,42,0.06)',
               }}
             >
@@ -263,8 +263,8 @@ export default function ImageUploader({
                       justifyContent: 'center',
                       fontSize: 13,
                       fontWeight: 700,
-                      color: '#b91c1c',
-                      background: '#FEF2F2',
+                      color: 'var(--danger, #b91c1c)',
+                      background: 'var(--danger-bg, #fef2f2)',
                     }}
                   >
                     PDF
@@ -292,7 +292,7 @@ export default function ImageUploader({
                     borderRadius: '50%',
                     border: 'none',
                     background: 'rgba(17,24,39,0.75)',
-                    color: '#fff',
+                    color: 'var(--card-bg, #ffffff)',
                     fontSize: 13,
                     lineHeight: '20px',
                     cursor: 'pointer',
@@ -338,9 +338,9 @@ export default function ImageUploader({
             title="Paste image copied from WhatsApp or clipboard"
             style={{
               ...tileBtnStyle,
-              borderColor: '#86efac',
-              background: '#f0fdf4',
-              color: '#166534',
+              borderColor: 'var(--success-bg, #86efac)',
+              background: 'var(--success-bg, #f0fdf4)',
+              color: 'var(--success, #166534)',
             }}
           >
             {busy ? (
@@ -380,7 +380,7 @@ export default function ImageUploader({
         ) : null}
       </div>
 
-      {error && <div style={{ marginTop: 4, fontSize: 11, color: '#dc2626' }}>{error}</div>}
+      {error && <div style={{ marginTop: 4, fontSize: 11, color: 'var(--danger, #dc2626)' }}>{error}</div>}
 
       {preview && (
         <Modal title="Picture" onClose={() => setPreview(null)}>

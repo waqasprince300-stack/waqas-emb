@@ -74,7 +74,7 @@ export default function OtpVerify({
       {devCode && (
         <div
           className="alert"
-          style={{ background: '#fff7ed', border: '1px solid #fed7aa', color: '#9a3412' }}
+          style={{ background: 'var(--card-bg, #ffffff)7ed', border: '1px solid var(--warning-bg, #fed7aa)', color: 'var(--warning, #9a3412)' }}
         >
           <strong>Testing mode:</strong> your code is{' '}
           <code style={{ fontWeight: 700 }}>{devCode}</code>

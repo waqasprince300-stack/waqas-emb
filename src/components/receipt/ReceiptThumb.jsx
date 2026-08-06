@@ -56,7 +56,7 @@ export default function ReceiptThumb({ receipt, lotLabel, onOpen, size = 44 }) {
         type="button"
         aria-label="View receipt PDF"
         title="View receipt PDF"
-        style={{ ...baseBtn, padding: 6, background: '#FEF2F2', border: '1px solid #FECACA' }}
+        style={{ ...baseBtn, padding: 6, background: 'var(--danger-bg, #fef2f2)', border: '1px solid var(--danger-bg, #fecaca)' }}
         onClick={() => onOpen({ kind: 'pdf', src: receipt, title: lotLabel })}
       >
         <span style={{ fontSize: size * 0.55 }}>PDF</span>
@@ -83,7 +83,7 @@ export default function ReceiptThumb({ receipt, lotLabel, onOpen, size = 44 }) {
             borderRadius: 8,
             border: '1px solid var(--border)',
             display: 'block',
-            background: '#f3f4f6',
+            background: 'var(--primary-bg, #f3f4f6)',
           }}
         />
       </button>
@@ -98,8 +98,8 @@ export default function ReceiptThumb({ receipt, lotLabel, onOpen, size = 44 }) {
       style={{
         ...baseBtn,
         padding: '6px 8px',
-        background: '#F0FDF4',
-        border: '1px solid #BBF7D0',
+        background: 'var(--success-bg, #f0fdf4)',
+        border: '1px solid var(--success-bg, #bbf7d0)',
         borderRadius: 8,
         fontSize: 12,
       }}

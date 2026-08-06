@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -203,6 +203,44 @@ export default function Sidebar({ sidebarOpen: _sidebarOpen, setSidebarOpen }) {
   const { user, isAdmin, isSuperAdmin, logout, isParty } = useAuth();
   const { reportingLots, reportingPartyEdits, notificationUnreadCount, notifications } = useApp();
   const [logoutModalOpen, setLogoutModalOpen] = useState(false);
+  const [deferredPrompt, setDeferredPrompt] = useState(null);
+  const [isInstallable, setIsInstallable] = useState(false);
+
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (e) => {
+      // Prevent the mini-infobar from appearing on mobile
+      e.preventDefault();
+      // Stash the event so it can be triggered later.
+      setDeferredPrompt(e);
+      setIsInstallable(true);
+    };
+    
+    // Check if already installed
+    if (window.matchMedia('(display-mode: standalone)').matches) {
+      setIsInstallable(false);
+    }
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    };
+  }, []);
+
+  const handleInstallClick = async () => {
+    if (!deferredPrompt) return;
+    // Show the install prompt
+    deferredPrompt.prompt();
+    // Wait for the user to respond to the prompt
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === 'accepted') {
+      console.log('User accepted the install prompt');
+      setIsInstallable(false);
+    } else {
+      console.log('User dismissed the install prompt');
+    }
+    setDeferredPrompt(null);
+  };
 
   /** Lots party-submitted and waiting for admin approval — shown as a badge on "Review Lots". */
   const reviewLotsCount = useMemo(
@@ -273,7 +311,7 @@ export default function Sidebar({ sidebarOpen: _sidebarOpen, setSidebarOpen }) {
               fontFamily: "'Playfair Display', serif",
               fontSize: 20,
               fontWeight: 600,
-              color: '#fff',
+              color: '#ffffff',
               lineHeight: 1.2,
             }}
           >
@@ -282,7 +320,7 @@ export default function Sidebar({ sidebarOpen: _sidebarOpen, setSidebarOpen }) {
           <div
             style={{
               fontSize: 11,
-              color: '#64748b',
+              color: 'var(--text-muted, #64748b)',
               marginTop: 3,
               letterSpacing: '0.08em',
               textTransform: 'uppercase',
@@ -310,10 +348,10 @@ export default function Sidebar({ sidebarOpen: _sidebarOpen, setSidebarOpen }) {
                 textDecoration: 'none',
                 fontSize: 13.5,
                 fontWeight: isActive ? 600 : 400,
-                color: isActive ? '#fff' : '#94a3b8',
-                background: isActive ? 'rgba(59,130,246,0.18)' : 'transparent',
+                color: isActive ? 'var(--sidebar-active, #ffffff)' : 'var(--text-muted, #94a3b8)',
+                background: isActive ? 'var(--sidebar-active-bg, rgba(59,130,246,0.18))' : 'transparent',
                 transition: 'all 0.15s',
-                borderLeft: isActive ? '3px solid #3b82f6' : '3px solid transparent',
+                borderLeft: isActive ? '3px solid var(--sidebar-active, #3b82f6)' : '3px solid transparent',
               })}
             >
               <span style={{ opacity: 0.85 }}>{item.icon}</span>
@@ -325,8 +363,8 @@ export default function Sidebar({ sidebarOpen: _sidebarOpen, setSidebarOpen }) {
                   title={`${reviewLotsCount} lot${reviewLotsCount === 1 ? '' : 's'} awaiting review`}
                   style={{
                     marginLeft: 'auto',
-                    background: '#ef4444',
-                    color: '#ffffff',
+                    background: 'var(--danger, #ef4444)',
+                    color: 'var(--card-bg, #ffffff)',
                     fontSize: 12,
                     fontWeight: 800,
                     height: 22,
@@ -347,8 +385,8 @@ export default function Sidebar({ sidebarOpen: _sidebarOpen, setSidebarOpen }) {
                   title={`${billRevisionCount} bill change request${billRevisionCount === 1 ? '' : 's'} pending`}
                   style={{
                     marginLeft: 'auto',
-                    background: '#f59e0b',
-                    color: '#ffffff',
+                    background: 'var(--warning, #f59e0b)',
+                    color: 'var(--card-bg, #ffffff)',
                     fontSize: 12,
                     fontWeight: 800,
                     height: 22,
@@ -369,8 +407,8 @@ export default function Sidebar({ sidebarOpen: _sidebarOpen, setSidebarOpen }) {
                   title={`${partyRejectedUnread} unread notification${partyRejectedUnread === 1 ? '' : 's'}`}
                   style={{
                     marginLeft: 'auto',
-                    background: '#ef4444',
-                    color: '#ffffff',
+                    background: 'var(--danger, #ef4444)',
+                    color: 'var(--card-bg, #ffffff)',
                     fontSize: 12,
                     fontWeight: 800,
                     height: 22,
@@ -396,18 +434,18 @@ export default function Sidebar({ sidebarOpen: _sidebarOpen, setSidebarOpen }) {
             padding: '14px 18px',
             borderTop: '1px solid rgba(255,255,255,0.07)',
             fontSize: 11,
-            color: '#64748b',
+            color: 'var(--text-muted, #64748b)',
           }}
         >
           {user && (
             <div style={{ marginBottom: 12 }}>
-              <div style={{ color: '#e2e8f0', fontSize: 12, fontWeight: 700 }}>{user.name}</div>
+              <div style={{ color: 'var(--border, #e2e8f0)', fontSize: 12, fontWeight: 700 }}>{user.name}</div>
               {user.email ? (
                 <div
                   style={{
                     marginTop: 4,
                     fontSize: 11,
-                    color: '#94a3b8',
+                    color: 'var(--text-muted, #94a3b8)',
                     fontWeight: 500,
                     lineHeight: 1.35,
                     wordBreak: 'break-all',
@@ -421,7 +459,7 @@ export default function Sidebar({ sidebarOpen: _sidebarOpen, setSidebarOpen }) {
                   style={{
                     marginTop: 4,
                     fontSize: 11,
-                    color: '#94a3b8',
+                    color: 'var(--text-muted, #94a3b8)',
                     fontWeight: 500,
                     lineHeight: 1.35,
                   }}
@@ -437,6 +475,33 @@ export default function Sidebar({ sidebarOpen: _sidebarOpen, setSidebarOpen }) {
                     : 'Party account'
                   : `${String(user.role || '').replace('_', ' ')}${user.partyName ? ` · ${user.partyName}` : ''}`}
               </div>
+              
+              {isInstallable && (
+                <button
+                  type="button"
+                  onClick={handleInstallClick}
+                  style={{
+                    marginTop: 10,
+                    width: '100%',
+                    padding: '8px 10px',
+                    borderRadius: 8,
+                    background: 'var(--primary, #3b82f6)',
+                    border: 'none',
+                    color: 'var(--card-bg, #ffffff)',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    fontSize: 13,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 6
+                  }}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                  Install App
+                </button>
+              )}
+
               <button
                 type="button"
                 onClick={() => setLogoutModalOpen(true)}
@@ -447,7 +512,7 @@ export default function Sidebar({ sidebarOpen: _sidebarOpen, setSidebarOpen }) {
                   borderRadius: 8,
                   border: '1px solid rgba(255,255,255,0.12)',
                   background: 'rgba(255,255,255,0.06)',
-                  color: '#cbd5e1',
+                  color: 'var(--border, #cbd5e1)',
                   cursor: 'pointer',
                   fontSize: 12,
                 }}

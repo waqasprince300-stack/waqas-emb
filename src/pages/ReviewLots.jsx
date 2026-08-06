@@ -407,7 +407,7 @@ export default function ReviewLots() {
                       id={`rl-lot-row-${l.id}`}
                       style={
                         String(highlightLotId) === String(l.id)
-                          ? { background: '#FEF3C7', outline: '2px solid #F59E0B' }
+                          ? { background: 'var(--warning-bg, #fef3c7)', outline: '2px solid var(--warning, #f59e0b)' }
                           : undefined
                       }
                     >
@@ -447,7 +447,7 @@ export default function ReviewLots() {
                           <div
                             style={{
                               fontSize: 11,
-                              color: '#92400e',
+                              color: 'var(--warning, #92400e)',
                               marginTop: 6,
                               lineHeight: 1.35,
                             }}
@@ -460,7 +460,7 @@ export default function ReviewLots() {
                             ) : null}
                           </div>
                         ) : hasOwnerReceivedForLot(l, reportingPayments) ? (
-                          <div style={{ fontSize: 11, color: '#0369a1', marginTop: 6 }}>
+                          <div style={{ fontSize: 11, color: 'var(--primary-light, #0369a1)', marginTop: 6 }}>
                             Owner payment is linked to this lot — choose how Ghausia bill should
                             follow.
                           </div>
@@ -470,7 +470,7 @@ export default function ReviewLots() {
                         <button
                           type="button"
                           className="btn btn-ghost btn-sm"
-                          style={{ color: '#b91c1c', borderColor: '#fecaca', marginRight: 6 }}
+                          style={{ color: 'var(--danger, #b91c1c)', borderColor: 'var(--danger-bg, #fecaca)', marginRight: 6 }}
                           disabled={busyId === l.id}
                           onClick={() => openReject(l)}
                         >
@@ -508,10 +508,10 @@ export default function ReviewLots() {
             const pe = reportingPartyEdits[l.id] || {};
             const submittedLabel = formatReviewSubmittedAt(l, pe);
             return (
-              <div key={l.id} className="review-mobile-card" style={String(highlightLotId) === String(l.id) ? { outline: '2px solid #F59E0B' } : undefined}>
+              <div key={l.id} className="review-mobile-card" style={String(highlightLotId) === String(l.id) ? { outline: '2px solid var(--warning, #f59e0b)' } : undefined}>
                 <div className="rl-mob-header">
                   <div className="rl-mob-lot-no">{l.lotNo || l.lotNumber}</div>
-                  <div style={{ fontSize: 15, fontWeight: 700, color: '#dc2626' }}>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--danger, #dc2626)' }}>
                     ₨{peBill(l.id, l).toLocaleString()}
                   </div>
                 </div>
@@ -545,10 +545,10 @@ export default function ReviewLots() {
                     />
                   </div>
                   {(pe.notes || pendingRevisionIsReal(pe) || hasOwnerReceivedForLot(l, reportingPayments)) && (
-                    <div style={{ fontSize: 12.5, marginTop: 8, padding: '10px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px' }}>
+                    <div style={{ fontSize: 12.5, marginTop: 8, padding: '10px', background: 'var(--primary-bg, #f8fafc)', border: '1px solid var(--border, #e2e8f0)', borderRadius: '8px' }}>
                       {pe.notes && <div style={{ marginBottom: 6, color: 'var(--text-primary)' }}>{pe.notes}</div>}
                       {pendingRevisionIsReal(pe) ? (
-                        <div style={{ fontSize: 11.5, color: '#92400e', lineHeight: 1.4 }}>
+                        <div style={{ fontSize: 11.5, color: 'var(--warning, #92400e)', lineHeight: 1.4 }}>
                           Party revised bill: ₨
                           {Number(pe.pendingRevision.fromAmount).toLocaleString()} → ₨
                           {Number(pe.pendingRevision.toAmount).toLocaleString()}
@@ -557,7 +557,7 @@ export default function ReviewLots() {
                           ) : null}
                         </div>
                       ) : hasOwnerReceivedForLot(l, reportingPayments) ? (
-                        <div style={{ fontSize: 11.5, color: '#0369a1' }}>
+                        <div style={{ fontSize: 11.5, color: 'var(--primary-light, #0369a1)' }}>
                           Owner payment is linked to this lot.
                         </div>
                       ) : null}
@@ -567,7 +567,7 @@ export default function ReviewLots() {
                     <button
                       type="button"
                       className="btn btn-ghost"
-                      style={{ flex: 1, padding: '10px', fontSize: 14, color: '#b91c1c', borderColor: '#fecaca' }}
+                      style={{ flex: 1, padding: '10px', fontSize: 14, color: 'var(--danger, #b91c1c)', borderColor: 'var(--danger-bg, #fecaca)' }}
                       disabled={busyId === l.id}
                       onClick={() => openReject(l)}
                     >
@@ -656,7 +656,7 @@ export default function ReviewLots() {
                     fontSize: 13,
                     marginBottom: 16,
                     padding: '12px 14px',
-                    background: '#F8FAFC',
+                    background: 'var(--primary-bg, #f8fafc)',
                     borderRadius: 8,
                     border: '1px solid var(--border)',
                   }}
@@ -737,7 +737,7 @@ export default function ReviewLots() {
                       border: '1px solid var(--border)',
                       borderRadius: 8,
                       padding: '12px 14px',
-                      background: ownerBillingChoice === 'custom_ghausia' ? '#EFF6FF' : '#FAFAFA',
+                      background: ownerBillingChoice === 'custom_ghausia' ? 'var(--primary-bg, #eff6ff)' : 'var(--primary-bg, #fafafa)',
                     }}
                   >
                     <label
@@ -851,7 +851,7 @@ export default function ReviewLots() {
               <button
                 type="submit"
                 className="btn btn-primary"
-                style={{ background: '#dc2626', borderColor: '#dc2626' }}
+                style={{ background: 'var(--danger, #dc2626)', borderColor: 'var(--danger, #dc2626)' }}
                 disabled={busyId}
               >
                 {busyId ? (

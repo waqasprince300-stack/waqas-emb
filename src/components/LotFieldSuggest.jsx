@@ -85,7 +85,7 @@ export default function LotFieldSuggest({
             margin: 0,
             padding: 4,
             listStyle: 'none',
-            background: '#fff',
+            background: 'var(--card-bg, #fff)',
             border: '1px solid var(--border, #e2e8f0)',
             borderRadius: 10,
             boxShadow: '0 10px 28px rgba(15,23,42,0.12)',
@@ -103,13 +103,13 @@ export default function LotFieldSuggest({
                   width: '100%',
                   textAlign: 'left',
                   border: 'none',
-                  background: i === active ? '#eef2ff' : 'transparent',
+                  background: i === active ? 'var(--primary-bg, #eef2ff)' : 'transparent',
                   padding: '8px 10px',
                   borderRadius: 8,
                   cursor: 'pointer',
                   fontSize: 13,
                   fontWeight: i === active ? 700 : 500,
-                  color: '#0f172a',
+                  color: 'var(--text-primary, #0f172a)',
                 }}
               >
                 {s}

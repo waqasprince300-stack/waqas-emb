@@ -181,7 +181,7 @@ export default function LazyReceiptThumb({
 
   if (typeof onUpload === 'function') {
     return (
-      <label ref={containerRef} style={{ color: '#2563eb', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4, margin: 0, whiteSpace: 'nowrap' }}>
+      <label ref={containerRef} style={{ color: 'var(--primary-light, #2563eb)', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4, margin: 0, whiteSpace: 'nowrap' }}>
         <input
           type="file"
           accept="image/*,.pdf,application/pdf"

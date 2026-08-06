@@ -64,8 +64,8 @@ export function StatusBadge({ status, label }) {
 
 export function ActionBtn({ variant = 'edit', onClick }) {
   const styles = {
-    edit: { bg: '#EFF6FF', color: '#1e40af', border: '#BFDBFE', label: 'Edit' },
-    delete: { bg: '#FEF2F2', color: '#dc2626', border: '#FECACA', label: 'Delete' },
+    edit: { bg: 'var(--primary-bg, #eff6ff)', color: 'var(--primary, #1e40af)', border: 'var(--border, #bfdbfe)', label: 'Edit' },
+    delete: { bg: 'var(--danger-bg, #fef2f2)', color: 'var(--danger, #dc2626)', border: 'var(--danger-bg, #fecaca)', label: 'Delete' },
   };
   const s = styles[variant];
   return (

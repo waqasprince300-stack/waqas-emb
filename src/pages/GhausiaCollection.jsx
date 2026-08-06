@@ -288,8 +288,8 @@ function LotForm({
         text: 'You have not entered a lot number. Are you sure you want to save this work as unnumbered?',
         icon: 'warning',
         showCancelButton: true,
-        confirmButtonColor: '#4f46e5',
-        cancelButtonColor: '#94a3b8',
+        confirmButtonColor: 'var(--purple, #4f46e5)',
+        cancelButtonColor: 'var(--text-muted, #94a3b8)',
         confirmButtonText: 'Yes, save without number',
         cancelButtonText: 'Cancel'
       });
@@ -400,7 +400,7 @@ function LotForm({
       style={{
         marginBottom: 10,
         paddingBottom: 8,
-        borderBottom: '1px solid #f1f5f9',
+        borderBottom: '1px solid var(--primary-bg, #f1f5f9)',
         display: 'flex',
         flexWrap: 'wrap',
         gap: '6px 10px',
@@ -408,7 +408,7 @@ function LotForm({
         fontSize: 12,
       }}
     >
-      <span style={{ fontWeight: 700, color: '#94a3b8' }}>Head</span>
+      <span style={{ fontWeight: 700, color: 'var(--text-muted, #94a3b8)' }}>Head</span>
       {headList.map((h) => {
         const active = selectedHead === h;
         const isDefault = headConfig.defaultHead === h;
@@ -421,9 +421,9 @@ function LotForm({
             style={{
               padding: '3px 9px',
               borderRadius: 6,
-              border: active ? '1px solid #4f46e5' : '1px solid #e2e8f0',
-              background: active ? '#eef2ff' : '#fff',
-              color: active ? '#3730a3' : '#475569',
+              border: active ? '1px solid var(--purple, #4f46e5)' : '1px solid var(--border, #e2e8f0)',
+              background: active ? 'var(--primary-bg, #eef2ff)' : 'var(--card-bg, #fff)',
+              color: active ? 'var(--primary, #3730a3)' : 'var(--text-secondary, #475569)',
               fontWeight: active ? 800 : 600,
               fontSize: 12,
               cursor: 'pointer',
@@ -442,9 +442,9 @@ function LotForm({
         style={{
           padding: '3px 8px',
           borderRadius: 6,
-          border: '1px dashed #cbd5e1',
-          background: '#fff',
-          color: '#64748b',
+          border: '1px dashed var(--border, #cbd5e1)',
+          background: 'var(--card-bg, #fff)',
+          color: 'var(--text-muted, #64748b)',
           fontSize: 12,
           fontWeight: 700,
           cursor: 'pointer',
@@ -465,7 +465,7 @@ function LotForm({
               padding: '3px 6px',
               fontSize: 12,
               borderRadius: 6,
-              border: '1px solid #e2e8f0',
+              border: '1px solid var(--border, #e2e8f0)',
             }}
           />
           <button
@@ -491,7 +491,7 @@ function LotForm({
             <button
               type="button"
               className="btn btn-ghost btn-sm"
-              style={{ padding: '2px 8px', fontSize: 11, color: '#dc2626' }}
+              style={{ padding: '2px 8px', fontSize: 11, color: 'var(--danger, #dc2626)' }}
               title={`Delete custom head ${selectedHead}`}
               onClick={() => removeCustomHead(selectedHead)}
             >
@@ -503,14 +503,14 @@ function LotForm({
 
       {isNewLot ? (
         <>
-          <span style={{ color: '#e2e8f0', userSelect: 'none' }}>|</span>
+          <span style={{ color: 'var(--border, #e2e8f0)', userSelect: 'none' }}>|</span>
           <label
             style={{
               display: 'inline-flex',
               alignItems: 'center',
               gap: 5,
               cursor: 'pointer',
-              color: '#475569',
+              color: 'var(--text-secondary, #475569)',
               fontWeight: 600,
             }}
           >
@@ -535,13 +535,13 @@ function LotForm({
                   padding: '3px 6px',
                   fontSize: 12,
                   borderRadius: 6,
-                  border: errors.bulkCount ? '1px solid #dc2626' : '1px solid #e2e8f0',
+                  border: errors.bulkCount ? '1px solid var(--danger, #dc2626)' : '1px solid var(--border, #e2e8f0)',
                 }}
               />
               {bulkLotNumbers && bulkLotNumbers.length > 1 ? (
                 <span
                   style={{
-                    color: '#94a3b8',
+                    color: 'var(--text-muted, #94a3b8)',
                     fontSize: 11,
                     maxWidth: 200,
                     overflow: 'hidden',
@@ -555,10 +555,10 @@ function LotForm({
             </>
           ) : null}
           {errors.bulkCount ? (
-            <span style={{ color: '#dc2626', fontSize: 11 }}>{errors.bulkCount}</span>
+            <span style={{ color: 'var(--danger, #dc2626)', fontSize: 11 }}>{errors.bulkCount}</span>
           ) : null}
           {bulkMode && !bulkLotNumbers && form.lotNumber.trim() ? (
-            <span style={{ color: '#b45309', fontSize: 11 }}>Lot needs digits</span>
+            <span style={{ color: 'var(--warning, #b45309)', fontSize: 11 }}>Lot needs digits</span>
           ) : null}
         </>
       ) : null}
@@ -580,7 +580,7 @@ function LotForm({
           <button
             type="button"
             className="btn btn-ghost btn-sm"
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: '#4f46e5', fontWeight: 600, background: '#eef2ff' }}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--purple, #4f46e5)', fontWeight: 600, background: 'var(--primary-bg, #eef2ff)' }}
             onClick={() => onJumpToLinkedLot && onJumpToLinkedLot(form.linkedLotId)}
           >
             {form.suitComponent === 'dupatta' ? '🔗 View Main Lot' : '🔗 View Dupatta'}
@@ -601,9 +601,9 @@ function LotForm({
                   flex: 1,
                   padding: '8px 4px',
                   borderRadius: '8px',
-                  border: form.suitType === type ? '2px solid #4f46e5' : '1px solid #e2e8f0',
-                  backgroundColor: form.suitType === type ? '#eef2ff' : 'transparent',
-                  color: form.suitType === type ? '#3730a3' : '#475569',
+                  border: form.suitType === type ? '2px solid var(--purple, #4f46e5)' : '1px solid var(--border, #e2e8f0)',
+                  backgroundColor: form.suitType === type ? 'var(--primary-bg, #eef2ff)' : 'transparent',
+                  color: form.suitType === type ? 'var(--primary, #3730a3)' : 'var(--text-secondary, #475569)',
                   fontWeight: form.suitType === type ? '600' : '400',
                   cursor: 'pointer',
                   fontSize: '13px',
@@ -615,12 +615,12 @@ function LotForm({
             ))}
           </div>
         )}
-        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#475569', fontWeight: 600, cursor: 'pointer' }}>
+        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--text-secondary, #475569)', fontWeight: 600, cursor: 'pointer' }}>
           <input
             type="checkbox"
             checked={form.isRework}
             onChange={(e) => set('isRework', e.target.checked)}
-            style={{ width: 16, height: 16, accentColor: '#b45309' }}
+            style={{ width: 16, height: 16, accentColor: 'var(--warning, #b45309)' }}
             disabled={!isNewLot && initial?.suitComponent === 'dupatta' && initial?.linkedLotId}
           />
           Mark as Rework / Claim
@@ -643,7 +643,7 @@ function LotForm({
               ))}
             </select>
             {errors.saveBusinessOwnerId && (
-              <span style={{ color: '#dc2626', fontSize: 11, marginTop: 3, display: 'block' }}>
+              <span style={{ color: 'var(--danger, #dc2626)', fontSize: 11, marginTop: 3, display: 'block' }}>
                 {errors.saveBusinessOwnerId}
               </span>
             )}
@@ -663,7 +663,7 @@ function LotForm({
             disabled={!isNewLot && initial?.suitComponent === 'dupatta' && initial?.linkedLotId}
           />
           {!isNewLot && initial?.suitComponent === 'dupatta' && initial?.linkedLotId && (
-            <span style={{ fontSize: 11, color: '#64748b', display: 'block', marginTop: 4 }}>
+            <span style={{ fontSize: 11, color: 'var(--text-muted, #64748b)', display: 'block', marginTop: 4 }}>
               Edit from the Main Lot to change the suit&apos;s Lot Number.
             </span>
           )}
@@ -679,7 +679,7 @@ function LotForm({
             disabled={!isNewLot && initial?.suitComponent === 'dupatta' && initial?.linkedLotId}
           />
           {errors.designNo && (
-            <span style={{ color: '#dc2626', fontSize: 11, marginTop: 3, display: 'block' }}>
+            <span style={{ color: 'var(--danger, #dc2626)', fontSize: 11, marginTop: 3, display: 'block' }}>
               {errors.designNo}
             </span>
           )}
@@ -785,7 +785,7 @@ function LotForm({
               className="form-select"
               style={
                 form.status === 'completed'
-                  ? { backgroundColor: '#dcfce7', color: '#166534', borderColor: '#bbf7d0', fontWeight: '600' }
+                  ? { backgroundColor: 'var(--success-bg, #dcfce7)', color: 'var(--success, #166534)', borderColor: 'var(--success-bg, #bbf7d0)', fontWeight: '600' }
                   : {}
               }
               value={form.status}
@@ -855,14 +855,14 @@ function LotForm({
             <div
               style={{
                 padding: 16,
-                background: '#f8fafc',
+                background: 'var(--primary-bg, #f8fafc)',
                 borderRadius: 8,
-                border: '1px solid #e2e8f0',
+                border: '1px solid var(--border, #e2e8f0)',
                 transform: form.suitType === '3-piece' ? 'translateY(0)' : 'translateY(-10px)',
                 transition: 'transform 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
               }}
             >
-          <h4 style={{ margin: '0 0 16px 0', color: '#334155', fontSize: 15, fontWeight: 700 }}>Dupatta Details</h4>
+          <h4 style={{ margin: '0 0 16px 0', color: 'var(--text-secondary, #334155)', fontSize: 15, fontWeight: 700 }}>Dupatta Details</h4>
           <div className="grid-2">
             <FormGroup label="Dupatta Party">
                 <select
@@ -947,8 +947,8 @@ function LotForm({
             )}
           </div>
 
-          <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px dashed #cbd5e1' }}>
-            <h5 style={{ margin: '0 0 10px 0', fontSize: 13, color: '#475569' }}>Owner Billing Preference</h5>
+          <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px dashed var(--border, #cbd5e1)' }}>
+            <h5 style={{ margin: '0 0 10px 0', fontSize: 13, color: 'var(--text-secondary, #475569)' }}>Owner Billing Preference</h5>
             <div style={{ display: 'flex', gap: '8px' }}>
               <button
                 type="button"
@@ -957,9 +957,9 @@ function LotForm({
                   flex: 1,
                   padding: '8px',
                   borderRadius: '6px',
-                  border: form.ownerBillingChoice === 'separate' ? '1px solid #10b981' : '1px solid #e2e8f0',
-                  background: form.ownerBillingChoice === 'separate' ? '#ecfdf5' : '#fff',
-                  color: form.ownerBillingChoice === 'separate' ? '#065f46' : '#64748b',
+                  border: form.ownerBillingChoice === 'separate' ? '1px solid var(--success, #10b981)' : '1px solid var(--border, #e2e8f0)',
+                  background: form.ownerBillingChoice === 'separate' ? 'var(--success-bg, #ecfdf5)' : 'var(--card-bg, #ffffff)',
+                  color: form.ownerBillingChoice === 'separate' ? '#065f46' : 'var(--text-muted, #64748b)',
                   fontSize: '12px',
                   fontWeight: 600,
                   cursor: 'pointer',
@@ -999,9 +999,9 @@ function LotForm({
                   flex: 1,
                   padding: '8px',
                   borderRadius: '6px',
-                  border: form.ownerBillingChoice === 'combined' ? '1px solid #f59e0b' : '1px solid #e2e8f0',
-                  background: form.ownerBillingChoice === 'combined' ? '#fffbeb' : '#fff',
-                  color: form.ownerBillingChoice === 'combined' ? '#92400e' : '#64748b',
+                  border: form.ownerBillingChoice === 'combined' ? '1px solid var(--warning, #f59e0b)' : '1px solid var(--border, #e2e8f0)',
+                  background: form.ownerBillingChoice === 'combined' ? 'var(--warning-bg, #fffbeb)' : 'var(--card-bg, #ffffff)',
+                  color: form.ownerBillingChoice === 'combined' ? 'var(--warning, #92400e)' : 'var(--text-muted, #64748b)',
                   fontSize: '12px',
                   fontWeight: 600,
                   cursor: 'pointer',
@@ -1692,7 +1692,7 @@ export default function GhausiaCollection() {
           icon: failed.length > 0 ? 'warning' : 'success',
           title: 'Bulk save done',
           html: `<p style="margin:0 0 8px">${parts.join(' · ')}</p>${failed.length > 0
-              ? `<p style="margin:0;font-size:13px;color:#64748b">${failed
+              ? `<p style="margin:0;font-size:13px;color:var(--text-muted, #64748b)">${failed
                 .slice(0, 5)
                 .map((f) => `${f.lotNumber}: ${f.message}`)
                 .join('<br/>')}${failed.length > 5 ? '<br/>…' : ''}</p>`
@@ -1914,8 +1914,8 @@ export default function GhausiaCollection() {
       text: 'This action cannot be undone.',
       icon: 'warning',
       showCancelButton: true,
-      confirmButtonColor: '#dc2626',
-      cancelButtonColor: '#6b7280',
+      confirmButtonColor: 'var(--danger, #dc2626)',
+      cancelButtonColor: 'var(--text-muted, #6b7280)',
       confirmButtonText: 'Yes, delete it',
     });
     if (result.isConfirmed) {
@@ -1953,7 +1953,7 @@ export default function GhausiaCollection() {
         className="ghausia-collection-page-hero"
         style={{
           marginBottom: 24,
-          background: 'linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)',
+          background: 'var(--card-bg, #ffffff)',
           border: '1px solid var(--border)',
           borderRadius: 16,
           boxShadow: 'var(--shadow-md)',
@@ -2038,9 +2038,9 @@ export default function GhausiaCollection() {
                 gap: 6,
                 fontSize: 12,
                 fontWeight: 600,
-                color: showSummaryCards ? '#475569' : '#1e40af',
+                color: showSummaryCards ? 'var(--text-secondary, #475569)' : 'var(--primary, #1e40af)',
                 border: '1px solid var(--border)',
-                background: showSummaryCards ? 'var(--surface-card, #ffffff)' : '#eff6ff',
+                background: showSummaryCards ? 'var(--card-bg, #ffffff)' : 'var(--primary-bg, #eff6ff)',
                 borderRadius: 20,
                 padding: '5px 14px',
                 cursor: 'pointer',
@@ -2104,7 +2104,7 @@ export default function GhausiaCollection() {
             gap: 12,
             padding: '14px 24px 18px',
             borderTop: '1px solid var(--border)',
-            background: 'rgba(255,255,255,0.85)',
+            background: 'var(--card-bg)',
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', width: '100%' }}>
@@ -2155,24 +2155,24 @@ export default function GhausiaCollection() {
             }}
           >
           {[
-            { label: 'Total Lots', value: visibleLots.length, color: '#1e40af' },
-            { label: 'Billable Lots', value: billable.length, color: '#dc2626' },
+            { label: 'Total Lots', value: visibleLots.length, color: 'var(--primary, #1e40af)' },
+            { label: 'Billable Lots', value: billable.length, color: 'var(--danger, #dc2626)' },
             {
               label: 'Billable Amount',
               value: `₨${billableTotal.toLocaleString()}`,
-              color: '#dc2626',
+              color: 'var(--danger, #dc2626)',
             },
             {
               label: 'Received from Owner',
               value: ownerReceivedIsPending
                 ? 'Pending to owner'
                 : `₨${ownerReceivedNet.toLocaleString()}`,
-              color: ownerReceivedIsPending ? '#d97706' : '#15803d',
+              color: ownerReceivedIsPending ? 'var(--warning, #d97706)' : 'var(--success, #15803d)',
             },
             {
               label: `${billableTotal - ownerReceivedNet >= 0 ? 'Receivable from Owner' : 'Advance from Owner'}`,
               value: `₨${(billableTotal - ownerReceivedNet).toLocaleString()}`,
-              color: billableTotal - ownerReceivedNet >= 0 ? '#15803d' : '#dc2626',
+              color: billableTotal - ownerReceivedNet >= 0 ? 'var(--success, #15803d)' : 'var(--danger, #dc2626)',
             },
           ].map((c) => (
             <div key={c.label} className="stat-card">
@@ -2236,21 +2236,21 @@ export default function GhausiaCollection() {
                       <td>{formatDisplayDate(p.date)}</td>
                       <td>
                         <span style={{
-                          background: p.type === 'Received' ? '#F0FDF4' : '#FEF2F2',
-                          color: p.type === 'Received' ? '#166534' : '#991B1B',
-                          border: `1px solid ${p.type === 'Received' ? '#BBF7D0' : '#FECACA'}`,
+                          background: p.type === 'Received' ? 'var(--success-bg, #f0fdf4)' : 'var(--danger-bg, #fef2f2)',
+                          color: p.type === 'Received' ? 'var(--success, #166534)' : 'var(--danger, #991b1b)',
+                          border: `1px solid ${p.type === 'Received' ? 'var(--success-bg, #bbf7d0)' : 'var(--danger-bg, #fecaca)'}`,
                           borderRadius: 20, padding: '2px 10px', fontSize: 11.5, fontWeight: 600,
                         }}>{p.type}</span>
                       </td>
                       <td>{p.party}</td>
                       <td>{p.linkedLot || '—'}</td>
                       <td style={{ color: 'var(--text-secondary)', fontSize: 12 }}>{p.note}</td>
-                      <td style={{ textAlign: 'right', fontWeight: 700, color: p.type === 'Received' ? '#15803d' : '#dc2626' }}>
+                      <td style={{ textAlign: 'right', fontWeight: 700, color: p.type === 'Received' ? 'var(--success, #15803d)' : 'var(--danger, #dc2626)' }}>
                         ₨{p.amount.toLocaleString()}
                       </td>
                       <td>
                         <button className="btn-icon" onClick={() => _handleDeletePayment(p.id)} title="Delete">
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#dc2626" strokeWidth="2">
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke='var(--danger, #dc2626)' strokeWidth="2">
                             <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/>
                             <path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
                           </svg>
@@ -2267,7 +2267,7 @@ export default function GhausiaCollection() {
           <div
             style={{
               margin: '0',
-              background: '#FFFBEB',
+              background: 'var(--warning-bg, #fffbeb)',
               border: '1px solid #FDE68A',
               borderRadius: 10,
               padding: 14,
@@ -2297,7 +2297,7 @@ export default function GhausiaCollection() {
                   padding: '6px 10px',
                   borderRadius: 8,
                   border: '1px solid #FDE68A',
-                  background: '#fff',
+                  background: 'var(--card-bg, #fff)',
                   color: 'var(--text-primary)',
                   minWidth: 200,
                   flex: '0 1 240px',
@@ -2333,7 +2333,7 @@ export default function GhausiaCollection() {
                       {partyEdits[l.id]?.amountChangeNote ? (
                         <div style={{ textAlign: 'right', color: '#92600A' }}>
                           <strong>₨{getOwnerBillableAmount(l).toLocaleString()}</strong>
-                          <div style={{ fontSize: 11, color: '#92400e', marginTop: 2 }}>
+                          <div style={{ fontSize: 11, color: 'var(--warning, #92400e)', marginTop: 2 }}>
                             Party ledger: Previous ₨
                             {Number(
                               partyEdits[l.id].amountChangeNote.previousAmount || 0
@@ -2391,7 +2391,7 @@ export default function GhausiaCollection() {
                         disabled={billableSafePage <= 1}
                         onClick={() => setBillablePage((p) => Math.max(1, p - 1))}
                         style={{
-                          background: '#fff',
+                          background: 'var(--card-bg, #fff)',
                           border: '1px solid #FDE68A',
                           color: '#92600A',
                           opacity: billableSafePage <= 1 ? 0.5 : 1,
@@ -2408,7 +2408,7 @@ export default function GhausiaCollection() {
                         disabled={billableSafePage >= billablePageCount}
                         onClick={() => setBillablePage((p) => Math.min(billablePageCount, p + 1))}
                         style={{
-                          background: '#fff',
+                          background: 'var(--card-bg, #fff)',
                           border: '1px solid #FDE68A',
                           color: '#92600A',
                           opacity: billableSafePage >= billablePageCount ? 0.5 : 1,
@@ -2513,10 +2513,10 @@ export default function GhausiaCollection() {
                 fontSize: 13,
                 fontWeight: 600,
                 border: 'none',
-                borderBottom: lotTableTab === tab.id ? '2px solid #1e40af' : '2px solid transparent',
+                borderBottom: lotTableTab === tab.id ? '2px solid var(--primary, #1e40af)' : '2px solid transparent',
                 marginBottom: -1,
                 background: 'transparent',
-                color: lotTableTab === tab.id ? '#1e40af' : 'var(--text-secondary)',
+                color: lotTableTab === tab.id ? 'var(--primary, #1e40af)' : 'var(--text-secondary)',
                 cursor: 'pointer',
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -2528,8 +2528,8 @@ export default function GhausiaCollection() {
                 style={{
                   fontSize: 11,
                   fontWeight: 700,
-                  background: lotTableTab === tab.id ? '#EFF6FF' : '#F3F4F6',
-                  color: lotTableTab === tab.id ? '#1e40af' : 'var(--text-muted)',
+                  background: lotTableTab === tab.id ? 'var(--primary-bg, #eff6ff)' : 'var(--primary-bg, #f3f4f6)',
+                  color: lotTableTab === tab.id ? 'var(--primary, #1e40af)' : 'var(--text-muted)',
                   padding: '1px 6px',
                   borderRadius: 999,
                 }}
@@ -2590,25 +2590,25 @@ export default function GhausiaCollection() {
                 </tr>
               ) : (
                 paginatedLots.map((l) => (
-                  <tr key={l.id}>
-                    <td style={{ fontWeight: 700, color: '#1e40af', whiteSpace: 'nowrap' }}>
+                  <tr key={l.id} className={l.suitComponent === 'dupatta' ? 'lot-row-dupatta' : l.suitComponent === 'main' && l.suitType === '3-piece' ? 'lot-row-main' : ''}>
+                    <td style={{ fontWeight: 700, color: 'var(--primary, #1e40af)', whiteSpace: 'nowrap' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        {l.lotNumber || <span style={{ color: '#94a3b8', fontStyle: 'italic', fontWeight: 500 }}>(No Lot)</span>}
+                        {l.lotNumber || <span style={{ color: 'var(--text-muted, #94a3b8)', fontStyle: 'italic', fontWeight: 500 }}>(No Lot)</span>}
                         {l.suitComponent === 'dupatta' && (
-                          <button type="button" onClick={() => openEdit(l)} style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', background: '#fdf4ff', color: '#a21caf', border: '1px solid #f5d0fe', borderRadius: 4, cursor: 'pointer' }}>Dupatta</button>
+                          <button type="button" onClick={() => openEdit(l)} style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', background: 'var(--primary-bg, #fdf4ff)', color: 'var(--primary, #a21caf)', border: '1px solid var(--border, #f5d0fe)', borderRadius: 4, cursor: 'pointer' }}>Dupatta</button>
                         )}
                         {l.suitComponent === 'main' && l.suitType === '3-piece' && (
-                          <button type="button" onClick={() => openEdit(l)} style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe', borderRadius: 4, cursor: 'pointer' }}>Main Lot</button>
+                          <button type="button" onClick={() => openEdit(l)} style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', background: 'var(--primary-bg, #eff6ff)', color: 'var(--primary, #1d4ed8)', border: '1px solid var(--border, #bfdbfe)', borderRadius: 4, cursor: 'pointer' }}>Main Lot</button>
                         )}
                         {l.isRework && (
-                          <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', background: '#fffbeb', color: '#b45309', border: '1px solid #fde68a', borderRadius: 4 }}>Rework</span>
+                          <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', background: 'var(--primary-bg, #fffbeb)', color: 'var(--primary, #b45309)', border: '1px solid var(--border, #fde68a)', borderRadius: 4 }}>Rework</span>
                         )}
                         {l.linkedLotId && (
                           <div title="Jump to linked lot">
                             <button
                               type="button"
                               onClick={() => openLinkedLot(l.linkedLotId)}
-                              style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', background: '#f8fafc', color: '#334155', border: '1px solid #cbd5e1', borderRadius: 4, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}
+                              style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', background: 'var(--primary-bg, #f8fafc)', color: 'var(--text-secondary, #334155)', border: '1px solid var(--border, #cbd5e1)', borderRadius: 4, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}
                             >
                               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
                               {l.suitComponent === 'main' ? 'View Dupatta' : 'View Main'}
@@ -2622,9 +2622,9 @@ export default function GhausiaCollection() {
                     <td>
                       <span
                         style={{
-                          background: '#F0F9FF',
-                          color: '#0369a1',
-                          border: '1px solid #BAE6FD',
+                          background: 'var(--primary-bg, #F0F9FF)',
+                          color: 'var(--primary, #0369a1)',
+                          border: '1px solid var(--border, #BAE6FD)',
                           borderRadius: 6,
                           padding: '2px 8px',
                           fontSize: 12,
@@ -2670,14 +2670,14 @@ export default function GhausiaCollection() {
                               fontWeight: '500',
                               padding: '2px 8px',
                               borderRadius: 6,
-                              background: '#DCFCE7',
-                              border: '1px solid #DCFCE7',
+                              background: 'var(--success-bg, #dcfce7)',
+                              border: '1px solid var(--success-bg, #dcfce7)',
                               alignSelf: 'flex-start'
                             }}
                           >
                             Completed
                           </span>
-                          <div style={{ fontSize: 11, color: '#166534', fontWeight: 600 }}>
+                          <div style={{ fontSize: 11, color: 'var(--success, #166534)', fontWeight: 600 }}>
                             Completed Date: {formatDisplayDate(l.completionApprovedAt || l.allotDate)}
                           </div>
                         </div>
@@ -2693,7 +2693,7 @@ export default function GhausiaCollection() {
                             <div
                               style={{
                                 fontSize: 12,
-                                color: '#dc2626',
+                                color: 'var(--danger, #dc2626)',
                                 marginTop: 3,
                                 fontWeight: '500',
                               }}
@@ -2717,7 +2717,7 @@ export default function GhausiaCollection() {
                             <div
                               style={{
                                 fontSize: 12,
-                                color: '#b91c1c',
+                                color: 'var(--danger, #b91c1c)',
                                 marginTop: 1,
                                 fontWeight: '500',
                               }}
@@ -2729,7 +2729,7 @@ export default function GhausiaCollection() {
                             <div
                               style={{
                                 fontSize: 12,
-                                color: '#ca8a04',
+                                color: 'var(--warning, #ca8a04)',
                                 marginTop: 1,
                                 fontWeight: '500',
                               }}
@@ -2740,7 +2740,7 @@ export default function GhausiaCollection() {
                         </>
                       )}
                     </td>
-                    <td style={{ textAlign: 'right', fontWeight: 700, color: '#1e40af' }}>
+                    <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--primary, #1e40af)' }}>
                       ₨{getOwnerBillableAmount(l).toLocaleString()}
                     </td>
                     <td>
@@ -2764,16 +2764,16 @@ export default function GhausiaCollection() {
             <EmptyState message="No lots found" />
           ) : (
             paginatedLots.map((l) => (
-              <div key={`gh-tile-${l.id}`} className="lot-tile-card">
+              <div key={`gh-tile-${l.id}`} className={`lot-tile-card ${l.suitComponent === 'dupatta' ? 'lot-row-dupatta' : l.suitComponent === 'main' && l.suitType === '3-piece' ? 'lot-row-main' : ''}`}>
                 <div className="lot-tile-header">
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
-                      <span className="lot-tile-number">Lot {l.lotNumber ? `#${l.lotNumber}` : <span style={{ fontStyle: 'italic', fontWeight: 500, color: '#94a3b8' }}>(No Lot)</span>}</span>
+                      <span className="lot-tile-number">Lot {l.lotNumber ? `#${l.lotNumber}` : <span style={{ fontStyle: 'italic', fontWeight: 500, color: 'var(--text-muted, #94a3b8)' }}>(No Lot)</span>}</span>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
-                      {l.suitComponent === 'dupatta' && <button type="button" onClick={() => openEdit(l)} style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', background: '#fdf4ff', color: '#a21caf', border: '1px solid #f5d0fe', borderRadius: 4, cursor: 'pointer' }}>Dupatta</button>}
-                      {l.suitComponent === 'main' && l.suitType === '3-piece' && <button type="button" onClick={() => openEdit(l)} style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe', borderRadius: 4, cursor: 'pointer' }}>Main Lot</button>}
+                      {l.suitComponent === 'dupatta' && <button type="button" onClick={() => openEdit(l)} style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', background: 'var(--primary-bg, #fdf4ff)', color: 'var(--primary, #a21caf)', border: '1px solid var(--border, #f5d0fe)', borderRadius: 4, cursor: 'pointer' }}>Dupatta</button>}
+                      {l.suitComponent === 'main' && l.suitType === '3-piece' && <button type="button" onClick={() => openEdit(l)} style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', background: 'var(--primary-bg, #eff6ff)', color: 'var(--primary, #1d4ed8)', border: '1px solid var(--border, #bfdbfe)', borderRadius: 4, cursor: 'pointer' }}>Main Lot</button>}
                       {l.linkedLotId && (
-                        <button type="button" onClick={() => openLinkedLot(l.linkedLotId)} style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', background: '#f8fafc', color: '#334155', border: '1px solid #cbd5e1', borderRadius: 4, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <button type="button" onClick={() => openLinkedLot(l.linkedLotId)} style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', background: 'var(--primary-bg, #f8fafc)', color: 'var(--text-secondary, #334155)', border: '1px solid var(--border, #cbd5e1)', borderRadius: 4, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
                           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
                           {l.suitComponent === 'main' ? 'View Dupatta' : 'View Main'}
                         </button>
@@ -2786,7 +2786,7 @@ export default function GhausiaCollection() {
                     {lotTableTab === 'completed' ? (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                         <span className="badge-completed" style={{ display: 'block', textAlign: 'center', fontSize: 13, padding: '4px 0', borderRadius: 20 }}>Done</span>
-                        <div style={{ fontSize: 11, color: '#166534', textAlign: 'center', fontWeight: 600 }}>
+                        <div style={{ fontSize: 11, color: 'var(--success, #166534)', textAlign: 'center', fontWeight: 600 }}>
                           Completed Date: {formatDisplayDate(l.completionApprovedAt || l.allotDate)}
                         </div>
                       </div>
@@ -2854,26 +2854,26 @@ export default function GhausiaCollection() {
                 <div className="gh-mob-header">
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
-                      <span className="gh-mob-lot-no">Lot {l.lotNumber ? `#${l.lotNumber}` : <span style={{ fontStyle: 'italic', fontWeight: 500, color: '#94a3b8' }}>(No Lot)</span>}</span>
+                      <span className="gh-mob-lot-no">Lot {l.lotNumber ? `#${l.lotNumber}` : <span style={{ fontStyle: 'italic', fontWeight: 500, color: 'var(--text-muted, #94a3b8)' }}>(No Lot)</span>}</span>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
-                        {l.suitComponent === 'dupatta' && <button type="button" onClick={() => openEdit(l)} style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', background: '#fdf4ff', color: '#a21caf', border: '1px solid #f5d0fe', borderRadius: 4, cursor: 'pointer' }}>Dupatta</button>}
-                        {l.suitComponent === 'main' && l.suitType === '3-piece' && <button type="button" onClick={() => openEdit(l)} style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe', borderRadius: 4, cursor: 'pointer' }}>Main Lot</button>}
-                        {l.isRework && <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', background: '#fffbeb', color: '#b45309', border: '1px solid #fde68a', borderRadius: 4 }}>Rework</span>}
+                        {l.suitComponent === 'dupatta' && <button type="button" onClick={() => openEdit(l)} style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', background: 'var(--primary-bg, #fdf4ff)', color: 'var(--primary, #a21caf)', border: '1px solid var(--border, #f5d0fe)', borderRadius: 4, cursor: 'pointer' }}>Dupatta</button>}
+                        {l.suitComponent === 'main' && l.suitType === '3-piece' && <button type="button" onClick={() => openEdit(l)} style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', background: 'var(--primary-bg, #eff6ff)', color: 'var(--primary, #1d4ed8)', border: '1px solid var(--border, #bfdbfe)', borderRadius: 4, cursor: 'pointer' }}>Main Lot</button>}
+                        {l.isRework && <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', background: 'var(--primary-bg, #fffbeb)', color: 'var(--primary, #b45309)', border: '1px solid var(--border, #fde68a)', borderRadius: 4 }}>Rework</span>}
                         {l.linkedLotId && (
-                          <button type="button" onClick={() => openLinkedLot(l.linkedLotId)} style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', background: '#f8fafc', color: '#334155', border: '1px solid #cbd5e1', borderRadius: 4, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <button type="button" onClick={() => openLinkedLot(l.linkedLotId)} style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', background: 'var(--primary-bg, #f8fafc)', color: 'var(--text-secondary, #334155)', border: '1px solid var(--border, #cbd5e1)', borderRadius: 4, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
                             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
                             {l.suitComponent === 'main' ? 'View Dupatta' : 'View Main'}
                           </button>
                         )}
                       </div>
                     </div>
-                    {l.designNo ? <span style={{ fontSize: 13, fontWeight: 600, color: '#475569' }}>Design #{l.designNo}</span> : null}
+                    {l.designNo ? <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary, #475569)' }}>Design #{l.designNo}</span> : null}
                   </div>
                   <div>
                     {lotTableTab === 'completed' ? (
                       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
                         <span className="badge-completed">Completed</span>
-                        <div style={{ fontSize: 11, color: '#166534', fontWeight: 600 }}>
+                        <div style={{ fontSize: 11, color: 'var(--success, #166534)', fontWeight: 600 }}>
                           Completed Date: {formatDisplayDate(l.completionApprovedAt || l.allotDate)}
                         </div>
                       </div>
@@ -2911,8 +2911,8 @@ export default function GhausiaCollection() {
                   </div>
 
                   <div className="gh-mob-bill-row">
-                    <span style={{ fontSize: 13, color: '#64748b' }}>Bill Amount:</span>
-                    <strong style={{ fontSize: 15, color: '#1e40af' }}>
+                    <span style={{ fontSize: 13, color: 'var(--text-muted, #64748b)' }}>Bill Amount:</span>
+                    <strong style={{ fontSize: 15, color: 'var(--primary, #1e40af)' }}>
                       ₨{getOwnerBillableAmount(l).toLocaleString()}
                     </strong>
                   </div>
@@ -3059,7 +3059,7 @@ export default function GhausiaCollection() {
                   )}
                   {amountForOwnerCheck > 0 && ownerReceivedNet < amountForOwnerCheck && (
                     <span
-                      style={{ display: 'block', marginTop: 10, color: '#b45309', fontWeight: 600 }}
+                      style={{ display: 'block', marginTop: 10, color: 'var(--warning, #b45309)', fontWeight: 600 }}
                     >
                       Owner Received (after other settlements) is less than this bill — after
                       completion, Owner Received will show as <strong>Pending to owner</strong>{' '}
@@ -3125,7 +3125,7 @@ export default function GhausiaCollection() {
                   autoFocus
                 />
                 {completeBillError && (
-                  <span style={{ color: '#dc2626', fontSize: 11, marginTop: 3, display: 'block' }}>
+                  <span style={{ color: 'var(--danger, #dc2626)', fontSize: 11, marginTop: 3, display: 'block' }}>
                     {completeBillError}
                   </span>
                 )}
@@ -3209,7 +3209,7 @@ export default function GhausiaCollection() {
                 placeholder="50000"
               />
               {payErrors.amount && (
-                <span style={{ color: '#dc2626', fontSize: 11, marginTop: 3, display: 'block' }}>
+                <span style={{ color: 'var(--danger, #dc2626)', fontSize: 11, marginTop: 3, display: 'block' }}>
                   {payErrors.amount}
                 </span>
               )}
@@ -3248,7 +3248,7 @@ export default function GhausiaCollection() {
                   </select>
                   {payErrors.party && (
                     <span
-                      style={{ color: '#dc2626', fontSize: 11, marginTop: 3, display: 'block' }}
+                      style={{ color: 'var(--danger, #dc2626)', fontSize: 11, marginTop: 3, display: 'block' }}
                     >
                       {payErrors.party}
                     </span>
@@ -3267,7 +3267,7 @@ export default function GhausiaCollection() {
                 }}
               />
               {payErrors.date && (
-                <span style={{ color: '#dc2626', fontSize: 11, marginTop: 3, display: 'block' }}>
+                <span style={{ color: 'var(--danger, #dc2626)', fontSize: 11, marginTop: 3, display: 'block' }}>
                   {payErrors.date}
                 </span>
               )}

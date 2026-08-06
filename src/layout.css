@@ -9,7 +9,7 @@
   width: 230px;
   min-height: 100vh;
   min-height: 100dvh;
-  background: #1e1e2e;
+  background: var(--sidebar-bg, #1e1e2e);
   display: flex;
   flex-direction: column;
   position: fixed;
@@ -33,7 +33,7 @@
 .app-sidebar-close button {
   background: none;
   border: none;
-  color: #94a3b8;
+  color: var(--sidebar-text, #94a3b8);
   font-size: 22px;
   cursor: pointer;
   padding: 4px 8px;
@@ -61,8 +61,8 @@
   top: max(12px, env(safe-area-inset-top, 0px));
   left: max(12px, env(safe-area-inset-left, 0px));
   z-index: 300;
-  background: #fff;
-  border: 1px solid #e5e7eb;
+  background: var(--card-bg, #fff);
+  border: 1px solid var(--border, #e5e7eb);
   border-radius: 12px;
   padding: 0;
   cursor: pointer;
@@ -71,7 +71,7 @@
   justify-content: center;
   width: 44px;
   height: 44px;
-  color: #0f172a;
+  color: var(--text-primary, #0f172a);
   transition:
     transform 0.15s ease,
     box-shadow 0.15s ease;
@@ -86,12 +86,12 @@
   margin-left: 230px;
   min-height: 100vh;
   min-height: 100dvh;
-  background: #f0f2f5;
+  background: var(--body-bg, #f0f2f5);
   padding: 28px 28px 40px;
   width: 100%;
   max-width: 100%;
   overflow-x: hidden;
-  transition: padding 0.2s ease;
+  transition: padding 0.2s ease, background 0.3s ease;
 }
 
 .app-main-inner {
@@ -103,8 +103,9 @@
 .pk-standalone-shell {
   min-height: 100vh;
   min-height: 100dvh;
-  background: #f0f2f5;
+  background: var(--body-bg, #f0f2f5);
   padding: max(12px, env(safe-area-inset-top)) 12px 24px;
+  transition: background 0.3s ease;
 }
 
 @media (min-width: 1024px) {
@@ -116,7 +117,7 @@
 
 /* Personal Khata inside main app (admin / party logged-in) */
 .app-main.app-main--khata {
-  background: #f0f2f5;
+  background: var(--body-bg, #f0f2f5);
 }
 
 .app-main.app-main--khata .app-main-inner {
@@ -154,11 +155,14 @@
 
   .app-menu-btn {
     display: flex;
+    position: fixed;
+    top: max(12px, env(safe-area-inset-top, 12px));
+    left: max(16px, env(safe-area-inset-left, 16px));
   }
 
   .app-main {
     margin-left: 0;
-    padding: 68px 14px calc(24px + env(safe-area-inset-bottom, 0px));
+    padding: calc(68px + env(safe-area-inset-top, 0px)) 14px calc(24px + env(safe-area-inset-bottom, 0px));
   }
 
   .app-main.app-main--khata {
@@ -170,7 +174,7 @@
 
 @media (max-width: 480px) {
   .app-main {
-    padding: 64px 10px calc(20px + env(safe-area-inset-bottom, 0px));
+    padding: calc(64px + env(safe-area-inset-top, 0px)) 10px calc(20px + env(safe-area-inset-bottom, 0px));
   }
 
   .app-menu-btn {

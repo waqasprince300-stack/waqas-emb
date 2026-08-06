@@ -156,7 +156,7 @@ export default function BusinessOwnerSwitcher({ compact = false }) {
               fontWeight: 600,
               borderRadius: 10,
               border: '1px solid var(--border)',
-              background: '#f8fafc',
+              background: 'var(--primary-bg, #f8fafc)',
             }}
             value={compactSelectValue}
             onChange={(event) => {
@@ -180,7 +180,7 @@ export default function BusinessOwnerSwitcher({ compact = false }) {
             onClick={() => setModalOpen(true)}
             style={{
               border: '1px solid var(--border)',
-              background: '#fff',
+              background: 'var(--card-bg, #fff)',
               fontWeight: 600,
               whiteSpace: 'nowrap',
             }}
@@ -209,7 +209,7 @@ export default function BusinessOwnerSwitcher({ compact = false }) {
       ) : (
         <div
           style={{
-            background: '#fff',
+            background: 'var(--card-bg, #fff)',
             border: '1px solid var(--border)',
             borderRadius: 12,
             boxShadow: 'var(--shadow)',

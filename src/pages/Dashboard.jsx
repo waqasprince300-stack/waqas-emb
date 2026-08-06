@@ -139,31 +139,31 @@ export default function Dashboard() {
       {
         label: 'My lots',
         value: scopedLots.length,
-        color: '#1e40af',
+        color: 'var(--primary, #1e40af)',
         sub: 'In selected period',
       },
       {
         label: 'Active work',
         value: partyInProgressRough,
-        color: '#0284c7',
+        color: 'var(--primary-light, #0284c7)',
         sub: 'Not received yet + with you + in progress',
       },
       {
         label: 'Needs your action',
         value: partyNeedsAttention,
-        color: '#ca8a04',
+        color: 'var(--warning, #ca8a04)',
         sub: 'Submitted for review + needs rework',
       },
       {
         label: 'Finished & delivered',
         value: partyApprovedDone,
-        color: '#15803d',
+        color: 'var(--success, #15803d)',
         sub: 'Delivered to business + completed',
       },
       {
         label: 'Paid to you',
         display: hideAmounts ? '****' : `₨${paidTotal.toLocaleString()}`,
-        color: '#166534',
+        color: 'var(--success, #166534)',
         sub: 'Payments from the business',
       },
     ];
@@ -423,12 +423,12 @@ export default function Dashboard() {
 
 
   // Donut chart colors
-  const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#64748b'];
+  const COLORS = ['var(--primary-light, #3b82f6)', 'var(--success, #10b981)', 'var(--warning, #f59e0b)', 'var(--danger, #ef4444)', 'var(--purple, #8b5cf6)', 'var(--text-muted, #64748b)'];
 
   const activePartyStat = {
     label: 'Active Parties',
     value: partyStats.length,
-    color: '#7c3aed',
+    color: 'var(--purple, #7c3aed)',
     sub: 'With assigned lots',
   };
 
@@ -441,20 +441,20 @@ export default function Dashboard() {
   };
 
   const finCards = [
-    { label: 'Total Lot Value', value: totalLotValue, color: '#1e40af' },
+    { label: 'Total Lot Value', value: totalLotValue, color: 'var(--primary, #1e40af)' },
     {
       label: 'Billable to Owner',
       value: billableTotal,
-      color: '#0369a1',
+      color: 'var(--primary-light, #0369a1)',
       note: `${billable.length} lot${billable.length === 1 ? '' : 's'} — ready to invoice`,
     },
-    { label: 'Completed Revenue', value: completedTotal, color: '#15803d' },
-    { label: 'Received from Owner', value: ownerIn, color: '#0284c7' },
-    { label: 'Paid to Parties', value: paidToNonOwnerParties, color: '#7c3aed' },
+    { label: 'Completed Revenue', value: completedTotal, color: 'var(--success, #15803d)' },
+    { label: 'Received from Owner', value: ownerIn, color: 'var(--primary-light, #0284c7)' },
+    { label: 'Paid to Parties', value: paidToNonOwnerParties, color: 'var(--purple, #7c3aed)' },
     {
       label: 'Net (owner vs parties)',
       value: netOwnerVsParties,
-      color: netOwnerVsParties >= 0 ? '#15803d' : '#dc2626',
+      color: netOwnerVsParties >= 0 ? 'var(--success, #15803d)' : 'var(--danger, #dc2626)',
       tooltip:
         netOwnerVsParties >= 0
           ? 'Received more than paid to parties'
@@ -545,52 +545,52 @@ export default function Dashboard() {
                 gap: 12,
               }}
             >
-              <div className="stat-card-modern" style={{ '--card-accent': '#8b5cf6' }}>
+              <div className="stat-card-modern" style={{ '--card-accent': 'var(--purple, #8b5cf6)' }}>
                 <div className="stat-label" style={{ textTransform: 'uppercase' }}>Total Lots</div>
-                <div className="stat-value" style={{ color: '#8b5cf6' }}>{scopedLots.length}</div>
+                <div className="stat-value" style={{ color: 'var(--purple, #8b5cf6)' }}>{scopedLots.length}</div>
                 <div className="stat-sub">All assigned lots</div>
               </div>
-              <div className="stat-card-modern" style={{ '--card-accent': '#f59e0b' }}>
+              <div className="stat-card-modern" style={{ '--card-accent': 'var(--warning, #f59e0b)' }}>
                 <div className="stat-label" style={{ textTransform: 'uppercase' }}>Pending</div>
-                <div className="stat-value" style={{ color: '#f59e0b' }}>{pendingCount}</div>
+                <div className="stat-value" style={{ color: 'var(--warning, #f59e0b)' }}>{pendingCount}</div>
                 <div className="stat-sub">Awaiting dispatch</div>
               </div>
-              <div className="stat-card-modern" style={{ '--card-accent': '#0ea5e9' }}>
+              <div className="stat-card-modern" style={{ '--card-accent': 'var(--primary-light, #0ea5e9)' }}>
                 <div className="stat-label" style={{ textTransform: 'uppercase' }}>Dispatched</div>
-                <div className="stat-value" style={{ color: '#0ea5e9' }}>{dispatchedCount}</div>
+                <div className="stat-value" style={{ color: 'var(--primary-light, #0ea5e9)' }}>{dispatchedCount}</div>
                 <div className="stat-sub">Currently with party</div>
               </div>
-              <div className="stat-card-modern" style={{ '--card-accent': '#eab308' }}>
+              <div className="stat-card-modern" style={{ '--card-accent': 'var(--warning, #eab308)' }}>
                 <div className="stat-label" style={{ textTransform: 'uppercase' }}>Awaiting Approval</div>
-                <div className="stat-value" style={{ color: '#eab308' }}>{pendingApprovalCount}</div>
+                <div className="stat-value" style={{ color: 'var(--warning, #eab308)' }}>{pendingApprovalCount}</div>
                 <div className="stat-sub">Party submitted completion</div>
               </div>
-              <div className="stat-card-modern" style={{ '--card-accent': '#ef4444' }}>
+              <div className="stat-card-modern" style={{ '--card-accent': 'var(--danger, #ef4444)' }}>
                 <div className="stat-label" style={{ textTransform: 'uppercase' }}>Rejected</div>
-                <div className="stat-value" style={{ color: '#ef4444' }}>{rejectedCount}</div>
+                <div className="stat-value" style={{ color: 'var(--danger, #ef4444)' }}>{rejectedCount}</div>
                 <div className="stat-sub">Needs rework</div>
               </div>
-              <div className="stat-card-modern" style={{ '--card-accent': '#14b8a6' }}>
+              <div className="stat-card-modern" style={{ '--card-accent': 'var(--success, #14b8a6)' }}>
                 <div className="stat-label" style={{ textTransform: 'uppercase' }}>Received Back</div>
-                <div className="stat-value" style={{ color: '#14b8a6' }}>{receivedBackCount}</div>
+                <div className="stat-value" style={{ color: 'var(--success, #14b8a6)' }}>{receivedBackCount}</div>
                 <div className="stat-sub">Ready to bill owner</div>
               </div>
-              <div className="stat-card-modern" style={{ '--card-accent': '#22c55e' }}>
+              <div className="stat-card-modern" style={{ '--card-accent': 'var(--success, #22c55e)' }}>
                 <div className="stat-label" style={{ textTransform: 'uppercase' }}>Completed</div>
-                <div className="stat-value" style={{ color: '#22c55e' }}>{completedCount}</div>
+                <div className="stat-value" style={{ color: 'var(--success, #22c55e)' }}>{completedCount}</div>
                 <div className="stat-sub">Fully done</div>
               </div>
-              <div className="stat-card-modern" style={{ '--card-accent': '#ec4899' }}>
+              <div className="stat-card-modern" style={{ '--card-accent': 'var(--danger, #ec4899)' }}>
                 <div className="stat-label" style={{ textTransform: 'uppercase' }}>Average TAT</div>
-                <div className="stat-value" style={{ color: '#ec4899' }}>{avgTatDisplay}</div>
+                <div className="stat-value" style={{ color: 'var(--danger, #ec4899)' }}>{avgTatDisplay}</div>
                 <div className="stat-sub">Pending to Complete</div>
               </div>
-              <div className="stat-card-modern" style={{ '--card-accent': '#0ea5e9' }}>
+              <div className="stat-card-modern" style={{ '--card-accent': 'var(--primary-light, #0ea5e9)' }}>
                 <div className="stat-label" style={{ textTransform: 'uppercase' }}>WIP Value</div>
                 <div
                   className="stat-value"
                   style={{
-                    color: '#0ea5e9',
+                    color: 'var(--primary-light, #0ea5e9)',
                     fontSize: hideAmounts ? 24 : (wipValue >= 1000000 ? 18 : 24),
                     wordBreak: 'break-word'
                   }}
@@ -626,11 +626,10 @@ export default function Dashboard() {
                     '--card-accent': c.color,
                     ...(c.highlight
                       ? {
-                        borderColor: netOwnerVsParties >= 0 ? '#86efac' : '#fecaca',
-                        background:
-                          netOwnerVsParties >= 0
-                            ? 'linear-gradient(145deg, #ffffff 0%, #f0fdf4 100%)'
-                            : 'linear-gradient(145deg, #ffffff 0%, #fef2f2 100%)',
+                        borderColor: netOwnerVsParties >= 0 ? 'var(--success-bg, #86efac)' : 'var(--danger-bg, #fecaca)',
+                        background: netOwnerVsParties >= 0
+                            ? 'var(--card-bg, linear-gradient(145deg, var(--card-bg, #ffffff) 0%, var(--success-bg, #f0fdf4) 100%))'
+                            : 'var(--card-bg, linear-gradient(145deg, var(--card-bg, #ffffff) 0%, var(--danger-bg, #fef2f2) 100%))',
                       }
                       : {}),
                   }}
@@ -643,7 +642,7 @@ export default function Dashboard() {
                           title={c.tooltip}
                           style={{
                             display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                            width: 16, height: 16, borderRadius: '50%', background: '#e2e8f0', color: '#64748b',
+                            width: 16, height: 16, borderRadius: '50%', background: 'var(--border, #e2e8f0)', color: 'var(--text-muted, #64748b)',
                             fontSize: 10, fontWeight: 'bold', cursor: 'help'
                           }}
                         >
@@ -681,7 +680,7 @@ export default function Dashboard() {
                           {topParties.map((p, idx) => (
                             <tr key={p.id}>
                               <td style={{ width: 40, textAlign: 'center' }}>
-                                <div style={{ width: 24, height: 24, borderRadius: '50%', background: idx === 0 ? '#fef08a' : idx === 1 ? '#e2e8f0' : '#fed7aa', color: idx === 0 ? '#a16207' : idx === 1 ? '#475569' : '#9a3412', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, margin: '0 auto' }}>
+                                <div style={{ width: 24, height: 24, borderRadius: '50%', background: idx === 0 ? 'var(--warning-bg, #fef08a)' : idx === 1 ? 'var(--border, #e2e8f0)' : 'var(--warning-bg, #fed7aa)', color: idx === 0 ? '#a16207' : idx === 1 ? 'var(--text-secondary, #475569)' : 'var(--warning, #9a3412)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, margin: '0 auto' }}>
                                   {idx + 1}
                                 </div>
                               </td>
@@ -690,7 +689,7 @@ export default function Dashboard() {
                                 <div style={{ fontSize: 13, fontWeight: 600 }}>{p.completed}</div>
                                 <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Completed</div>
                               </td>
-                              <td style={{ textAlign: 'right', fontWeight: 700, color: '#15803d' }}>
+                              <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--success, #15803d)' }}>
                                 {hideAmounts ? '****' : `₨${p.value.toLocaleString()}`}
                               </td>
                             </tr>
@@ -699,7 +698,7 @@ export default function Dashboard() {
                       </table>
                     </div>
                   ) : (
-                    <div style={{ padding: 24, textAlign: 'center', color: '#64748b', fontSize: 13 }}>No active parties found.</div>
+                    <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-muted, #64748b)', fontSize: 13 }}>No active parties found.</div>
                   )}
                 </div>
               </div>
@@ -739,7 +738,7 @@ export default function Dashboard() {
                       </div>
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px 16px', justifyContent: 'center', marginTop: 16 }}>
                         {fabricStats.map((f, idx) => (
-                          <div key={f.name} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: '#475569' }}>
+                          <div key={f.name} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: 'var(--text-secondary, #475569)' }}>
                             <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', background: COLORS[idx % COLORS.length] }}></span>
                             {f.name} ({f.count})
                           </div>
@@ -747,7 +746,7 @@ export default function Dashboard() {
                       </div>
                     </>
                   ) : (
-                    <div style={{ padding: 24, textAlign: 'center', color: '#64748b', fontSize: 13 }}>No fabric data available.</div>
+                    <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-muted, #64748b)', fontSize: 13 }}>No fabric data available.</div>
                   )}
                 </div>
               </div>
@@ -758,37 +757,37 @@ export default function Dashboard() {
             <div className="dash-grid-2 dash-desktop-only" style={{ marginBottom: 28 }}>
               {/* Revenue Trends Chart */}
               <div className="card" style={{ boxShadow: '0 4px 15px rgba(0,0,0,0.02)', border: '1px solid rgba(226,232,240,0.8)', borderRadius: 16 }}>
-                <div className="card-header" style={{ borderBottom: '1px solid #f1f5f9', padding: '20px 24px' }}>
+                <div className="card-header" style={{ borderBottom: '1px solid var(--primary-bg, #f1f5f9)', padding: '20px 24px' }}>
                   <span className="card-title" style={{ fontSize: 16, fontWeight: 700 }}>Revenue Trends (6 Months)</span>
                 </div>
                 <div className="card-body" style={{ padding: '24px', height: 350 }}>
                   {revenueTrendData.some(d => d.revenue > 0) ? (
                     <ResponsiveContainer width="100%" height="100%">
                       <LineChart data={revenueTrendData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                        <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} dy={10} />
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke='var(--border, #e2e8f0)' />
+                        <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: 'var(--text-muted, #64748b)', fontSize: 12 }} dy={10} />
                         <YAxis
                           axisLine={false}
                           tickLine={false}
-                          tick={{ fill: '#64748b', fontSize: 12 }}
+                          tick={{ fill: 'var(--text-muted, #64748b)', fontSize: 12 }}
                           tickFormatter={(value) => hideAmounts ? '***' : ((value / 1000).toFixed(0) + 'k')}
                         />
                         <RechartsTooltip
                           contentStyle={{ borderRadius: 8, border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
                           formatter={(value) => [hideAmounts ? '****' : ('₨ ' + value.toLocaleString()), 'Revenue']}
-                          labelStyle={{ color: '#0f172a', fontWeight: 600, marginBottom: 4 }}
+                          labelStyle={{ color: 'var(--text-primary, #0f172a)', fontWeight: 600, marginBottom: 4 }}
                         />
-                        <Line type="monotone" dataKey="revenue" stroke="#3b82f6" strokeWidth={4} dot={{ r: 4, fill: '#3b82f6', strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 6 }} />
+                        <Line type="monotone" dataKey="revenue" stroke='var(--primary-light, #3b82f6)' strokeWidth={4} dot={{ r: 4, fill: 'var(--primary-light, #3b82f6)', strokeWidth: 2, stroke: 'var(--card-bg, #fff)' }} activeDot={{ r: 6 }} />
                       </LineChart>
                     </ResponsiveContainer>
                   ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#64748b' }}>
-                      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#cbd5e1" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginBottom: 16 }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-muted, #64748b)' }}>
+                      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke='var(--border, #cbd5e1)' strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginBottom: 16 }}>
                         <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
                         <line x1="3" y1="9" x2="21" y2="9"></line>
                         <line x1="9" y1="21" x2="9" y2="9"></line>
                       </svg>
-                      <p style={{ margin: 0, fontWeight: 500, color: '#475569' }}>No revenue data yet</p>
+                      <p style={{ margin: 0, fontWeight: 500, color: 'var(--text-secondary, #475569)' }}>No revenue data yet</p>
                       <p style={{ margin: '4px 0 0', fontSize: 13 }}>Complete lots to see your trends over time.</p>
                     </div>
                   )}
@@ -796,24 +795,24 @@ export default function Dashboard() {
               </div>
 
               {/* Alerts & Notifications */}
-              <div className="card" style={{ boxShadow: '0 4px 15px rgba(0,0,0,0.02)', border: '1px solid rgba(226,232,240,0.8)', borderRadius: 16 }}>
-                <div className="card-header" style={{ borderBottom: '1px solid #f1f5f9', padding: '20px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div className="card" style={{ boxShadow: 'var(--shadow)', border: '1px solid var(--border)', borderRadius: 16 }}>
+                <div className="card-header" style={{ borderBottom: '1px solid var(--primary-bg, #f1f5f9)', padding: '20px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span className="card-title" style={{ fontSize: 16, fontWeight: 700 }}>Needs Attention</span>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#64748b' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-muted, #64748b)' }}>
                     Threshold:
                     <input
                       type="number"
                       value={alertDaysThreshold}
                       onChange={(e) => setAlertDaysThreshold(Number(e.target.value) || 7)}
-                      style={{ width: 40, padding: '2px 4px', border: '1px solid #cbd5e1', borderRadius: 4, textAlign: 'center' }}
+                      style={{ width: 40, padding: '2px 4px', border: '1px solid var(--border, #cbd5e1)', borderRadius: 4, textAlign: 'center', background: 'var(--primary-bg)', color: 'var(--text-primary)' }}
                       min="1"
                     /> days
                   </div>
                 </div>
                 <div className="card-body" style={{ padding: '24px' }}>
                   {alerts.length === 0 ? (
-                    <div style={{ textAlign: 'center', color: '#64748b', padding: '40px 0' }}>
-                      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginBottom: 12 }}><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                    <div style={{ textAlign: 'center', color: 'var(--text-muted, #64748b)', padding: '40px 0' }}>
+                      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted, #94a3b8)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginBottom: 12 }}><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
                       <p>All caught up! No active alerts.</p>
                     </div>
                   ) : (
@@ -827,9 +826,9 @@ export default function Dashboard() {
                         >
                           <div className="dash-alert-icon">
                             {alert.type === 'danger' ? (
-                              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke='var(--danger, #ef4444)' strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
                             ) : (
-                              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f97316" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+                              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--warning, #f97316)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
                             )}
                           </div>
                           <div className="dash-alert-content">
@@ -853,12 +852,12 @@ export default function Dashboard() {
               </div>
               <div className="card-body">
                 {[
-                  { label: 'Pending', count: byStatus('pending'), color: '#d97706' },
-                  { label: 'Dispatched', count: byStatus('dispatched'), color: '#0284c7' },
-                  { label: 'Pending Approval', count: byStatus('pending approval'), color: '#eab308' },
-                  { label: 'Rejected', count: byStatus('rejected'), color: '#ef4444' },
-                  { label: 'Received Back', count: byStatus('received back'), color: '#0d9488' },
-                  { label: 'Completed', count: byStatus('completed'), color: '#15803d' },
+                  { label: 'Pending', count: byStatus('pending'), color: 'var(--warning, #d97706)' },
+                  { label: 'Dispatched', count: byStatus('dispatched'), color: 'var(--primary-light, #0284c7)' },
+                  { label: 'Pending Approval', count: byStatus('pending approval'), color: 'var(--warning, #eab308)' },
+                  { label: 'Rejected', count: byStatus('rejected'), color: 'var(--danger, #ef4444)' },
+                  { label: 'Received Back', count: byStatus('received back'), color: 'var(--success, #0d9488)' },
+                  { label: 'Completed', count: byStatus('completed'), color: 'var(--success, #15803d)' },
                 ].filter((s) => s.count > 0).map((s) => (
                   <div
                     key={s.label}
@@ -877,7 +876,7 @@ export default function Dashboard() {
                     <div
                       style={{
                         flex: 1,
-                        background: '#F3F4F6',
+                        background: 'var(--primary-bg, #f3f4f6)',
                         borderRadius: 6,
                         height: 14,
                         overflow: 'hidden',
@@ -913,7 +912,7 @@ export default function Dashboard() {
             <div className="card dash-desktop-only">
               <div className="card-header">
                 <span className="card-title">Billable to Owner</span>
-                <span style={{ fontSize: 13, fontWeight: 700, color: '#0369a1' }}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--primary-light, #0369a1)' }}>
                   {hideAmounts ? '****' : `₨${billableTotal.toLocaleString()}`}
                 </span>
               </div>
@@ -952,7 +951,7 @@ export default function Dashboard() {
                             <td style={{ color: 'var(--text-secondary)', fontSize: 12 }}>
                               {workspaceDisplayTitleForLot(l, businessOwners)}
                             </td>
-                            <td style={{ textAlign: 'right', fontWeight: 600, color: '#0369a1' }}>
+                            <td style={{ textAlign: 'right', fontWeight: 600, color: 'var(--primary-light, #0369a1)' }}>
                               {hideAmounts ? '****' : `₨${Number(l.billAmount).toLocaleString()}`}
                             </td>
                           </tr>
@@ -976,7 +975,7 @@ export default function Dashboard() {
                         {topParties.map((p, idx) => (
                           <tr key={p.id}>
                             <td style={{ width: 40, textAlign: 'center' }}>
-                              <div style={{ width: 24, height: 24, borderRadius: '50%', background: idx === 0 ? '#fef08a' : idx === 1 ? '#e2e8f0' : '#fed7aa', color: idx === 0 ? '#a16207' : idx === 1 ? '#475569' : '#9a3412', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, margin: '0 auto' }}>
+                              <div style={{ width: 24, height: 24, borderRadius: '50%', background: idx === 0 ? 'var(--warning-bg, #fef08a)' : idx === 1 ? 'var(--border, #e2e8f0)' : 'var(--warning-bg, #fed7aa)', color: idx === 0 ? '#a16207' : idx === 1 ? 'var(--text-secondary, #475569)' : 'var(--warning, #9a3412)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, margin: '0 auto' }}>
                                 {idx + 1}
                               </div>
                             </td>
@@ -985,7 +984,7 @@ export default function Dashboard() {
                               <div style={{ fontSize: 13, fontWeight: 600 }}>{p.completed}</div>
                               <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Completed</div>
                             </td>
-                            <td style={{ textAlign: 'right', fontWeight: 700, color: '#15803d' }}>
+                            <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--success, #15803d)' }}>
                               {hideAmounts ? '****' : `₨${p.value.toLocaleString()}`}
                             </td>
                           </tr>
@@ -994,7 +993,7 @@ export default function Dashboard() {
                     </table>
                   </div>
                 ) : (
-                  <div style={{ padding: 24, textAlign: 'center', color: '#64748b', fontSize: 13 }}>No active parties found.</div>
+                  <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-muted, #64748b)', fontSize: 13 }}>No active parties found.</div>
                 )}
               </div>
             </div>
@@ -1157,7 +1156,7 @@ export default function Dashboard() {
                               </span>
                             </td>
                             <td>{adminPaymentPartyLabel(p, businessOwners)}</td>
-                            <td style={{ fontSize: 13, color: '#475569', fontWeight: 600 }}>
+                            <td style={{ fontSize: 13, color: 'var(--text-secondary, #475569)', fontWeight: 600 }}>
                               {linkedStr || '—'}
                             </td>
                             <td style={{ color: 'var(--text-secondary)', fontSize: 13 }}>
@@ -1167,7 +1166,7 @@ export default function Dashboard() {
                               style={{
                                 textAlign: 'right',
                                 fontWeight: 700,
-                                color: p.type === 'Received' ? '#15803d' : '#dc2626',
+                                color: p.type === 'Received' ? 'var(--success, #15803d)' : 'var(--danger, #dc2626)',
                                 whiteSpace: 'nowrap',
                               }}
                             >

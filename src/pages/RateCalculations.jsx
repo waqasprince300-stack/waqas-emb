@@ -250,9 +250,9 @@ export default function StitchCalculator() {
 
       showCancelButton: true,
 
-      confirmButtonColor: '#dc2626',
+      confirmButtonColor: 'var(--danger, #dc2626)',
 
-      cancelButtonColor: '#6b7280',
+      cancelButtonColor: 'var(--text-muted, #6b7280)',
 
       confirmButtonText: 'Yes, delete it',
     });
@@ -398,7 +398,7 @@ export default function StitchCalculator() {
 
               <div className="calc-cell horizontal">
                 <span className="mob-calc-label">Total</span>
-                <div className="total" style={{ color: '#0f172a' }}>{format(total)}</div>
+                <div className="total" style={{ color: 'var(--text-primary, #0f172a)' }}>{format(total)}</div>
               </div>
 
               {rows.length > 1 && (
@@ -533,7 +533,7 @@ export default function StitchCalculator() {
           <div className="calc-summary-box">
             <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>Summary</div>
 
-            <div style={{ fontSize: 13, color: '#64748B' }}>
+            <div style={{ fontSize: 13, color: 'var(--text-muted, #64748b)' }}>
               <div>
                 {rows.length} stitch row{rows.length !== 1 ? 's' : ''} · {format(grandTotal)}{' '}
                 stitches
@@ -581,7 +581,7 @@ export default function StitchCalculator() {
               <Loader />
             </div>
           ) : filteredDesigns.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '40px', color: '#64748B' }}>
+            <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted, #64748b)' }}>
               {savedDesigns.length === 0 ? 'No saved designs yet' : 'No match'}
             </div>
           ) : (

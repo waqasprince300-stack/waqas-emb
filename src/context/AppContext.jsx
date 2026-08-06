@@ -620,7 +620,11 @@ export function AppProvider({ children }) {
         action === 'bill_revision_request' ||
         action === 'bill_revision_approved' ||
         action === 'bill_revision_rejected' ||
-        action === 'payment_recorded'
+        action === 'payment_recorded' ||
+        action === 'lot_assigned' ||
+        action === 'lot_approved' ||
+        action === 'payment_updated' ||
+        action === 'payment_deleted'
       ) {
         setPendingLotNotice({
           action,

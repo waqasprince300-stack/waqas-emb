@@ -74,7 +74,7 @@ function initials(name) {
   return (p[0][0] + p[1][0]).toUpperCase();
 }
 
-const AVATAR_COLORS = ['#0d9488', '#6366f1', '#0891b2', '#7c3aed', '#ea580c', '#db2777'];
+const AVATAR_COLORS = ['var(--success, #0d9488)', 'var(--purple, #6366f1)', '#0891b2', 'var(--purple, #7c3aed)', '#ea580c', '#db2777'];
 
 function avatarColor(name) {
   const s = String(name || '');
@@ -128,7 +128,7 @@ async function compressImageDataUrl(dataUrl, maxBytes = PK_IMAGE_TARGET_BYTES) {
     canvas.width = tw;
     canvas.height = th;
     const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#ffffff';
+    ctx.fillStyle = 'var(--card-bg, #ffffff)';
     ctx.fillRect(0, 0, tw, th);
     ctx.drawImage(img, 0, 0, tw, th);
     return canvas.toDataURL(mime, q);
@@ -750,7 +750,7 @@ export default function PersonalKhata({ standalone = false } = {}) {
       html: `<p style="margin:0;font-size:14px;line-height:1.5">This removes <strong>${bizContacts.length}</strong> contact${bizContacts.length === 1 ? '' : 's'} and <strong>${entryCount}</strong> entr${entryCount === 1 ? 'y' : 'ies'} in this business.</p>`,
       showCancelButton: true,
       confirmButtonText: 'Delete business',
-      confirmButtonColor: '#dc2626',
+      confirmButtonColor: 'var(--danger, #dc2626)',
       cancelButtonText: 'Cancel',
     });
     if (!ok.isConfirmed) return;
@@ -859,7 +859,7 @@ export default function PersonalKhata({ standalone = false } = {}) {
           width: '100%',
           maxWidth: 920,
           height: 'min(92vh, 900px)',
-          background: '#fff',
+          background: 'var(--card-bg, #fff)',
           borderRadius: 16,
           overflow: 'hidden',
           display: 'flex',
@@ -877,8 +877,8 @@ export default function PersonalKhata({ standalone = false } = {}) {
             gap: 10,
             flexWrap: 'wrap',
             padding: '10px 14px',
-            background: '#1e293b',
-            color: '#fff',
+            background: 'var(--text-primary, #1e293b)',
+            color: 'var(--card-bg, #ffffff)',
           }}
         >
           <span style={{ fontWeight: 800, fontSize: 14 }}>{pdfPreviewTitle}</span>
@@ -889,7 +889,7 @@ export default function PersonalKhata({ standalone = false } = {}) {
               style={{
                 border: 'none',
                 background: 'rgba(255,255,255,0.18)',
-                color: '#fff',
+                color: 'var(--card-bg, #ffffff)',
                 borderRadius: 10,
                 padding: '8px 12px',
                 fontWeight: 700,
@@ -905,7 +905,7 @@ export default function PersonalKhata({ standalone = false } = {}) {
               style={{
                 border: 'none',
                 background: 'rgba(255,255,255,0.22)',
-                color: '#fff',
+                color: 'var(--card-bg, #ffffff)',
                 borderRadius: 10,
                 padding: '8px 14px',
                 fontWeight: 700,
@@ -931,7 +931,7 @@ export default function PersonalKhata({ standalone = false } = {}) {
   if (khataStorageScope && !khataHydrated) {
     return (
       <div className="pk-app">
-        <p style={{ textAlign: 'center', padding: 48, color: '#64748b', fontWeight: 600 }}>
+        <p style={{ textAlign: 'center', padding: 48, color: 'var(--text-muted, #64748b)', fontWeight: 600 }}>
           Loading your ledger…
         </p>
       </div>
@@ -991,7 +991,7 @@ export default function PersonalKhata({ standalone = false } = {}) {
                     borderRadius: 12,
                     padding: 10,
                     cursor: 'pointer',
-                    color: '#fff',
+                    color: 'var(--card-bg, #ffffff)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -1012,7 +1012,7 @@ export default function PersonalKhata({ standalone = false } = {}) {
                     borderRadius: 12,
                     padding: 10,
                     cursor: 'pointer',
-                    color: '#fff',
+                    color: 'var(--card-bg, #ffffff)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -1038,7 +1038,7 @@ export default function PersonalKhata({ standalone = false } = {}) {
                     borderRadius: 12,
                     padding: 10,
                     cursor: 'pointer',
-                    color: '#fff',
+                    color: 'var(--card-bg, #ffffff)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -1075,7 +1075,7 @@ export default function PersonalKhata({ standalone = false } = {}) {
                   {net > 0 ? 'They owe you' : net < 0 ? 'You owe them' : 'Settled up'}
                 </div>
               </div>
-              <div style={{ color: net >= 0 ? '#dc2626' : '#059669' }}>
+              <div style={{ color: net >= 0 ? 'var(--danger, #dc2626)' : 'var(--success, #059669)' }}>
                 {net >= 0 ? <ArrowDownLeft size={28} /> : <ArrowUpRight size={28} />}
               </div>
             </div>
@@ -1088,7 +1088,7 @@ export default function PersonalKhata({ standalone = false } = {}) {
               <span className="pk-tx-head-in">Received in</span>
             </div>
             {chronological.length === 0 ? (
-              <div style={{ padding: 40, textAlign: 'center', color: '#94a3b8', fontWeight: 600 }}>
+              <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted, #94a3b8)', fontWeight: 600 }}>
                 No entries yet — add below
               </div>
             ) : (
@@ -1110,9 +1110,9 @@ export default function PersonalKhata({ standalone = false } = {}) {
                             gap: 5,
                             padding: '5px 10px',
                             borderRadius: 8,
-                            border: '1px solid #c7d2fe',
-                            background: '#eef2ff',
-                            color: '#3730a3',
+                            border: '1px solid var(--border, #c7d2fe)',
+                            background: 'var(--primary-bg, #eef2ff)',
+                            color: 'var(--primary, #3730a3)',
                             fontWeight: 700,
                             fontSize: 11,
                             cursor: 'pointer',
@@ -1128,8 +1128,8 @@ export default function PersonalKhata({ standalone = false } = {}) {
                         style={{
                           marginLeft: 'auto',
                           border: 'none',
-                          background: '#f8fafc',
-                          color: '#94a3b8',
+                          background: 'var(--primary-bg, #f8fafc)',
+                          color: 'var(--text-muted, #94a3b8)',
                           cursor: 'pointer',
                           padding: 6,
                           borderRadius: 8,
@@ -1231,7 +1231,7 @@ export default function PersonalKhata({ standalone = false } = {}) {
                   borderRadius: 999,
                   border: 'none',
                   background: 'rgba(255,255,255,0.95)',
-                  color: '#0f172a',
+                  color: 'var(--text-primary, #0f172a)',
                   cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
@@ -1408,7 +1408,7 @@ export default function PersonalKhata({ standalone = false } = {}) {
                 saveContact();
               }}
               style={{
-                background: '#fff',
+                background: 'var(--card-bg, #fff)',
                 borderRadius: 24,
                 padding: 22,
                 width: '100%',
@@ -1420,7 +1420,7 @@ export default function PersonalKhata({ standalone = false } = {}) {
               }}
             >
               <h2 style={{ margin: '0 0 6px', fontSize: 20, fontWeight: 900 }}>New contact</h2>
-              <p style={{ margin: '0 0 14px', color: '#64748b', fontSize: 13 }}>
+              <p style={{ margin: '0 0 14px', color: 'var(--text-muted, #64748b)', fontSize: 13 }}>
                 Name required — phone optional
               </p>
 
@@ -1458,7 +1458,7 @@ export default function PersonalKhata({ standalone = false } = {}) {
                   fontSize: 12,
                   fontWeight: 700,
                   marginBottom: 6,
-                  color: '#475569',
+                  color: 'var(--text-secondary, #475569)',
                 }}
               >
                 Name
@@ -1470,7 +1470,7 @@ export default function PersonalKhata({ standalone = false } = {}) {
                   marginBottom: 14,
                   padding: 12,
                   borderRadius: 12,
-                  border: '1px solid #e2e8f0',
+                  border: '1px solid var(--border, #e2e8f0)',
                 }}
                 value={formName}
                 onChange={(e) => setFormName(e.target.value)}
@@ -1484,7 +1484,7 @@ export default function PersonalKhata({ standalone = false } = {}) {
                   fontSize: 12,
                   fontWeight: 700,
                   marginBottom: 6,
-                  color: '#475569',
+                  color: 'var(--text-secondary, #475569)',
                 }}
               >
                 Phone
@@ -1496,7 +1496,7 @@ export default function PersonalKhata({ standalone = false } = {}) {
                   marginBottom: 20,
                   padding: 12,
                   borderRadius: 12,
-                  border: '1px solid #e2e8f0',
+                  border: '1px solid var(--border, #e2e8f0)',
                 }}
                 value={formPhone}
                 onChange={(e) => setFormPhone(e.target.value)}
@@ -1558,7 +1558,7 @@ export default function PersonalKhata({ standalone = false } = {}) {
                 saveNewBusiness();
               }}
               style={{
-                background: '#fff',
+                background: 'var(--card-bg, #fff)',
                 borderRadius: 24,
                 padding: 22,
                 width: '100%',
@@ -1570,7 +1570,7 @@ export default function PersonalKhata({ standalone = false } = {}) {
               }}
             >
               <h2 style={{ margin: '0 0 6px', fontSize: 20, fontWeight: 900 }}>New business</h2>
-              <p style={{ margin: '0 0 18px', color: '#64748b', fontSize: 13 }}>
+              <p style={{ margin: '0 0 18px', color: 'var(--text-muted, #64748b)', fontSize: 13 }}>
                 Name for a separate shop or unit — entries stay in this ledger.
               </p>
               <label
@@ -1579,7 +1579,7 @@ export default function PersonalKhata({ standalone = false } = {}) {
                   fontSize: 12,
                   fontWeight: 700,
                   marginBottom: 6,
-                  color: '#475569',
+                  color: 'var(--text-secondary, #475569)',
                 }}
               >
                 Name
@@ -1591,7 +1591,7 @@ export default function PersonalKhata({ standalone = false } = {}) {
                   marginBottom: 18,
                   padding: 12,
                   borderRadius: 12,
-                  border: '1px solid #e2e8f0',
+                  border: '1px solid var(--border, #e2e8f0)',
                 }}
                 value={formBizName}
                 onChange={(e) => setFormBizName(e.target.value)}
@@ -1679,7 +1679,7 @@ function EntryOverlay({
   onSave,
 }) {
   const title = type === 'given' ? 'Paid out — amount & note' : 'Received in — amount & note';
-  const accent = type === 'given' ? '#e11d48' : '#059669';
+  const accent = type === 'given' ? 'var(--danger, #e11d48)' : 'var(--success, #059669)';
 
   const handleImagePick = (e) => {
     const file = e.target.files?.[0];
@@ -1726,7 +1726,7 @@ function EntryOverlay({
           onSave();
         }}
         style={{
-          background: '#fff',
+          background: 'var(--card-bg, #fff)',
           borderRadius: 24,
           padding: 22,
           width: '100%',
@@ -1753,10 +1753,10 @@ function EntryOverlay({
           style={{ display: 'none' }}
           onChange={handleImagePick}
         />
-        <h2 style={{ margin: '0 0 4px', fontSize: 19, fontWeight: 900, color: '#0f172a' }}>
+        <h2 style={{ margin: '0 0 4px', fontSize: 19, fontWeight: 900, color: 'var(--text-primary, #0f172a)' }}>
           {title}
         </h2>
-        <p style={{ margin: '0 0 16px', fontSize: 12.5, color: '#64748b' }}>
+        <p style={{ margin: '0 0 16px', fontSize: 12.5, color: 'var(--text-muted, #64748b)' }}>
           In words, why this money was {type === 'given' ? 'paid out' : 'received'} — helps you
           remember later rahega.
         </p>
@@ -1766,7 +1766,7 @@ function EntryOverlay({
             display: 'block',
             fontSize: 11,
             fontWeight: 800,
-            color: '#475569',
+            color: 'var(--text-secondary, #475569)',
             marginBottom: 6,
           }}
         >
@@ -1779,7 +1779,7 @@ function EntryOverlay({
             marginBottom: 14,
             padding: 12,
             borderRadius: 12,
-            border: '1px solid #e2e8f0',
+            border: '1px solid var(--border, #e2e8f0)',
             fontSize: 14,
           }}
           value={formContactId}
@@ -1798,7 +1798,7 @@ function EntryOverlay({
             display: 'block',
             fontSize: 11,
             fontWeight: 800,
-            color: '#475569',
+            color: 'var(--text-secondary, #475569)',
             marginBottom: 6,
           }}
         >
@@ -1811,7 +1811,7 @@ function EntryOverlay({
             marginBottom: 14,
             padding: 12,
             borderRadius: 12,
-            border: '1px solid #e2e8f0',
+            border: '1px solid var(--border, #e2e8f0)',
             fontSize: 14,
           }}
           value={formCategory}
@@ -1830,7 +1830,7 @@ function EntryOverlay({
             display: 'block',
             fontSize: 11,
             fontWeight: 800,
-            color: '#475569',
+            color: 'var(--text-secondary, #475569)',
             marginBottom: 6,
           }}
         >
@@ -1845,7 +1845,7 @@ function EntryOverlay({
             marginBottom: 14,
             padding: 12,
             borderRadius: 12,
-            border: '1px solid #e2e8f0',
+            border: '1px solid var(--border, #e2e8f0)',
             fontSize: 18,
             fontWeight: 800,
           }}
@@ -1859,7 +1859,7 @@ function EntryOverlay({
             display: 'block',
             fontSize: 11,
             fontWeight: 800,
-            color: '#475569',
+            color: 'var(--text-secondary, #475569)',
             marginBottom: 6,
           }}
         >
@@ -1871,7 +1871,7 @@ function EntryOverlay({
             marginBottom: 18,
             padding: 12,
             borderRadius: 12,
-            border: '1px solid #e2e8f0',
+            border: '1px solid var(--border, #e2e8f0)',
             minHeight: 88,
             resize: 'vertical',
             fontSize: 14,
@@ -1887,7 +1887,7 @@ function EntryOverlay({
             display: 'block',
             fontSize: 11,
             fontWeight: 800,
-            color: '#475569',
+            color: 'var(--text-secondary, #475569)',
             marginBottom: 6,
           }}
         >
@@ -1905,9 +1905,9 @@ function EntryOverlay({
               gap: 8,
               padding: '10px 12px',
               borderRadius: 12,
-              border: '1px solid #bae6fd',
-              background: '#f0f9ff',
-              color: '#0369a1',
+              border: '1px solid var(--border, #bae6fd)',
+              background: 'var(--primary-bg, #f0f9ff)',
+              color: 'var(--primary-light, #0369a1)',
               fontWeight: 700,
               fontSize: 13,
               cursor: 'pointer',
@@ -1927,9 +1927,9 @@ function EntryOverlay({
               gap: 8,
               padding: '10px 12px',
               borderRadius: 12,
-              border: '1px solid #e9d5ff',
-              background: '#faf5ff',
-              color: '#6b21a8',
+              border: '1px solid var(--border, #e9d5ff)',
+              background: 'var(--purple-bg, #faf5ff)',
+              color: 'var(--purple, #6b21a8)',
               fontWeight: 700,
               fontSize: 13,
               cursor: 'pointer',
@@ -1946,7 +1946,7 @@ function EntryOverlay({
               marginBottom: 16,
               borderRadius: 14,
               overflow: 'hidden',
-              border: '1px solid #e2e8f0',
+              border: '1px solid var(--border, #e2e8f0)',
               alignSelf: 'stretch',
             }}
           >
@@ -1967,7 +1967,7 @@ function EntryOverlay({
                 borderRadius: 999,
                 border: 'none',
                 background: 'rgba(15,23,42,0.65)',
-                color: '#fff',
+                color: 'var(--card-bg, #ffffff)',
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
@@ -1979,7 +1979,7 @@ function EntryOverlay({
             </button>
           </div>
         ) : (
-          <p style={{ margin: '0 0 16px', fontSize: 11.5, color: '#94a3b8', lineHeight: 1.4 }}>
+          <p style={{ margin: '0 0 16px', fontSize: 11.5, color: 'var(--text-muted, #94a3b8)', lineHeight: 1.4 }}>
             Attach a bill image, e.g. JazzCash screenshot or paper receipt.
           </p>
         )}

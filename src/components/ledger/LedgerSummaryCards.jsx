@@ -40,13 +40,13 @@ export default function LedgerSummaryCards({
       {pendingRevisionCount > 0 && (
         <div
           className="pk-summary-card pending-revision-card"
-          style={{ cursor: 'pointer', borderColor: '#f59e0b', backgroundColor: '#fffbe finished' }}
+          style={{ cursor: 'pointer', borderColor: 'var(--warning, #f59e0b)', backgroundColor: 'var(--card-bg, #ffffff)be finished' }}
           onClick={onOpenPendingRevisions}
         >
-          <span className="pk-card-label" style={{ color: '#d97706', fontWeight: 600 }}>
+          <span className="pk-card-label" style={{ color: 'var(--warning, #d97706)', fontWeight: 600 }}>
             Pending Revisions
           </span>
-          <span className="pk-card-value" style={{ color: '#b45309' }}>
+          <span className="pk-card-value" style={{ color: 'var(--warning, #b45309)' }}>
             {pendingRevisionCount} {pendingRevisionCount === 1 ? 'Request' : 'Requests'}
           </span>
         </div>

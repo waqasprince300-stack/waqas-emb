@@ -51,12 +51,12 @@ const IOSSwitch = ({ checked, onChange }) => (
   <div
     onClick={() => onChange(!checked)}
     style={{
-      width: 44, height: 24, background: checked ? '#34C759' : '#e2e8f0', borderRadius: 999,
+      width: 44, height: 24, background: checked ? '#34C759' : 'var(--border, #e2e8f0)', borderRadius: 999,
       position: 'relative', transition: 'background 0.3s', flexShrink: 0, cursor: 'pointer'
     }}
   >
     <div style={{
-      width: 20, height: 20, background: '#fff', borderRadius: '50%',
+      width: 20, height: 20, background: 'var(--card-bg, #fff)', borderRadius: '50%',
       position: 'absolute', top: 2, left: checked ? 22 : 2, transition: 'left 0.3s',
       boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
     }} />
@@ -95,7 +95,7 @@ function PartyForm({ initial, onSave, onClose, saving }) {
         await onSave(form);
       }}
     >
-      <div style={{ background: '#fff', borderRadius: 12, border: '1px solid #e2e8f0', padding: 16, boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
+      <div style={{ background: 'var(--card-bg, #fff)', borderRadius: 12, border: '1px solid var(--border, #e2e8f0)', padding: 16, boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
         <FormGroup label="Party Name *">
           <input
             className="form-input"
@@ -103,7 +103,7 @@ function PartyForm({ initial, onSave, onClose, saving }) {
             onChange={(e) => set('name', e.target.value)}
             placeholder="e.g. Al-Hamra Textiles"
           />
-          {errors.name && <span style={{ color: '#dc2626', fontSize: 11 }}>{errors.name}</span>}
+          {errors.name && <span style={{ color: 'var(--danger, #dc2626)', fontSize: 11 }}>{errors.name}</span>}
         </FormGroup>
         <FormGroup label="Phone Number">
           <input
@@ -125,11 +125,11 @@ function PartyForm({ initial, onSave, onClose, saving }) {
         </FormGroup>
       </div>
       <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
-        <div style={{ marginTop: 24, background: '#fff', borderRadius: 12, border: '1px solid #e2e8f0', padding: '16px 16px 8px', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
+        <div style={{ marginTop: 24, background: 'var(--card-bg, #fff)', borderRadius: 12, border: '1px solid var(--border, #e2e8f0)', padding: '16px 16px 8px', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: form.showWorkspace ? 16 : 8 }}>
             <div>
-              <div style={{ fontSize: 14, fontWeight: 600, color: '#1e293b' }}>Global Workspace Visibility</div>
-              <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>Show workspace name to this party by default</div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary, #1e293b)' }}>Global Workspace Visibility</div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted, #64748b)', marginTop: 2 }}>Show workspace name to this party by default</div>
             </div>
             <IOSSwitch checked={form.showWorkspace} onChange={(c) => set('showWorkspace', c)} />
           </div>
@@ -137,12 +137,12 @@ function PartyForm({ initial, onSave, onClose, saving }) {
             <FormGroup label="Custom Global Alias (Optional)" style={{ marginBottom: 8 }}>
               <input
                 className="form-input"
-                style={{ background: '#f8fafc' }}
+                style={{ background: 'var(--primary-bg, #f8fafc)' }}
                 value={form.workspaceAlias}
                 onChange={(e) => set('workspaceAlias', e.target.value)}
                 placeholder="e.g. Ghausia Main Unit"
               />
-              <span style={{ fontSize: 11, color: '#94a3b8', display: 'block', marginTop: 6 }}>
+              <span style={{ fontSize: 11, color: 'var(--text-muted, #94a3b8)', display: 'block', marginTop: 6 }}>
                 Replaces the internal workspace name globally for this party user.
               </span>
             </FormGroup>
@@ -151,27 +151,27 @@ function PartyForm({ initial, onSave, onClose, saving }) {
 
         {businessOwners && businessOwners.length > 0 && (
           <div style={{ marginTop: 24 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', color: '#94a3b8', marginBottom: 12, paddingLeft: 4 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-muted, #94a3b8)', marginBottom: 12, paddingLeft: 4 }}>
               Per-Workspace Overrides
             </div>
             {form.workspaceOverrides?.map((ov, idx) => {
               const bo = businessOwners.find((b) => String(b.id || b._id) === String(ov.businessOwnerId));
               const boName = bo ? bo.name : `Workspace ${ov.businessOwnerId.slice(-6)}`;
               return (
-                <div key={ov.businessOwnerId} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: 16, marginBottom: 12, boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
+                <div key={ov.businessOwnerId} style={{ background: 'var(--card-bg, #fff)', border: '1px solid var(--border, #e2e8f0)', borderRadius: 12, padding: 16, marginBottom: 12, boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: ov.showWorkspace ? 16 : 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                       <span style={{ fontSize: 18 }}>🏢</span>
-                      <span style={{ fontWeight: 600, fontSize: 14, color: '#1e293b' }}>{boName}</span>
+                      <span style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary, #1e293b)' }}>{boName}</span>
                     </div>
                     <IOSSwitch checked={ov.showWorkspace} onChange={(c) => updateOverride(idx, 'showWorkspace', c)} />
                   </div>
                   {ov.showWorkspace && (
                     <div style={{ marginTop: 8 }}>
-                      <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#64748b', marginBottom: 6 }}>Custom Alias</label>
+                      <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: 'var(--text-muted, #64748b)', marginBottom: 6 }}>Custom Alias</label>
                       <input
                         className="form-input"
-                        style={{ fontSize: 13, padding: '8px 12px', background: '#f8fafc', border: '1px solid #e2e8f0' }}
+                        style={{ fontSize: 13, padding: '8px 12px', background: 'var(--primary-bg, #f8fafc)', border: '1px solid var(--border, #e2e8f0)' }}
                         value={ov.alias}
                         onChange={(e) => updateOverride(idx, 'alias', e.target.value)}
                         placeholder={`e.g. Branch A`}
@@ -242,14 +242,14 @@ function PartyStatTile({ label, count, amountStr, accent, bgTint, hideAmount }) 
         style={{
           fontSize: 11,
           fontWeight: 700,
-          color: '#64748b',
+          color: 'var(--text-muted, #64748b)',
           textTransform: 'uppercase',
           letterSpacing: '0.04em',
         }}
       >
         {label}
       </div>
-      <div style={{ fontSize: 26, fontWeight: 800, color: '#1e293b', lineHeight: 1 }}>{count}</div>
+      <div style={{ fontSize: 26, fontWeight: 800, color: 'var(--text-primary, #1e293b)', lineHeight: 1 }}>{count}</div>
       <div style={{ fontSize: 13, fontWeight: 600, color: accent, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{hideAmount ? '****' : amountStr}</div>
     </div>
   );
@@ -505,12 +505,12 @@ export default function Parties() {
       .toUpperCase();
 
   const avatarColors = [
-    ['#EFF6FF', '#1e40af'],
-    ['#F0FDF4', '#15803d'],
-    ['#FFF7ED', '#c2410c'],
+    ['var(--primary-bg, #eff6ff)', 'var(--primary, #1e40af)'],
+    ['var(--success-bg, #f0fdf4)', 'var(--success, #15803d)'],
+    ['var(--card-bg, #ffffff)7ED', 'var(--warning, #c2410c)'],
     ['#F5F3FF', '#6d28d9'],
-    ['#FEF2F2', '#991B1B'],
-    ['#F0F9FF', '#075985'],
+    ['var(--danger-bg, #fef2f2)', 'var(--danger, #991b1b)'],
+    ['var(--primary-bg, #f0f9ff)', '#075985'],
   ];
 
   return (
@@ -569,7 +569,7 @@ export default function Parties() {
         }}
       >
         {[
-          { label: 'Total Parties', value: parties.length, color: '#1e40af' },
+          { label: 'Total Parties', value: parties.length, color: 'var(--primary, #1e40af)' },
           {
             label: 'Active Parties',
             value: parties.filter((p) =>
@@ -578,22 +578,22 @@ export default function Parties() {
                   String(l.partyId ?? '') === String(p.id ?? '') && lotStatusKey(l) !== 'completed'
               )
             ).length,
-            color: '#d97706',
+            color: 'var(--warning, #d97706)',
           },
           {
             label: 'Total Lots Assigned',
             value: rangedLots.filter((l) => String(l.partyId || '').trim()).length,
-            color: '#7c3aed',
+            color: 'var(--purple, #7c3aed)',
           },
           {
             label: 'Total Payable',
             value: hideAmounts ? '****' : formatMoney(Array.from(statsByPartyId.values()).reduce((s, st) => s + (st.remaining > 0 ? st.remaining : 0), 0)),
-            color: '#dc2626',
+            color: 'var(--danger, #dc2626)',
           },
           {
             label: 'Total Advance',
             value: hideAmounts ? '****' : formatMoney(Array.from(statsByPartyId.values()).reduce((s, st) => s + (st.remaining < 0 ? Math.abs(st.remaining) : 0), 0)),
-            color: '#10b981',
+            color: 'var(--success, #10b981)',
           },
         ].map((c) => (
           <div key={c.label} className="stat-card">
@@ -641,7 +641,7 @@ export default function Parties() {
               <div
                 key={party.id}
                 style={{
-                  background: '#fff',
+                  background: 'var(--card-bg, #fff)',
                   border: '1px solid var(--border)',
                   borderRadius: 14,
                   boxShadow: 'var(--shadow)',
@@ -696,9 +696,9 @@ export default function Parties() {
                           style={{
                             fontSize: 11,
                             fontWeight: 700,
-                            color: '#1e40af',
-                            background: '#EFF6FF',
-                            border: '1px solid #BFDBFE',
+                            color: 'var(--primary, #1e40af)',
+                            background: 'var(--primary-bg, #eff6ff)',
+                            border: '1px solid var(--border, #bfdbfe)',
                             borderRadius: 999,
                             padding: '4px 10px',
                             whiteSpace: 'nowrap',
@@ -776,16 +776,16 @@ export default function Parties() {
                       label="Active"
                       count={stats.active}
                       amountStr={stats.active > 0 ? formatMoney(stats.activeAmount) : '—'}
-                      accent="#f59e0b"
-                      bgTint="#fffbeb"
+                      accent='var(--warning, #f59e0b)'
+                      bgTint='var(--warning-bg, #fffbeb)'
                       hideAmount={hideAmounts}
                     />
                     <PartyStatTile
                       label="Completed"
                       count={stats.completed}
                       amountStr={stats.completed > 0 ? formatMoney(stats.completedAmount) : '—'}
-                      accent="#10b981"
-                      bgTint="#ecfdf5"
+                      accent='var(--success, #10b981)'
+                      bgTint='var(--success-bg, #ecfdf5)'
                       hideAmount={hideAmounts}
                     />
                   </div>
@@ -796,27 +796,27 @@ export default function Parties() {
                       gap: 8,
                     }}
                   >
-                    <div style={{ background: '#f8fafc', borderRadius: 8, padding: '10px 8px', overflow: 'hidden' }}>
-                      <div style={{ fontSize: 10, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>
+                    <div style={{ background: 'var(--primary-bg, #f8fafc)', borderRadius: 8, padding: '10px 8px', overflow: 'hidden' }}>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted, #64748b)', textTransform: 'uppercase' }}>
                         Total bill
                       </div>
-                      <div style={{ fontSize: 13, fontWeight: 800, color: '#1e293b', marginTop: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--text-primary, #1e293b)', marginTop: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                         {stats.total > 0 ? (hideAmounts ? '****' : formatMoney(stats.totalValue)) : '—'}
                       </div>
                     </div>
-                    <div style={{ background: '#f8fafc', borderRadius: 8, padding: '10px 8px', overflow: 'hidden' }}>
-                      <div style={{ fontSize: 10, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>
+                    <div style={{ background: 'var(--primary-bg, #f8fafc)', borderRadius: 8, padding: '10px 8px', overflow: 'hidden' }}>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted, #64748b)', textTransform: 'uppercase' }}>
                         Paid
                       </div>
-                      <div style={{ fontSize: 13, fontWeight: 800, color: '#10b981', marginTop: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--success, #10b981)', marginTop: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                         {hideAmounts ? '****' : formatMoney(stats.paid)}
                       </div>
                     </div>
-                    <div style={{ background: stats.remaining > 0 ? '#fef2f2' : '#f8fafc', borderRadius: 8, padding: '10px 8px', overflow: 'hidden' }}>
-                      <div style={{ fontSize: 10, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>
+                    <div style={{ background: stats.remaining > 0 ? 'var(--danger-bg, #fef2f2)' : 'var(--primary-bg, #f8fafc)', borderRadius: 8, padding: '10px 8px', overflow: 'hidden' }}>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted, #64748b)', textTransform: 'uppercase' }}>
                         {stats.remaining >= 0 ? 'Remaining' : 'Advance'}
                       </div>
-                      <div style={{ fontSize: 13, fontWeight: 800, color: stats.remaining > 0 ? '#ef4444' : '#10b981', marginTop: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      <div style={{ fontSize: 13, fontWeight: 800, color: stats.remaining > 0 ? 'var(--danger, #ef4444)' : 'var(--success, #10b981)', marginTop: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                         {hideAmounts ? '****' : formatMoney(Math.abs(stats.remaining))}
                       </div>
                     </div>
@@ -831,19 +831,19 @@ export default function Parties() {
                     justifyContent: 'space-between',
                     padding: '12px 14px',
                     marginTop: 'auto',
-                    borderTop: '1px solid #f1f5f9',
-                    background: '#f8fafc'
+                    borderTop: '1px solid var(--primary-bg, #f1f5f9)',
+                    background: 'var(--primary-bg, #f8fafc)'
                   }}
                 >
                   <button
                     onClick={() => setTransactionParty(party)}
-                    style={{ color: '#0ea5e9', fontWeight: 600, fontSize: 13, background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}
+                    style={{ color: 'var(--primary-light, #0ea5e9)', fontWeight: 600, fontSize: 13, background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}
                   >
                     View Ledger &rarr;
                   </button>
                   <div style={{ display: 'flex', gap: 14 }}>
-                    <button onClick={() => { setEditing(party); setModal('form'); }} style={{ color: '#64748b', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600, padding: 0 }}>Edit</button>
-                    <button onClick={() => setDeleteTarget(party)} style={{ color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600, padding: 0 }}>Delete</button>
+                    <button onClick={() => { setEditing(party); setModal('form'); }} style={{ color: 'var(--text-muted, #64748b)', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600, padding: 0 }}>Edit</button>
+                    <button onClick={() => setDeleteTarget(party)} style={{ color: 'var(--danger, #ef4444)', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600, padding: 0 }}>Delete</button>
                   </div>
                 </div>
               </div>
@@ -1006,8 +1006,8 @@ export default function Parties() {
                 <div style={{ padding: '0 0 8px' }}>
                   <div
                     style={{
-                      background: '#FFFFFF',
-                      border: '1px solid #FECACA',
+                      background: 'var(--card-bg, #FFFFFF)',
+                      border: '1px solid var(--danger-bg, #fecaca)',
                       borderRadius: 12,
                       padding: '14px 16px',
                       marginBottom: 16,
@@ -1028,7 +1028,7 @@ export default function Parties() {
                       style={{
                         fontSize: 26,
                         fontWeight: 800,
-                        color: netBalance >= 0 ? '#b91c1c' : '#047857',
+                        color: netBalance >= 0 ? 'var(--danger, #b91c1c)' : 'var(--success, #047857)',
                         marginTop: 4,
                       }}
                     >
@@ -1050,7 +1050,7 @@ export default function Parties() {
                         'minmax(145px, 1.2fr) minmax(88px, 1fr) minmax(88px, 1fr)',
                       gap: 8,
                       padding: '8px 10px',
-                      background: '#F8FAFC',
+                      background: 'var(--primary-bg, #f8fafc)',
                       borderRadius: 8,
                       marginBottom: 6,
                       fontSize: 11,
@@ -1061,11 +1061,11 @@ export default function Parties() {
                     }}
                   >
                     <div>Date</div>
-                    <div style={{ color: '#b91c1c', textAlign: 'center' }}>
+                    <div style={{ color: 'var(--danger, #b91c1c)', textAlign: 'center' }}>
                       Paid out
                       <div style={{ fontWeight: 500, opacity: 0.85 }}>(to party)</div>
                     </div>
-                    <div style={{ color: '#047857', textAlign: 'center' }}>
+                    <div style={{ color: 'var(--success, #047857)', textAlign: 'center' }}>
                       In
                       <div style={{ fontWeight: 500, opacity: 0.85 }}>(bill / from party)</div>
                     </div>
@@ -1107,7 +1107,7 @@ export default function Parties() {
                             gap: 8,
                             alignItems: 'stretch',
                             padding: '10px 10px',
-                            borderBottom: '1px solid #F3F4F6',
+                            borderBottom: '1px solid var(--primary-bg, #f3f4f6)',
                             fontSize: 13,
                           }}
                         >
@@ -1133,8 +1133,8 @@ export default function Parties() {
                                 fontWeight: 700,
                                 padding: '3px 8px',
                                 borderRadius: 999,
-                                background: '#FCE7F3',
-                                color: '#be185d',
+                                background: 'var(--danger-bg, #fce7f3)',
+                                color: 'var(--danger, #be185d)',
                                 border: '1px solid #FBCFE8',
                               }}
                             >
@@ -1147,7 +1147,7 @@ export default function Parties() {
                               fontWeight: 800,
                               alignSelf: 'center',
                               fontVariantNumeric: 'tabular-nums',
-                              color: diye ? '#b91c1c' : 'var(--text-muted)',
+                              color: diye ? 'var(--danger, #b91c1c)' : 'var(--text-muted)',
                             }}
                           >
                             {diye ? formatMoney(diye) : '—'}
@@ -1158,7 +1158,7 @@ export default function Parties() {
                               fontWeight: 800,
                               alignSelf: 'center',
                               fontVariantNumeric: 'tabular-nums',
-                              color: liye ? '#047857' : 'var(--text-muted)',
+                              color: liye ? 'var(--success, #047857)' : 'var(--text-muted)',
                             }}
                           >
                             {liye ? formatMoney(liye) : '—'}

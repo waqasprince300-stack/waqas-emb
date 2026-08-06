@@ -10,7 +10,7 @@ function LoaderDashboard({ height = 9, width = 9 }) {
             width: width,
             height: height,
             borderRadius: '50%',
-            background: '#D85A30',
+            background: 'var(--warning, #d85a30)',
             animation: `bounce 0.9s ${d}s ease-in-out infinite`,
           }}
         />

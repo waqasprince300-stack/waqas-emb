@@ -131,8 +131,8 @@ export default function LotStatusSelect({
               padding: 4,
               listStyle: 'none',
               zIndex: 10050,
-              background: '#fff',
-              border: '1px solid #cbd5e1',
+              background: 'var(--card-bg, #fff)',
+              border: '1px solid var(--border, #cbd5e1)',
               borderRadius: 8,
               boxShadow: '0 10px 28px rgba(15, 23, 42, 0.14)',
               maxHeight: 'min(280px, calc(100vh - 24px))',
@@ -160,12 +160,12 @@ export default function LotStatusSelect({
                       fontSize: 12,
                       fontFamily: 'inherit',
                       cursor: 'pointer',
-                      background: selected ? '#334155' : 'transparent',
-                      color: selected ? '#fff' : '#0f172a',
+                      background: selected ? 'var(--text-secondary, #334155)' : 'transparent',
+                      color: selected ? 'var(--card-bg, #ffffff)' : 'var(--text-primary, #0f172a)',
                       fontWeight: selected ? 600 : 400,
                     }}
                     onMouseEnter={(e) => {
-                      if (!selected) e.currentTarget.style.background = '#f1f5f9';
+                      if (!selected) e.currentTarget.style.background = 'var(--border, #f1f5f9)';
                     }}
                     onMouseLeave={(e) => {
                       if (!selected) e.currentTarget.style.background = 'transparent';

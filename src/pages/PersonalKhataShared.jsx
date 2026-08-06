@@ -26,17 +26,17 @@ export default function PersonalKhataShared() {
           style={{
             maxWidth: 520,
             margin: '80px auto',
-            background: '#fff',
+            background: 'var(--card-bg, #fff)',
             borderRadius: 16,
             padding: 24,
-            border: '1px solid #e2e8f0',
+            border: '1px solid var(--border, #e2e8f0)',
           }}
         >
           <h1 style={{ fontSize: 20, margin: '0 0 12px' }}>Invalid or expired link</h1>
-          <p style={{ color: '#64748b', fontSize: 14, margin: '0 0 16px', lineHeight: 1.5 }}>
+          <p style={{ color: 'var(--text-muted, #64748b)', fontSize: 14, margin: '0 0 16px', lineHeight: 1.5 }}>
             Copy the full URL, or ask for a new share link from Personal Khata.
           </p>
-          <Link to="/personal-khata" style={{ color: '#6366f1', fontWeight: 700 }}>
+          <Link to="/personal-khata" style={{ color: 'var(--purple, #6366f1)', fontWeight: 700 }}>
             Open Personal Khata →
           </Link>
         </div>
@@ -67,10 +67,10 @@ export default function PersonalKhataShared() {
       <div style={{ maxWidth: 920, margin: '0 auto' }}>
         <div
           style={{
-            background: 'linear-gradient(125deg,#0ea5e9,#6366f1,#a855f7)',
+            background: 'linear-gradient(125deg,var(--primary-light, #0ea5e9),var(--purple, #6366f1),#a855f7)',
             borderRadius: 20,
             padding: '22px 20px',
-            color: '#fff',
+            color: 'var(--card-bg, #ffffff)',
             marginBottom: 18,
           }}
         >
@@ -144,7 +144,7 @@ export default function PersonalKhataShared() {
             style={{
               display: 'inline-block',
               marginTop: 16,
-              color: '#fff',
+              color: 'var(--card-bg, #ffffff)',
               fontWeight: 700,
               fontSize: 13,
               textDecoration: 'underline',
@@ -164,9 +164,9 @@ export default function PersonalKhataShared() {
               <div
                 key={c.id}
                 style={{
-                  background: '#fff',
+                  background: 'var(--card-bg, #fff)',
                   borderRadius: 16,
-                  border: '1px solid #e2e8f0',
+                  border: '1px solid var(--border, #e2e8f0)',
                   overflow: 'hidden',
                 }}
               >
@@ -177,7 +177,7 @@ export default function PersonalKhataShared() {
                     width: '100%',
                     padding: '16px 18px',
                     border: 'none',
-                    background: '#fff',
+                    background: 'var(--card-bg, #fff)',
                     cursor: 'pointer',
                     textAlign: 'left',
                     display: 'flex',
@@ -187,9 +187,9 @@ export default function PersonalKhataShared() {
                   }}
                 >
                   <div>
-                    <div style={{ fontWeight: 800, fontSize: 16, color: '#0f172a' }}>{c.name}</div>
+                    <div style={{ fontWeight: 800, fontSize: 16, color: 'var(--text-primary, #0f172a)' }}>{c.name}</div>
                     {c.phone ? (
-                      <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>{c.phone}</div>
+                      <div style={{ fontSize: 12, color: 'var(--text-muted, #64748b)', marginTop: 2 }}>{c.phone}</div>
                     ) : null}
                   </div>
                   <div style={{ textAlign: 'right' }}>
@@ -197,24 +197,24 @@ export default function PersonalKhataShared() {
                       style={{
                         fontWeight: 900,
                         fontSize: 16,
-                        color: net === 0 ? '#64748b' : net > 0 ? '#e11d48' : '#059669',
+                        color: net === 0 ? 'var(--text-muted, #64748b)' : net > 0 ? 'var(--danger, #e11d48)' : 'var(--success, #059669)',
                       }}
                     >
                       {net === 0 ? '₨0' : `${net > 0 ? '' : '−'}${fmtMoney(net)}`}
                     </div>
-                    <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted, #94a3b8)', marginTop: 4 }}>
                       {open ? 'Hide details' : 'Show details'}
                     </div>
                   </div>
                 </button>
 
                 {open && chron.length > 0 ? (
-                  <div style={{ padding: '0 16px 16px', fontSize: 13, color: '#334155' }}>
+                  <div style={{ padding: '0 16px 16px', fontSize: 13, color: 'var(--text-secondary, #334155)' }}>
                     {chron.map((e) => (
                       <div
                         key={e.id}
                         style={{
-                          borderTop: '1px solid #f1f5f9',
+                          borderTop: '1px solid var(--primary-bg, #f1f5f9)',
                           padding: '12px 0',
                           display: 'grid',
                           gridTemplateColumns: '1fr auto',
@@ -242,7 +242,7 @@ export default function PersonalKhataShared() {
                         <div
                           style={{
                             fontWeight: 800,
-                            color: e.type === 'given' ? '#e11d48' : '#059669',
+                            color: e.type === 'given' ? 'var(--danger, #e11d48)' : 'var(--success, #059669)',
                           }}
                         >
                           {e.type === 'given' ? `−${fmtMoney(e.amount)}` : `+${fmtMoney(e.amount)}`}

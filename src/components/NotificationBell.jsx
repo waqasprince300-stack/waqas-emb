@@ -117,8 +117,8 @@ export default function NotificationBell() {
           height: 40,
           borderRadius: 10,
           border: '1px solid var(--border, #e2e8f0)',
-          background: '#fff',
-          color: '#334155',
+          background: 'var(--card-bg, #fff)',
+          color: 'var(--text-secondary, #334155)',
           cursor: 'pointer',
         }}
       >
@@ -143,8 +143,8 @@ export default function NotificationBell() {
               height: 16,
               padding: '0 4px',
               borderRadius: 999,
-              background: '#ef4444',
-              color: '#fff',
+              background: 'var(--danger, #ef4444)',
+              color: 'var(--card-bg, #ffffff)',
               fontSize: 10,
               fontWeight: 700,
               lineHeight: '16px',
@@ -173,8 +173,8 @@ export default function NotificationBell() {
               overflow: 'hidden',
               display: 'flex',
               flexDirection: 'column',
-              background: '#fff',
-              border: '1px solid #e2e8f0',
+              background: 'var(--card-bg, #fff)',
+              border: '1px solid var(--border, #e2e8f0)',
               borderRadius: 12,
               boxShadow: '0 12px 40px rgba(15,23,42,0.18)',
               zIndex: 500,
@@ -187,7 +187,7 @@ export default function NotificationBell() {
                 justifyContent: 'space-between',
                 gap: 8,
                 padding: '12px 14px',
-                borderBottom: '1px solid #e2e8f0',
+                borderBottom: '1px solid var(--border, #e2e8f0)',
               }}
             >
               <strong style={{ fontSize: 14 }}>Notifications</strong>
@@ -198,7 +198,7 @@ export default function NotificationBell() {
                   style={{
                     border: 'none',
                     background: 'transparent',
-                    color: '#2563eb',
+                    color: 'var(--primary-light, #2563eb)',
                     fontSize: 12,
                     fontWeight: 600,
                     cursor: 'pointer',
@@ -210,7 +210,7 @@ export default function NotificationBell() {
             </div>
             <div style={{ overflowY: 'auto', flex: 1 }}>
               {visibleList.length === 0 ? (
-                <p style={{ padding: 16, margin: 0, fontSize: 13, color: '#64748b' }}>
+                <p style={{ padding: 16, margin: 0, fontSize: 13, color: 'var(--text-muted, #64748b)' }}>
                   {list.length === 0
                     ? 'No notifications yet.'
                     : 'All caught up — no unread notifications.'}
@@ -226,8 +226,8 @@ export default function NotificationBell() {
                       width: '100%',
                       textAlign: 'left',
                       border: 'none',
-                      borderBottom: '1px solid #f1f5f9',
-                      background: '#eff6ff',
+                      borderBottom: '1px solid var(--primary-bg, #f1f5f9)',
+                      background: 'var(--primary-bg, #eff6ff)',
                       padding: '12px 14px',
                       cursor: 'pointer',
                     }}
@@ -236,14 +236,14 @@ export default function NotificationBell() {
                       style={{
                         fontSize: 13,
                         fontWeight: 700,
-                        color: '#0f172a',
+                        color: 'var(--text-primary, #0f172a)',
                         marginBottom: 4,
                       }}
                     >
                       {n.title}
                     </div>
-                    <div style={{ fontSize: 12, color: '#475569', lineHeight: 1.4 }}>{n.body}</div>
-                    <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 6 }}>
+                    <div style={{ fontSize: 12, color: 'var(--text-secondary, #475569)', lineHeight: 1.4 }}>{n.body}</div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted, #94a3b8)', marginTop: 6 }}>
                       {formatWhen(n.createdAt)}
                     </div>
                   </button>

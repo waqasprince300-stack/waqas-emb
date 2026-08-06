@@ -166,7 +166,7 @@ function PaymentSlipCell({ payment, isParty }) {
             height="16"
             viewBox="0 0 24 24"
             fill="none"
-            stroke="#1e40af"
+            stroke="var(--primary, #1e40af)"
             strokeWidth="2"
           >
             <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
@@ -234,6 +234,10 @@ export default function Payments() {
   const PAGE_SIZE = 10;
   const [modal, setModal] = useState(false);
   const [typeFilter, setTypeFilter] = useState('All');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [startFocused, setStartFocused] = useState(false);
+  const [endFocused, setEndFocused] = useState(false);
   const [ownerNameFilter, setOwnerNameFilter] = useState('All');
   const [search, setSearch] = useState('');
   const [form, setForm] = useState({
@@ -361,9 +365,26 @@ export default function Payments() {
 
   const searchTerm = search.trim().toLowerCase();
 
+  const combinedRowsWithBalance = useMemo(() => {
+    // Calculate running balance for party perspective
+    const sorted = [...combinedRows].sort((a, b) => compareRowsByUpdatedNewestFirst(b, a, 'payment'));
+    let runningBalance = 0;
+    return sorted.map((p) => {
+      if (isParty) {
+        const pt = presentationType(p, isParty);
+        const val = Number(p.amount) || 0;
+        if (pt === 'Bill') runningBalance += val;
+        else if (pt === 'Received') runningBalance -= val;
+        else if (pt === 'Paid') runningBalance += val;
+        return { ...p, runningBalance };
+      }
+      return p;
+    });
+  }, [combinedRows, isParty]);
+
   const filtered = useMemo(
     () =>
-      combinedRows.filter((p) => {
+      combinedRowsWithBalance.filter((p) => {
         const pt = presentationType(p, isParty);
         if (typeFilter === 'All') {
           // no type restriction
@@ -386,6 +407,24 @@ export default function Payments() {
         if (isAdmin && ownerNameFilter !== 'All') {
           if (paymentBusinessOwnerId(p) !== ownerNameFilter) return false;
         }
+
+        if (isParty && (startDate || endDate)) {
+          const rowDate = p.date ? new Date(p.date) : null;
+          if (rowDate) {
+            rowDate.setHours(0, 0, 0, 0);
+            if (startDate) {
+              const sDate = new Date(startDate);
+              sDate.setHours(0, 0, 0, 0);
+              if (rowDate < sDate) return false;
+            }
+            if (endDate) {
+              const eDate = new Date(endDate);
+              eDate.setHours(23, 59, 59, 999);
+              if (rowDate > eDate) return false;
+            }
+          }
+        }
+
         if (searchTerm) {
           const { lotLabel, designLabel } = resolveLinkedLotDesignDisplay(p, lotsLookupForLinks);
           const haystack = [
@@ -405,7 +444,7 @@ export default function Payments() {
         }
         return true;
       }),
-    [combinedRows, typeFilter, ownerNameFilter, isAdmin, isParty, searchTerm, lotsLookupForLinks]
+    [combinedRowsWithBalance, typeFilter, ownerNameFilter, isAdmin, isParty, searchTerm, lotsLookupForLinks, startDate, endDate]
   );
   const sortedFiltered = useMemo(
     () => [...filtered].sort((a, b) => compareRowsByUpdatedNewestFirst(a, b, 'payment')),
@@ -418,7 +457,7 @@ export default function Payments() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [typeFilter, ownerNameFilter, searchTerm]);
+  }, [typeFilter, ownerNameFilter, searchTerm, startDate, endDate]);
 
   useEffect(() => {
     if (currentPage > totalPages) {
@@ -642,8 +681,8 @@ export default function Payments() {
       text: 'This action cannot be undone.',
       icon: 'warning',
       showCancelButton: true,
-      confirmButtonColor: '#dc2626',
-      cancelButtonColor: '#6b7280',
+      confirmButtonColor: 'var(--danger, #dc2626)',
+      cancelButtonColor: 'var(--text-muted, #6b7280)',
       confirmButtonText: 'Yes, delete it',
     });
     if (!result.isConfirmed) return;
@@ -731,9 +770,9 @@ export default function Payments() {
               gap: 6,
               fontSize: 12,
               fontWeight: 600,
-              color: showSummaryCards ? '#475569' : '#1e40af',
+              color: showSummaryCards ? 'var(--text-secondary, #475569)' : 'var(--primary, #1e40af)',
               border: '1px solid var(--border)',
-              background: showSummaryCards ? 'var(--surface-card, #ffffff)' : '#eff6ff',
+              background: showSummaryCards ? 'var(--surface-card, #ffffff)' : 'var(--primary-bg, #eff6ff)',
               borderRadius: 20,
               padding: '5px 14px',
               cursor: 'pointer',
@@ -850,20 +889,20 @@ export default function Payments() {
               {
                 label: 'Work billed (completed lots)',
                 value: partyStatementSummary.billed,
-                color: '#dc2626',
+                color: 'var(--danger, #dc2626)',
                 icon: '↑',
               },
               {
                 label: 'Received from business',
                 value: partyStatementSummary.paidFromAdmin,
-                color: '#15803d',
+                color: 'var(--success, #15803d)',
                 icon: '↓',
                 note: 'Payments the business recorded to you',
               },
               {
                 label: 'Paid to business',
                 value: partyStatementSummary.paidToBusiness,
-                color: '#b91c1c',
+                color: 'var(--danger, #b91c1c)',
                 icon: '↑',
                 note: 'Amounts you paid to the business',
               },
@@ -872,10 +911,10 @@ export default function Payments() {
                 value: Math.abs(partyStatementSummary.due),
                 color:
                   partyStatementSummary.due > 0
-                    ? '#b91c1c'
+                    ? 'var(--danger, #b91c1c)'
                     : partyStatementSummary.due < 0
-                      ? '#047857'
-                      : '#64748b',
+                      ? 'var(--success, #047857)'
+                      : 'var(--text-muted, #64748b)',
                 icon:
                   partyStatementSummary.due > 0 ? '!' : partyStatementSummary.due < 0 ? '✓' : '=',
                 note:
@@ -888,14 +927,14 @@ export default function Payments() {
               {
                 label: 'Total rows',
                 value: combinedRows.length,
-                color: '#1e40af',
+                color: 'var(--primary, #1e40af)',
                 isCount: true,
               },
             ].map((c) => (
               <div
                 key={c.label}
                 style={{
-                  background: '#fff',
+                  background: 'var(--card-bg, #fff)',
                   border: '1px solid var(--border)',
                   borderRadius: 12,
                   padding: '18px 20px',
@@ -939,26 +978,26 @@ export default function Payments() {
               {
                 label: 'Received from Owner',
                 value: ownerIn,
-                color: '#15803d',
+                color: 'var(--success, #15803d)',
                 icon: '↓',
               },
               {
                 label: 'Received from parties',
                 value: receivedFromParties,
-                color: '#059669',
+                color: 'var(--success, #059669)',
                 icon: '↓',
                 note: 'Party → business',
               },
               {
                 label: 'Paid to Parties',
                 value: paidToNonOwnerParties,
-                color: '#dc2626',
+                color: 'var(--danger, #dc2626)',
                 icon: '↑',
               },
               {
                 label: 'Net Balance',
                 value: Math.abs(balance),
-                color: balance >= 0 ? '#15803d' : '#dc2626',
+                color: balance >= 0 ? 'var(--success, #15803d)' : 'var(--danger, #dc2626)',
                 icon: balance >= 0 ? '+' : '-',
                 note:
                   balance >= 0
@@ -968,14 +1007,14 @@ export default function Payments() {
               {
                 label: 'Total Transactions',
                 value: adminSummaryTransactionCount,
-                color: '#1e40af',
+                color: 'var(--primary, #1e40af)',
                 isCount: true,
               },
             ].map((c) => (
               <div
                 key={c.label}
                 style={{
-                  background: '#fff',
+                  background: 'var(--card-bg, #fff)',
                   border: '1px solid var(--border)',
                   borderRadius: 12,
                   padding: '18px 20px',
@@ -1022,7 +1061,7 @@ export default function Payments() {
       {/* {visiblePayments.length > 0 && (
         <div
           style={{
-            background: "#fff",
+            background: "var(--card-bg, #fff)",
             border: "1px solid var(--border)",
             borderRadius: 12,
             padding: "18px 22px",
@@ -1060,7 +1099,7 @@ export default function Payments() {
             <div
               style={{
                 flex: 1,
-                background: "#F3F4F6",
+                background: "var(--primary-bg, #f3f4f6)",
                 borderRadius: 6,
                 height: 16,
                 overflow: "hidden",
@@ -1069,7 +1108,7 @@ export default function Payments() {
               <div
                 style={{
                   width: `${ownerIn > 0 ? 100 : 0}%`,
-                  background: "#15803d",
+                  background: "var(--success, #15803d)",
                   height: "100%",
                   borderRadius: 6,
                 }}
@@ -1078,7 +1117,7 @@ export default function Payments() {
             <div
               style={{
                 fontWeight: 700,
-                color: "#15803d",
+                color: "var(--success, #15803d)",
                 minWidth: 80,
                 textAlign: "right",
               }}
@@ -1099,7 +1138,7 @@ export default function Payments() {
             <div
               style={{
                 flex: 1,
-                background: "#F3F4F6",
+                background: "var(--primary-bg, #f3f4f6)",
                 borderRadius: 6,
                 height: 16,
                 overflow: "hidden",
@@ -1108,7 +1147,7 @@ export default function Payments() {
               <div
                 style={{
                   width: `${ownerIn > 0 ? Math.min((_partyOut / ownerIn) * 100, 100) : 0}%`,
-                  background: "#dc2626",
+                  background: 'var(--danger, #dc2626)',
                   height: "100%",
                   borderRadius: 6,
                 }}
@@ -1117,7 +1156,7 @@ export default function Payments() {
             <div
               style={{
                 fontWeight: 700,
-                color: "#dc2626",
+                color: 'var(--danger, #dc2626)',
                 minWidth: 80,
                 textAlign: "right",
               }}
@@ -1145,6 +1184,39 @@ export default function Payments() {
           <option>Paid</option>
           <option value="Bill">{isParty ? 'Work bill' : 'Bill'}</option>
         </select>
+        {isParty && (
+          <>
+            <input
+              type={(startDate || startFocused) ? 'date' : 'text'}
+              className="form-input pl-toolbar-filter hide-print"
+              style={{ width: 'auto', fontSize: 13 }}
+              placeholder="Start Date"
+              onFocus={() => setStartFocused(true)}
+              onBlur={() => setStartFocused(false)}
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              title="Start Date"
+            />
+            <input
+              type={(endDate || endFocused) ? 'date' : 'text'}
+              className="form-input pl-toolbar-filter hide-print"
+              style={{ width: 'auto', fontSize: 13 }}
+              placeholder="End Date"
+              onFocus={() => setEndFocused(true)}
+              onBlur={() => setEndFocused(false)}
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              title="End Date"
+            />
+            <button
+              className="btn btn-view-mode hide-print"
+              onClick={() => window.print()}
+              style={{ fontSize: 13, padding: '4px 10px', whiteSpace: 'nowrap' }}
+            >
+              Download PDF
+            </button>
+          </>
+        )}
         {isAdmin && businessOwners.length > 0 && (
           <select
             className="form-select pl-toolbar-filter pl-toolbar-filter--owner"
@@ -1214,12 +1286,12 @@ export default function Payments() {
                   const amt = Number(p.amount ?? 0);
                   const showPlus = isParty ? pt === 'Received' || pt === 'Bill' : p.type !== 'Paid';
                   const amtColor = partyWorkBill
-                    ? '#dc2626'
+                    ? 'var(--danger, #dc2626)'
                     : partyReceived
-                      ? '#15803d'
+                      ? 'var(--success, #15803d)'
                       : showPlus
-                        ? '#15803d'
-                        : '#dc2626';
+                        ? 'var(--success, #15803d)'
+                        : 'var(--danger, #dc2626)';
 
                   const { lotLabel, designLabel } = resolveLinkedLotDesignDisplay(
                     p,
@@ -1235,10 +1307,10 @@ export default function Payments() {
                       <td>
                         <span
                           style={{
-                            background: ownerBill ? '#FFFBEB' : badgeGreen ? '#F0FDF4' : '#FEF2F2',
-                            color: ownerBill ? '#92400E' : badgeGreen ? '#166534' : '#991B1B',
+                            background: ownerBill ? 'var(--warning-bg, #fffbeb)' : badgeGreen ? 'var(--success-bg, #f0fdf4)' : 'var(--danger-bg, #fef2f2)',
+                            color: ownerBill ? 'var(--warning, #92400e)' : badgeGreen ? 'var(--success, #166534)' : 'var(--danger, #991b1b)',
                             border: `1px solid ${
-                              ownerBill ? '#FCD34D' : badgeGreen ? '#BBF7D0' : '#FECACA'
+                              ownerBill ? 'var(--warning-bg, #fcd34d)' : badgeGreen ? 'var(--success-bg, #bbf7d0)' : 'var(--danger-bg, #fecaca)'
                             }`,
                             borderRadius: 20,
                             padding: '3px 12px',
@@ -1259,9 +1331,9 @@ export default function Payments() {
                         {lotLabel ? (
                           <div
                             style={{
-                              background: '#EFF6FF',
-                              color: '#1e40af',
-                              border: '1px solid #BFDBFE',
+                              background: 'var(--primary-bg, #eff6ff)',
+                              color: 'var(--primary, #1e40af)',
+                              border: '1px solid var(--border, #bfdbfe)',
                               borderRadius: 6,
                               padding: '4px 8px',
                               fontSize: 12,
@@ -1298,7 +1370,12 @@ export default function Payments() {
                           color: amtColor,
                         }}
                       >
-                        {showPlus ? '+' : '-'}₨{amt.toLocaleString()}
+                        <div>{showPlus ? '+' : '-'}₨{amt.toLocaleString()}</div>
+                        {isParty && p.runningBalance !== undefined && (
+                          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2, fontWeight: 500 }}>
+                            Bal: {p.runningBalance > 0 ? 'Cr ' : p.runningBalance < 0 ? 'Dr ' : ''}₨{Math.abs(p.runningBalance).toLocaleString()}
+                          </div>
+                        )}
                       </td>
                       <td>
                         <PaymentSlipCell payment={p} isParty={isParty} />
@@ -1320,7 +1397,7 @@ export default function Payments() {
                             height="14"
                             viewBox="0 0 24 24"
                             fill="none"
-                            stroke="#dc2626"
+                            stroke='var(--danger, #dc2626)'
                             strokeWidth="2"
                           >
                             <polyline points="3 6 5 6 21 6" />
@@ -1365,12 +1442,12 @@ export default function Payments() {
             const amt = Number(p.amount ?? 0);
             const showPlus = isParty ? pt === 'Received' || pt === 'Bill' : p.type !== 'Paid';
             const amtColor = partyWorkBill
-              ? '#dc2626'
+              ? 'var(--danger, #dc2626)'
               : partyReceived
-                ? '#15803d'
+                ? 'var(--success, #15803d)'
                 : showPlus
-                  ? '#15803d'
-                  : '#dc2626';
+                  ? 'var(--success, #15803d)'
+                  : 'var(--danger, #dc2626)';
 
             const { lotLabel, designLabel } = resolveLinkedLotDesignDisplay(
               p,
@@ -1386,10 +1463,10 @@ export default function Payments() {
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span
                       style={{
-                        background: ownerBill ? '#FFFBEB' : badgeGreen ? '#F0FDF4' : '#FEF2F2',
-                        color: ownerBill ? '#92400E' : badgeGreen ? '#166534' : '#991B1B',
+                        background: ownerBill ? 'var(--warning-bg, #fffbeb)' : badgeGreen ? 'var(--success-bg, #f0fdf4)' : 'var(--danger-bg, #fef2f2)',
+                        color: ownerBill ? 'var(--warning, #92400e)' : badgeGreen ? 'var(--success, #166534)' : 'var(--danger, #991b1b)',
                         border: `1px solid ${
-                          ownerBill ? '#FCD34D' : badgeGreen ? '#BBF7D0' : '#FECACA'
+                          ownerBill ? 'var(--warning-bg, #fcd34d)' : badgeGreen ? 'var(--success-bg, #bbf7d0)' : 'var(--danger-bg, #fecaca)'
                         }`,
                         borderRadius: 20,
                         padding: '2px 10px',
@@ -1403,45 +1480,54 @@ export default function Payments() {
                       {formatDisplayDate(p.date)}
                     </span>
                   </div>
-                  <span style={{ fontSize: 15, fontWeight: 700, color: amtColor }}>
-                    {showPlus ? '+' : '-'}₨{amt.toLocaleString()}
-                  </span>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                    <span style={{ fontSize: 15, fontWeight: 700, color: amtColor }}>
+                      {showPlus ? '+' : '-'}₨{amt.toLocaleString()}
+                    </span>
+                    {isParty && p.runningBalance !== undefined && (
+                      <span style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2, fontWeight: 500 }}>
+                        Bal: {p.runningBalance > 0 ? 'Cr ' : p.runningBalance < 0 ? 'Dr ' : ''}₨{Math.abs(p.runningBalance).toLocaleString()}
+                      </span>
+                    )}
+                  </div>
                 </div>
 
-                <div className="pmc-body">
-                  {!isParty && (
-                    <div style={{ fontSize: 13, fontWeight: 600, color: '#1e293b' }}>
-                      Party: {partyLabel}
-                    </div>
-                  )}
-                  {isAdmin && (
-                    <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
-                      Owner: {p._synthetic ? '—' : paymentOwnerColumn(p)}
-                    </div>
-                  )}
-                  {lotLabel && (
-                    <div
-                      style={{
-                        marginTop: 6,
-                        background: '#EFF6FF',
-                        color: '#1e40af',
-                        border: '1px solid #BFDBFE',
-                        borderRadius: 6,
-                        padding: '4px 8px',
-                        fontSize: 12,
-                        fontWeight: 600,
-                        display: 'inline-block',
-                      }}
-                    >
-                      Lot #{lotLabel} {designLabel ? `· Design: ${designLabel}` : ''}
-                    </div>
-                  )}
-                  {p.note && (
-                    <div style={{ fontSize: 12.5, color: '#475569', marginTop: 4 }}>
-                      Note: {p.note}
-                    </div>
-                  )}
-                </div>
+                {(!isParty || lotLabel || p.note) && (
+                  <div className="pmc-body">
+                    {!isParty && (
+                      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary, #1e293b)' }}>
+                        Party: {partyLabel}
+                      </div>
+                    )}
+                    {isAdmin && (
+                      <div style={{ fontSize: 12, color: 'var(--text-muted, #64748b)', marginTop: 2 }}>
+                        Owner: {p._synthetic ? '—' : paymentOwnerColumn(p)}
+                      </div>
+                    )}
+                    {lotLabel && (
+                      <div
+                        style={{
+                          marginTop: 6,
+                          background: 'var(--primary-bg, #eff6ff)',
+                          color: 'var(--primary, #1e40af)',
+                          border: '1px solid var(--border, #bfdbfe)',
+                          borderRadius: 6,
+                          padding: '4px 8px',
+                          fontSize: 12,
+                          fontWeight: 600,
+                          display: 'inline-block',
+                        }}
+                      >
+                        Lot #{lotLabel} {designLabel ? `· Design: ${designLabel}` : ''}
+                      </div>
+                    )}
+                    {p.note && (
+                      <div style={{ fontSize: 12.5, color: 'var(--text-secondary, #475569)', marginTop: 4 }}>
+                        Note: {p.note}
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 <div className="pmc-footer">
                   <PaymentSlipCell payment={p} isParty={isParty} />
@@ -1457,7 +1543,7 @@ export default function Payments() {
                         height="14"
                         viewBox="0 0 24 24"
                         fill="none"
-                        stroke="#dc2626"
+                        stroke='var(--danger, #dc2626)'
                         strokeWidth="2"
                       >
                         <polyline points="3 6 5 6 21 6" />
@@ -1633,7 +1719,7 @@ export default function Payments() {
                   {errors.party && (
                     <span
                       style={{
-                        color: '#dc2626',
+                        color: 'var(--danger, #dc2626)',
                         fontSize: 11,
                         marginTop: 3,
                         display: 'block',
@@ -1679,7 +1765,7 @@ export default function Payments() {
                 {errors.ownerWorkspaceId && (
                   <span
                     style={{
-                      color: '#dc2626',
+                      color: 'var(--danger, #dc2626)',
                       fontSize: 11,
                       marginTop: 3,
                       display: 'block',
@@ -1757,7 +1843,7 @@ export default function Payments() {
               {errors.linkedLot && (
                 <span
                   style={{
-                    color: '#dc2626',
+                    color: 'var(--danger, #dc2626)',
                     fontSize: 11,
                     marginTop: 4,
                     display: 'block',
@@ -1848,7 +1934,7 @@ export default function Payments() {
               {errors.amount && (
                 <span
                   style={{
-                    color: '#dc2626',
+                    color: 'var(--danger, #dc2626)',
                     fontSize: 11,
                     marginTop: 3,
                     display: 'block',
@@ -1884,7 +1970,7 @@ export default function Payments() {
                     transform: 'translateY(-50%)',
                     border: 'none',
                     background: 'transparent',
-                    color: '#1e40af',
+                    color: 'var(--primary, #1e40af)',
                     fontSize: 12,
                     fontWeight: 600,
                     cursor: 'pointer',
@@ -1898,7 +1984,7 @@ export default function Payments() {
               {errors.date && (
                 <span
                   style={{
-                    color: '#dc2626',
+                    color: 'var(--danger, #dc2626)',
                     fontSize: 11,
                     marginTop: 3,
                     display: 'block',

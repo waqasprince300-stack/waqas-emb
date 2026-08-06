@@ -8,11 +8,11 @@ import { compareRowsByUpdatedNewestFirst } from '../utils/dateFilters';
 const getUserId = (user) => String(user?._id || user?.id || '');
 
 const STATUS_BADGES = {
-  pending: { color: '#92400e', bg: '#fef3c7', border: '#fcd34d' },
-  approved: { color: '#166534', bg: '#dcfce7', border: '#86efac' },
-  disabled: { color: '#991b1b', bg: '#fee2e2', border: '#fca5a5' },
-  rejected: { color: '#475569', bg: '#f1f5f9', border: '#cbd5e1' },
-  default: { color: '#475569', bg: '#f1f5f9', border: '#cbd5e1' },
+  pending: { color: 'var(--warning, #92400e)', bg: 'var(--warning-bg, #fef3c7)', border: 'var(--warning-bg, #fcd34d)' },
+  approved: { color: 'var(--success, #166534)', bg: 'var(--success-bg, #dcfce7)', border: 'var(--success-bg, #86efac)' },
+  disabled: { color: 'var(--danger, #991b1b)', bg: 'var(--danger-bg, #fee2e2)', border: 'var(--danger-bg, #fca5a5)' },
+  rejected: { color: 'var(--text-secondary, #475569)', bg: 'var(--border, #f1f5f9)', border: 'var(--border, #cbd5e1)' },
+  default: { color: 'var(--text-secondary, #475569)', bg: 'var(--border, #f1f5f9)', border: 'var(--border, #cbd5e1)' },
 };
 
 /** Mongo populate may expose `partyId` as `{ _id, name }` — API approve body expects an id string. */
@@ -207,15 +207,15 @@ export default function UserApprovals() {
         }}
       >
         {[
-          { label: 'Pending', value: counts.pending, color: '#b45309' },
-          { label: 'Approved', value: counts.approved, color: '#15803d' },
-          { label: 'Disabled', value: counts.disabled, color: '#b91c1c' },
-          { label: 'Rejected', value: counts.rejected, color: '#64748b' },
+          { label: 'Pending', value: counts.pending, color: 'var(--warning, #b45309)' },
+          { label: 'Approved', value: counts.approved, color: 'var(--success, #15803d)' },
+          { label: 'Disabled', value: counts.disabled, color: 'var(--danger, #b91c1c)' },
+          { label: 'Rejected', value: counts.rejected, color: 'var(--text-muted, #64748b)' },
         ].map((card) => (
           <div
             key={card.label}
             style={{
-              background: '#fff',
+              background: 'var(--card-bg, #fff)',
               border: '1px solid var(--border)',
               borderRadius: 10,
               padding: '14px 16px',
@@ -296,7 +296,7 @@ export default function UserApprovals() {
                           style={
                             partyChanged
                               ? {
-                                  borderColor: '#6366f1',
+                                  borderColor: 'var(--purple, #6366f1)',
                                   boxShadow: '0 0 0 2px rgba(99,102,241,0.15)',
                                 }
                               : undefined
@@ -323,7 +323,7 @@ export default function UserApprovals() {
                               </button>
                               <button
                                 className="btn btn-ghost btn-sm"
-                                style={{ color: '#b91c1c', borderColor: '#fecaca' }}
+                                style={{ color: 'var(--danger, #b91c1c)', borderColor: 'var(--danger-bg, #fecaca)' }}
                                 disabled={isSaving}
                                 onClick={() => rejectUser(user)}
                               >
@@ -345,7 +345,7 @@ export default function UserApprovals() {
                           {isApproved && (
                             <button
                               className="btn btn-ghost btn-sm"
-                              style={{ color: '#b91c1c', borderColor: '#fecaca' }}
+                              style={{ color: 'var(--danger, #b91c1c)', borderColor: 'var(--danger-bg, #fecaca)' }}
                               disabled={isSaving}
                               onClick={() => disableUser(user)}
                             >
@@ -388,7 +388,6 @@ export default function UserApprovals() {
             const isPending = user.status === 'pending';
             const isApproved = user.status === 'approved';
             const isDisabled = user.status === 'disabled';
-            const isRejected = user.status === 'rejected';
             const isSaving = savingId === id;
             const canEditParty = isPending || isApproved || isDisabled;
             const partyChanged = !isPending && normalizePartyIdRef(form.partyId).trim() !== normalizedPartyIdFromUser(user);
@@ -398,8 +397,8 @@ export default function UserApprovals() {
               <div key={`mob-${id}`} className="ghausia-mobile-card" style={{ padding: '16px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
                   <div>
-                    <div style={{ fontWeight: 700, fontSize: 15, color: '#1e293b' }}>{user.name}</div>
-                    <div style={{ fontSize: 13, color: '#64748b', marginTop: 2 }}>{user.email}</div>
+                    <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--text-primary, #1e293b)' }}>{user.name}</div>
+                    <div style={{ fontSize: 13, color: 'var(--text-muted, #64748b)', marginTop: 2 }}>{user.email}</div>
                   </div>
                   <span
                     style={{
@@ -419,7 +418,7 @@ export default function UserApprovals() {
                 </div>
                 
                 <div style={{ marginBottom: 12 }}>
-                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#475569', marginBottom: 4 }}>Party</label>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary, #475569)', marginBottom: 4 }}>Party</label>
                   <select
                     className="form-select"
                     value={form.partyId}
@@ -431,9 +430,9 @@ export default function UserApprovals() {
                       padding: '6px 10px',
                       ...(partyChanged
                         ? {
-                            borderColor: '#6366f1',
+                            borderColor: 'var(--purple, #6366f1)',
                             boxShadow: '0 0 0 2px rgba(99,102,241,0.15)',
-                            backgroundColor: '#f8fafc'
+                            backgroundColor: 'var(--primary-bg, #f8fafc)'
                           }
                         : {})
                     }}
@@ -449,14 +448,14 @@ export default function UserApprovals() {
                   {isPending && (
                     <>
                       <button className="btn btn-success btn-sm" disabled={isSaving} onClick={() => approveUser(user)} style={{ flex: 1 }}>Approve</button>
-                      <button className="btn btn-ghost btn-sm" style={{ color: '#b91c1c', borderColor: '#fecaca', flex: 1 }} disabled={isSaving} onClick={() => rejectUser(user)}>Reject</button>
+                      <button className="btn btn-ghost btn-sm" style={{ color: 'var(--danger, #b91c1c)', borderColor: 'var(--danger-bg, #fecaca)', flex: 1 }} disabled={isSaving} onClick={() => rejectUser(user)}>Reject</button>
                     </>
                   )}
                   {(isApproved || isDisabled) && partyChanged && (
                     <button className="btn btn-primary btn-sm" disabled={isSaving} onClick={() => saveParty(user)} style={{ flex: 1 }}>Save party</button>
                   )}
                   {isApproved && (
-                    <button className="btn btn-ghost btn-sm" style={{ color: '#b91c1c', borderColor: '#fecaca', flex: 1 }} disabled={isSaving} onClick={() => disableUser(user)}>Disable</button>
+                    <button className="btn btn-ghost btn-sm" style={{ color: 'var(--danger, #b91c1c)', borderColor: 'var(--danger-bg, #fecaca)', flex: 1 }} disabled={isSaving} onClick={() => disableUser(user)}>Disable</button>
                   )}
                   {isDisabled && (
                     <button className="btn btn-success btn-sm" disabled={isSaving} onClick={() => enableUser(user)} style={{ flex: 1 }}>Enable</button>

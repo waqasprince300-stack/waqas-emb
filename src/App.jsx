@@ -6,6 +6,10 @@ import Sidebar from './components/Sidebar';
 import LoaderDashboard from './components/LoaderDashboard';
 import NotificationBell, { LotNotificationListener } from './components/NotificationBell';
 import ErrorBoundary from './components/ErrorBoundary';
+import { ThemeProvider } from './context/ThemeContext';
+import ThemeToggle from './components/ThemeToggle';
+import { usePushNotifications } from './hooks/usePushNotifications';
+import IosInstallPrompt from './components/IosInstallPrompt';
 
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const GhausiaCollection = lazy(() => import('./pages/GhausiaCollection'));
@@ -95,8 +99,9 @@ function Layout({ children, sidebarOpen, setSidebarOpen }) {
 
       <div
         className="app-top-actions"
-        style={{ position: 'fixed', top: 12, right: 16, zIndex: 120 }}
+        style={{ position: 'fixed', top: 'max(12px, env(safe-area-inset-top, 12px))', right: 'max(16px, env(safe-area-inset-right, 16px))', zIndex: 120, display: 'flex', alignItems: 'center', gap: '12px' }}
       >
+        <ThemeToggle />
         <NotificationBell />
       </div>
 
@@ -218,7 +223,7 @@ function BootstrapErrorBanner() {
         left: 0,
         right: 0,
         zIndex: 500,
-        background: '#7f1d1d',
+        background: 'var(--danger, #7f1d1d)',
         color: '#fff',
         padding: '10px 16px',
         fontSize: 13,
@@ -235,7 +240,7 @@ function BootstrapErrorBanner() {
         onClick={() => refreshData({ force: true })}
         style={{
           background: '#fff',
-          color: '#7f1d1d',
+          color: 'var(--danger, #7f1d1d)',
           border: 'none',
           borderRadius: 6,
           padding: '4px 12px',
@@ -260,7 +265,7 @@ function BackgroundRefreshIndicator() {
         left: '50%',
         transform: 'translateX(-50%)',
         zIndex: 400,
-        background: '#1e293b',
+        background: 'var(--text-primary, #1e293b)',
         color: '#fff',
         fontSize: 12,
         fontWeight: 600,
@@ -278,7 +283,7 @@ function BackgroundRefreshIndicator() {
           width: 8,
           height: 8,
           borderRadius: 999,
-          background: '#38bdf8',
+          background: 'var(--primary-light, #38bdf8)',
           display: 'inline-block',
         }}
       />
@@ -289,6 +294,8 @@ function BackgroundRefreshIndicator() {
 
 function AppRoutes() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { isAuthenticated } = useAuth();
+  usePushNotifications({ isAuthenticated });
 
   return (
     <SuperAdminShell>
@@ -296,6 +303,7 @@ function AppRoutes() {
       <BootstrapErrorBanner />
       <BackgroundRefreshIndicator />
       <LotNotificationListener />
+      <IosInstallPrompt />
       <Suspense
         fallback={
           <div
@@ -370,7 +378,7 @@ function AppRoutes() {
           <Route
             path="/rate-calculations"
             element={
-              <RequireAuth adminOnly>
+              <RequireAuth>
                 <Layout sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen}>
                   <RateCalculations />
                 </Layout>
@@ -437,12 +445,14 @@ function AppRoutes() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <AppProvider>
-        <BrowserRouter>
-          <AppRoutes />
-        </BrowserRouter>
-      </AppProvider>
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <AppProvider>
+          <BrowserRouter>
+            <AppRoutes />
+          </BrowserRouter>
+        </AppProvider>
+      </AuthProvider>
+    </ThemeProvider>
   );
 }
