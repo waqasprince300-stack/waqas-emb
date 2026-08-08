@@ -140,7 +140,7 @@ function PartyForm({ initial, onSave, onClose, saving }) {
                 style={{ background: 'var(--primary-bg, #f8fafc)' }}
                 value={form.workspaceAlias}
                 onChange={(e) => set('workspaceAlias', e.target.value)}
-                placeholder="e.g. Ghausia Main Unit"
+                placeholder="e.g. Main Unit"
               />
               <span style={{ fontSize: 11, color: 'var(--text-muted, #94a3b8)', display: 'block', marginTop: 6 }}>
                 Replaces the internal workspace name globally for this party user.

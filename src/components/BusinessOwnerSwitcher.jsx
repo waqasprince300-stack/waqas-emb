@@ -320,7 +320,7 @@ export default function BusinessOwnerSwitcher({ compact = false }) {
               className="form-input"
               value={form.name}
               onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
-              placeholder="e.g. Ghausia Collection"
+              placeholder="e.g. Style Collection"
               autoFocus
             />
           </FormGroup>

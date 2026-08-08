@@ -60,7 +60,7 @@ function drawSummaryStrip(doc, y, pageW, receivable, payable) {
   doc.setTextColor(...C.slate);
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7);
-  doc.text('Personal Khata · Ghausia', pageW / 2, y + 13, { align: 'center' });
+  doc.text('Personal Khata', pageW / 2, y + 13, { align: 'center' });
 }
 
 function drawFooterStrip(pdf, tagline) {
@@ -140,7 +140,7 @@ export function buildPersonalKhataSummaryPdf(contacts, entries) {
     },
     margin: { left: 12, right: 12, bottom: 10 },
     didDrawPage: () => {
-      drawFooterStrip(doc, 'Ghausia Textile Manager · Personal Khata');
+      drawFooterStrip(doc, 'Textile Manager · Personal Khata');
     },
   });
 
@@ -227,7 +227,7 @@ export function buildContactLedgerPdf(contact, entries) {
     },
     margin: { left: 12, right: 12, bottom: 10 },
     didDrawPage: () => {
-      drawFooterStrip(doc, `Ledger · ${String(contact.name || '').slice(0, 35)} · Ghausia`);
+      drawFooterStrip(doc, `Ledger · ${String(contact.name || '').slice(0, 35)}`);
     },
   });
 

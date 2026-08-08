@@ -241,7 +241,7 @@ export default function ReviewLots() {
         await Swal.fire({
           icon: 'warning',
           title: 'Enter a valid amount',
-          text: 'Set the Ghausia / owner bill amount (0 or greater).',
+          text: 'Set the owner bill amount (0 or greater).',
         });
         return;
       }
@@ -461,7 +461,7 @@ export default function ReviewLots() {
                           </div>
                         ) : hasOwnerReceivedForLot(l, reportingPayments) ? (
                           <div style={{ fontSize: 11, color: 'var(--primary-light, #0369a1)', marginTop: 6 }}>
-                            Owner payment is linked to this lot — choose how Ghausia bill should
+                            Owner payment is linked to this lot — choose how Owner bill should
                             follow.
                           </div>
                         ) : null}
@@ -643,7 +643,7 @@ export default function ReviewLots() {
                     lineHeight: 1.5,
                   }}
                 >
-                  This lot needs a billing choice for the <strong>owner / Ghausia</strong> side
+                  This lot needs a billing choice for the <strong>Business Owner</strong> side
                   {showDelta
                     ? ' because the party changed the ledger amount while awaiting review'
                     : ''}
@@ -666,7 +666,7 @@ export default function ReviewLots() {
                     {partyBill.toLocaleString()}
                   </div>
                   <div>
-                    <strong>Current Ghausia bill on lot:</strong> ₨{ghausia.toLocaleString()}
+                    <strong>Current Owner bill on lot:</strong> ₨{ghausia.toLocaleString()}
                   </div>
                   {showDelta && pr ? (
                     <div style={{ marginTop: 6 }}>
@@ -688,7 +688,7 @@ export default function ReviewLots() {
                     <strong>Note:</strong> “Owner billed for party increase only” is shown only when
                     a <strong>Received</strong> payment from the owner is already linked to this lot
                     (business already settled for this lot number) and the party increased the
-                    ledger. Otherwise use match, keep, or <strong>set custom Ghausia bill</strong>.
+                    ledger. Otherwise use match, keep, or <strong>set custom owner bill</strong>.
                   </p>
                 ) : null}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -708,7 +708,7 @@ export default function ReviewLots() {
                       onChange={() => setOwnerBillingChoice('sync_party')}
                     />
                     <span>
-                      <strong>Match Ghausia bill to party ledger</strong> — set the lot&apos;s bill
+                      <strong>Match Owner bill to party ledger</strong> — set the lot&apos;s bill
                       to ₨{partyBill.toLocaleString()} (full party amount drives owner billing).
                     </span>
                   </label>
@@ -728,7 +728,7 @@ export default function ReviewLots() {
                       onChange={() => setOwnerBillingChoice('keep_ghausia')}
                     />
                     <span>
-                      <strong>Keep current Ghausia bill</strong> — leave the lot bill at ₨
+                      <strong>Keep current Owner bill</strong> — leave the lot bill at ₨
                       {ghausia.toLocaleString()} (party ledger still stores the party figure).
                     </span>
                   </label>
@@ -757,7 +757,7 @@ export default function ReviewLots() {
                         onChange={() => setOwnerBillingChoice('custom_ghausia')}
                       />
                       <span>
-                        <strong>Set custom Ghausia / owner bill</strong> — choose any amount to bill
+                        <strong>Set custom owner bill</strong> — choose any amount to bill
                         the business (owner) side. Use when the party changed their ledger and you
                         need a different owner figure than &quot;match party&quot; or &quot;keep
                         current&quot;.
@@ -774,7 +774,7 @@ export default function ReviewLots() {
                             marginBottom: 6,
                           }}
                         >
-                          Owner / Ghausia bill (₨)
+                          Owner bill (₨)
                         </span>
                         <input
                           type="number"
@@ -817,7 +817,7 @@ export default function ReviewLots() {
                         onChange={() => setOwnerBillingChoice('delta_only')}
                       />
                       <span>
-                        <strong>Owner billed for party increase only</strong> — set the Ghausia bill
+                        <strong>Owner billed for party increase only</strong> — set the owner bill
                         to ₨{revisionIncrease.toLocaleString()} (only the positive change since the
                         party&apos;s previous figure). Use this when the owner was already billed
                         for the earlier amount.

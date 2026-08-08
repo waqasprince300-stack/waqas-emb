@@ -17,7 +17,7 @@ export default function AuthCard({
   brandHomeAriaLabel,
   brandMarkLetter = 'G',
 }) {
-  const kicker = brandKicker ?? 'Ghausia Textile Manager';
+  const kicker = brandKicker ?? 'Textile Manager';
 
   return (
     <div className={`auth-page${brandLogoSrc ? ' auth-page--seam-grace' : ''}`}>
@@ -62,7 +62,7 @@ export default function AuthCard({
             </Link>
           ) : (
             <Link className="auth-home-link" to="/login">
-              Ghausia
+              Business
             </Link>
           )}
           <div className="auth-card-header">

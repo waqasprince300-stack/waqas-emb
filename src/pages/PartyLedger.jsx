@@ -1100,11 +1100,11 @@ export default function PartyLedger() {
           icon: 'warning',
           html: `
             <div style="text-align:left;font-size:14px;line-height:1.6">
-              <div><strong>Ghausia amount:</strong> ₨${ghausiaAmount.toLocaleString()}</div>
+              <div><strong>Owner amount:</strong> ₨${ghausiaAmount.toLocaleString()}</div>
               <div><strong>Current party ledger amount:</strong> ₨${previousLedgerAmount.toLocaleString()}</div>
               <div><strong>Updated party ledger amount:</strong> ₨${nextLedgerAmount.toLocaleString()}</div>
               <div><strong>Difference:</strong> ₨${difference.toLocaleString()}</div>
-              <div style="margin-top:10px;color:var(--warning, #92400e)">Only the party ledger is updated. The business (Ghausia) bill on the lot is <strong>not</strong> changed — edit it in the collection workspace or when reviewing completion so the owner sees the correct amount.</div>
+              <div style="margin-top:10px;color:var(--warning, #92400e)">Only the party ledger is updated. The business (owner) bill on the lot is <strong>not</strong> changed — edit it in the collection workspace or when reviewing completion so the owner sees the correct amount.</div>
               <div style="margin-top:8px;color:var(--text-muted, #64748b);font-size:12px">No payment transaction will be created automatically.</div>
             </div>
           `,
@@ -2666,7 +2666,7 @@ export default function PartyLedger() {
               </div>
               <div>
                 <span style={{ color: 'var(--text-muted)' }}>
-                  {isParty ? 'Business order status: ' : 'Ghausia Status: '}
+                  {isParty ? 'Business order status: ' : 'Owner Status: '}
                 </span>
                 <StatusBadge
                   status={toTitleCase(editingLot.status)}
@@ -3343,7 +3343,7 @@ export default function PartyLedger() {
                   </div>
                 ) : null}
                 <div>
-                  <span style={{ color: 'var(--text-muted)' }}>Current owner (Ghausia) bill: </span>
+                  <span style={{ color: 'var(--text-muted)' }}>Current owner bill: </span>
                   ₨{ownerBill.toLocaleString()}
                 </div>
                 <div>

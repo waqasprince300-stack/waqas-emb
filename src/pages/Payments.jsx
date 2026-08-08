@@ -7,6 +7,7 @@ import { Modal, FormGroup, EmptyState, SearchBar } from '../components/UI';
 import Loader from '../components/Loader';
 import LoaderDashboard from '../components/LoaderDashboard';
 import ImageUploader from '../components/ImageUploader';
+import OwnerLedgerModal from '../components/ledger/OwnerLedgerModal';
 import apiService from '../services/api';
 import { receiptPreviewKind } from '../components/receipt/ReceiptThumb';
 import {
@@ -233,6 +234,7 @@ export default function Payments() {
   const { isAdmin, isParty, user } = useAuth();
   const PAGE_SIZE = 10;
   const [modal, setModal] = useState(false);
+  const [showOwnerLedger, setShowOwnerLedger] = useState(false);
   const [typeFilter, setTypeFilter] = useState('All');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -745,7 +747,7 @@ export default function Payments() {
   }
 
   return (
-    <div>
+    <div style={{ paddingBottom: 100 }}>
       <div className="page-header">
         <div>
           <div className="page-title">{isParty ? 'My Payments' : 'Payments'}</div>
@@ -1218,22 +1220,33 @@ export default function Payments() {
           </>
         )}
         {isAdmin && businessOwners.length > 0 && (
-          <select
-            className="form-select pl-toolbar-filter pl-toolbar-filter--owner"
-            value={ownerNameFilter}
-            onChange={(e) => setOwnerNameFilter(e.target.value)}
-            aria-label="Filter by owner name"
-          >
-            <option value="All">All owners</option>
-            {businessOwnersSorted.map((o) => {
-              const id = String(o.id ?? o._id);
-              return (
-                <option key={id} value={id}>
-                  {businessOwnerDisplayName(o)}
-                </option>
-              );
-            })}
-          </select>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <select
+              className="form-select pl-toolbar-filter pl-toolbar-filter--owner"
+              value={ownerNameFilter}
+              onChange={(e) => setOwnerNameFilter(e.target.value)}
+              aria-label="Filter by owner name"
+            >
+              <option value="All">All owners</option>
+              {businessOwnersSorted.map((o) => {
+                const id = String(o.id ?? o._id);
+                return (
+                  <option key={id} value={id}>
+                    {businessOwnerDisplayName(o)}
+                  </option>
+                );
+              })}
+            </select>
+            {ownerNameFilter !== 'All' && (
+              <button
+                className="btn btn-secondary hide-print"
+                style={{ fontSize: 13, padding: '4px 12px', whiteSpace: 'nowrap', border: '1px solid var(--border)', background: 'var(--card-bg)' }}
+                onClick={() => setShowOwnerLedger(true)}
+              >
+                View Ledger
+              </button>
+            )}
+          </div>
         )}
         <span className="pl-toolbar-meta" style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
           {filtered.length} records
@@ -1927,7 +1940,7 @@ export default function Payments() {
                   }}
                 >
                   {form.type === 'Paid'
-                    ? 'Default is the Party Ledger bill for this lot (not the Ghausia/owner figure) — you can change it before saving.'
+                    ? 'Default is the Party Ledger bill for this lot (not the owner figure) — you can change it before saving.'
                     : 'Default is the bill amount on the lot — you can change it before saving.'}
                 </span>
               )}
@@ -2014,6 +2027,15 @@ export default function Payments() {
             </div>
           </div>
         </Modal>
+      )}
+      {showOwnerLedger && ownerNameFilter !== 'All' && (
+        <OwnerLedgerModal
+          ownerId={ownerNameFilter}
+          ownerName={businessOwnerDisplayName(businessOwners.find(o => String(o.id ?? o._id) === String(ownerNameFilter)))}
+          payments={reportingPayments}
+          lots={reportingLots}
+          onClose={() => setShowOwnerLedger(false)}
+        />
       )}
     </div>
   );

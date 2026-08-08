@@ -357,7 +357,7 @@ export default function Dashboard() {
           <div className="stat-label">No workspaces yet</div>
           <p style={{ margin: '12px 0', color: 'var(--text-secondary, #64748b)' }}>
             Open <strong>Work Spaces</strong> and use <strong>+ New workspace</strong> to create
-            your Ghausia collection (or any name you use for production).
+            your business collection (or any name you use for production).
           </p>
           <Link
             className="btn btn-primary"

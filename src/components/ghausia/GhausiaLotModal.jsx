@@ -17,7 +17,7 @@ export default function GhausiaLotModal({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title={isEditing ? 'Edit Ghausia Lot' : 'Add New Ghausia Lot'}
+      title={isEditing ? 'Edit Lot' : 'Add New Lot'}
     >
       <form
         onSubmit={(e) => {
