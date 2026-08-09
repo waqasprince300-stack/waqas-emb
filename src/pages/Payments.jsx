@@ -14,6 +14,8 @@ import {
   latestDateFrom,
   compareRowsByUpdatedNewestFirst,
   formatDisplayDate,
+  DateRangeSelect,
+  isWithinDateRange,
 } from '../utils/dateFilters';
 import { getAdminLedgerOrBusinessBill, getPartyLedgerBillNumeric } from '../utils/partyBillPrivacy';
 import {
@@ -87,13 +89,16 @@ function partyLedgerBillForLot(lot, partyEditsMap) {
 /** Lot number + resolved design No for linked payments / synthetic bills */
 function resolveLinkedLotDesignDisplay(payment, lotsPool) {
   const linked = String(payment?.linkedLot || '').trim();
-  if (!linked) return { lotLabel: '', designLabel: '' };
+  if (!linked) return { lotLabel: '', designLabel: '', isCombinedDupatta: false };
   if (payment._synthetic && payment.linkedDesignNo) {
-    return { lotLabel: linked, designLabel: String(payment.linkedDesignNo).trim() };
+    const lot = findLotByLinkedValue(lotsPool, linked);
+    const isCombinedDupatta = Boolean(lot && lot.suitComponent === 'dupatta' && (lot.billAmount === 0 || !lot.billAmount));
+    return { lotLabel: linked, designLabel: String(payment.linkedDesignNo).trim(), isCombinedDupatta };
   }
   const lot = findLotByLinkedValue(lotsPool, linked);
   const design = lot?.designNo != null ? String(lot.designNo).trim() : '';
-  return { lotLabel: linked, designLabel: design };
+  const isCombinedDupatta = Boolean(lot && lot.suitComponent === 'dupatta' && (lot.billAmount === 0 || !lot.billAmount));
+  return { lotLabel: linked, designLabel: design, isCombinedDupatta };
 }
 
 function businessOwnerDisplayName(owner) {
@@ -236,10 +241,8 @@ export default function Payments() {
   const [modal, setModal] = useState(false);
   const [showOwnerLedger, setShowOwnerLedger] = useState(false);
   const [typeFilter, setTypeFilter] = useState('All');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
-  const [startFocused, setStartFocused] = useState(false);
-  const [endFocused, setEndFocused] = useState(false);
+  const [dateRange, setDateRange] = useState('all');
+  const [customDateRange, setCustomDateRange] = useState({ start: '', end: '' });
   const [ownerNameFilter, setOwnerNameFilter] = useState('All');
   const [search, setSearch] = useState('');
   const [form, setForm] = useState({
@@ -409,22 +412,8 @@ export default function Payments() {
         if (isAdmin && ownerNameFilter !== 'All') {
           if (paymentBusinessOwnerId(p) !== ownerNameFilter) return false;
         }
-
-        if (isParty && (startDate || endDate)) {
-          const rowDate = p.date ? new Date(p.date) : null;
-          if (rowDate) {
-            rowDate.setHours(0, 0, 0, 0);
-            if (startDate) {
-              const sDate = new Date(startDate);
-              sDate.setHours(0, 0, 0, 0);
-              if (rowDate < sDate) return false;
-            }
-            if (endDate) {
-              const eDate = new Date(endDate);
-              eDate.setHours(23, 59, 59, 999);
-              if (rowDate > eDate) return false;
-            }
-          }
+        if (dateRange !== 'all') {
+          if (!isWithinDateRange(p.date, dateRange, customDateRange)) return false;
         }
 
         if (searchTerm) {
@@ -446,7 +435,7 @@ export default function Payments() {
         }
         return true;
       }),
-    [combinedRowsWithBalance, typeFilter, ownerNameFilter, isAdmin, isParty, searchTerm, lotsLookupForLinks, startDate, endDate]
+    [combinedRowsWithBalance, typeFilter, ownerNameFilter, isAdmin, isParty, searchTerm, lotsLookupForLinks, dateRange, customDateRange]
   );
   const sortedFiltered = useMemo(
     () => [...filtered].sort((a, b) => compareRowsByUpdatedNewestFirst(a, b, 'payment')),
@@ -459,7 +448,7 @@ export default function Payments() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [typeFilter, ownerNameFilter, searchTerm, startDate, endDate]);
+  }, [typeFilter, ownerNameFilter, searchTerm, dateRange, customDateRange]);
 
   useEffect(() => {
     if (currentPage > totalPages) {
@@ -959,7 +948,7 @@ export default function Payments() {
                   {c.icon && !c.isCount && (
                     <span style={{ fontSize: 18, fontWeight: 700, color: c.color }}>{c.icon}</span>
                   )}
-                  <span style={{ fontSize: 22, fontWeight: 700, color: c.color }}>
+                  <span style={{ fontSize: 'clamp(12px, 4vw, 22px)', fontWeight: 700, color: c.color, whiteSpace: 'nowrap', letterSpacing: '-0.02em' }}>
                     {c.isCount ? c.value : `₨${Number(c.value).toLocaleString()}`}
                   </span>
                 </div>
@@ -1039,7 +1028,7 @@ export default function Payments() {
                   {c.icon && !c.isCount && (
                     <span style={{ fontSize: 18, fontWeight: 700, color: c.color }}>{c.icon}</span>
                   )}
-                  <span style={{ fontSize: 22, fontWeight: 700, color: c.color }}>
+                  <span style={{ fontSize: 'clamp(12px, 4vw, 22px)', fontWeight: 700, color: c.color, whiteSpace: 'nowrap', letterSpacing: '-0.02em' }}>
                     {c.isCount ? c.value : `₨${c.value.toLocaleString()}`}
                   </span>
                 </div>
@@ -1059,116 +1048,6 @@ export default function Payments() {
         </div>
       )}
 
-      {/* Balance visual */}
-      {/* {visiblePayments.length > 0 && (
-        <div
-          style={{
-            background: "var(--card-bg, #fff)",
-            border: "1px solid var(--border)",
-            borderRadius: 12,
-            padding: "18px 22px",
-            marginBottom: 22,
-            boxShadow: "var(--shadow)",
-          }}
-        >
-          <div
-            style={{
-              fontSize: 13,
-              fontWeight: 600,
-              color: "var(--text-secondary)",
-              marginBottom: 12,
-            }}
-          >
-            Cash Flow Overview
-          </div>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 10,
-              marginBottom: 10,
-            }}
-          >
-            <div
-              style={{
-                width: 120,
-                fontSize: 13,
-                color: "var(--text-secondary)",
-              }}
-            >
-              Owner In
-            </div>
-            <div
-              style={{
-                flex: 1,
-                background: "var(--primary-bg, #f3f4f6)",
-                borderRadius: 6,
-                height: 16,
-                overflow: "hidden",
-              }}
-            >
-              <div
-                style={{
-                  width: `${ownerIn > 0 ? 100 : 0}%`,
-                  background: "var(--success, #15803d)",
-                  height: "100%",
-                  borderRadius: 6,
-                }}
-              />
-            </div>
-            <div
-              style={{
-                fontWeight: 700,
-                color: "var(--success, #15803d)",
-                minWidth: 80,
-                textAlign: "right",
-              }}
-            >
-              ₨{ownerIn.toLocaleString()}
-            </div>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div
-              style={{
-                width: 120,
-                fontSize: 13,
-                color: "var(--text-secondary)",
-              }}
-            >
-              Party Out
-            </div>
-            <div
-              style={{
-                flex: 1,
-                background: "var(--primary-bg, #f3f4f6)",
-                borderRadius: 6,
-                height: 16,
-                overflow: "hidden",
-              }}
-            >
-              <div
-                style={{
-                  width: `${ownerIn > 0 ? Math.min((_partyOut / ownerIn) * 100, 100) : 0}%`,
-                  background: 'var(--danger, #dc2626)',
-                  height: "100%",
-                  borderRadius: 6,
-                }}
-              />
-            </div>
-            <div
-              style={{
-                fontWeight: 700,
-                color: 'var(--danger, #dc2626)',
-                minWidth: 80,
-                textAlign: "right",
-              }}
-            >
-              ₨{_partyOut.toLocaleString()}
-            </div>
-          </div>
-        </div>
-      )} */}
-
       {/* Filter */}
       <div className={`toolbar pl-toolbar${isParty ? ' pl-toolbar--party-user' : ''}`}>
         <SearchBar
@@ -1186,30 +1065,16 @@ export default function Payments() {
           <option>Paid</option>
           <option value="Bill">{isParty ? 'Work bill' : 'Bill'}</option>
         </select>
+        <DateRangeSelect
+          value={dateRange}
+          onChange={setDateRange}
+          customStart={customDateRange.start}
+          customEnd={customDateRange.end}
+          onCustomChange={setCustomDateRange}
+          className="pl-toolbar-filter hide-print"
+        />
         {isParty && (
           <>
-            <input
-              type={(startDate || startFocused) ? 'date' : 'text'}
-              className="form-input pl-toolbar-filter hide-print"
-              style={{ width: 'auto', fontSize: 13 }}
-              placeholder="Start Date"
-              onFocus={() => setStartFocused(true)}
-              onBlur={() => setStartFocused(false)}
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-              title="Start Date"
-            />
-            <input
-              type={(endDate || endFocused) ? 'date' : 'text'}
-              className="form-input pl-toolbar-filter hide-print"
-              style={{ width: 'auto', fontSize: 13 }}
-              placeholder="End Date"
-              onFocus={() => setEndFocused(true)}
-              onBlur={() => setEndFocused(false)}
-              value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
-              title="End Date"
-            />
             <button
               className="btn btn-view-mode hide-print"
               onClick={() => window.print()}
@@ -1306,7 +1171,7 @@ export default function Payments() {
                         ? 'var(--success, #15803d)'
                         : 'var(--danger, #dc2626)';
 
-                  const { lotLabel, designLabel } = resolveLinkedLotDesignDisplay(
+                  const { lotLabel, designLabel, isCombinedDupatta } = resolveLinkedLotDesignDisplay(
                     p,
                     lotsLookupForLinks
                   );
@@ -1367,6 +1232,11 @@ export default function Payments() {
                                 Design: {designLabel}
                               </div>
                             ) : null}
+                            {!isParty && isCombinedDupatta && (
+                              <div style={{ fontSize: 11, color: 'var(--warning, #d97706)', marginTop: 2, fontWeight: 600 }}>
+                                This lot&apos;s bill is combined with the main lot
+                              </div>
+                            )}
                           </div>
                         ) : (
                           <span style={{ color: 'var(--text-muted)' }}>—</span>
@@ -1462,7 +1332,7 @@ export default function Payments() {
                   ? 'var(--success, #15803d)'
                   : 'var(--danger, #dc2626)';
 
-            const { lotLabel, designLabel } = resolveLinkedLotDesignDisplay(
+            const { lotLabel, designLabel, isCombinedDupatta } = resolveLinkedLotDesignDisplay(
               p,
               lotsLookupForLinks
             );
@@ -1531,7 +1401,12 @@ export default function Payments() {
                           display: 'inline-block',
                         }}
                       >
-                        Lot #{lotLabel} {designLabel ? `· Design: ${designLabel}` : ''}
+                        Lot #{lotLabel} {designLabel ? `— Design: ${designLabel}` : ''}
+                        {!isParty && isCombinedDupatta && (
+                          <div style={{ fontSize: 11, color: 'var(--warning, #d97706)', marginTop: 2, fontWeight: 600 }}>
+                            This lot&apos;s bill is combined with the main lot
+                          </div>
+                        )}
                       </div>
                     )}
                     {p.note && (

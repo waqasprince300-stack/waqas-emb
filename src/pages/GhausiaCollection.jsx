@@ -113,6 +113,7 @@ function LotForm({
   workspaceOwnerOptions,
   defaultNewLotOwnerId,
   onJumpToLinkedLot,
+  onSeparateBill,
 }) {
   const blank = {
     lotNumber: '',
@@ -803,14 +804,29 @@ function LotForm({
           </FormGroup>
         )}
         <FormGroup label="Bill Amount (₨)">
-          <input
-            className="form-input"
-            type="number"
-            min="0"
-            value={form.billAmount}
-            onChange={(e) => set('billAmount', e.target.value)}
-            placeholder="45000"
-          />
+          {initial && initial.suitComponent === 'dupatta' && Number(initial.billAmount || 0) === 0 ? (
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <div style={{ flex: 1, padding: '8px 12px', background: 'var(--card-bg)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text-muted)', fontSize: 13 }}>
+                Combined with main lot
+              </div>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={onSeparateBill}
+              >
+                Separate Bill
+              </button>
+            </div>
+          ) : (
+            <input
+              className="form-input"
+              type="number"
+              min="0"
+              value={form.billAmount}
+              onChange={(e) => set('billAmount', e.target.value)}
+              placeholder="45000"
+            />
+          )}
         </FormGroup>
         {/* <FormGroup label="Notes">
           <input className="form-input" value={form.notes} onChange={e => set('notes', e.target.value)} placeholder="Optional notes" />
@@ -855,9 +871,10 @@ function LotForm({
             <div
               style={{
                 padding: 16,
-                background: 'var(--primary-bg, #f8fafc)',
-                borderRadius: 8,
-                border: '1px solid var(--border, #e2e8f0)',
+                background: 'var(--dupatta-box-bg, rgba(168, 85, 247, 0.06))',
+                borderRadius: 12,
+                border: '1px solid var(--dupatta-box-border, rgba(168, 85, 247, 0.2))',
+                boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.02)',
                 transform: form.suitType === '3-piece' ? 'translateY(0)' : 'translateY(-10px)',
                 transition: 'transform 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
               }}
@@ -959,7 +976,7 @@ function LotForm({
                   borderRadius: '6px',
                   border: form.ownerBillingChoice === 'separate' ? '1px solid var(--success, #10b981)' : '1px solid var(--border, #e2e8f0)',
                   background: form.ownerBillingChoice === 'separate' ? 'var(--success-bg, #ecfdf5)' : 'var(--card-bg, #ffffff)',
-                  color: form.ownerBillingChoice === 'separate' ? '#065f46' : 'var(--text-muted, #64748b)',
+                  color: form.ownerBillingChoice === 'separate' ? 'var(--success, #10b981)' : 'var(--text-muted, #64748b)',
                   fontSize: '12px',
                   fontWeight: 600,
                   cursor: 'pointer',
@@ -1001,7 +1018,7 @@ function LotForm({
                   borderRadius: '6px',
                   border: form.ownerBillingChoice === 'combined' ? '1px solid var(--warning, #f59e0b)' : '1px solid var(--border, #e2e8f0)',
                   background: form.ownerBillingChoice === 'combined' ? 'var(--warning-bg, #fffbeb)' : 'var(--card-bg, #ffffff)',
-                  color: form.ownerBillingChoice === 'combined' ? 'var(--warning, #92400e)' : 'var(--text-muted, #64748b)',
+                  color: form.ownerBillingChoice === 'combined' ? 'var(--warning, #d97706)' : 'var(--text-muted, #64748b)',
                   fontSize: '12px',
                   fontWeight: 600,
                   cursor: 'pointer',
@@ -1204,8 +1221,8 @@ export default function GhausiaCollection() {
 
   const confirmCompleteBillModal = () => {
     const n = Number(completeBillInput);
-    if (completeBillInput === '' || Number.isNaN(n) || n <= 0) {
-      setCompleteBillError('Enter a valid amount greater than zero');
+    if (completeBillInput === '' || Number.isNaN(n) || n < 0) {
+      setCompleteBillError('Enter a valid amount (0 or greater)');
       return;
     }
     const resolve = completeBillResolveRef.current;
@@ -1218,12 +1235,13 @@ export default function GhausiaCollection() {
 
   const promptBillAmountForCompletion = (lot, options = {}) =>
     new Promise((resolve) => {
+      const isCombDup = lot.suitComponent === 'dupatta' && Number(lot.billAmount || 0) === 0;
       const effective = getAdminLedgerOrBusinessBill(lot, partyEdits[lot.id] || {});
       const ov = options.billAmountOverride;
       const rawBill =
         ov !== undefined && ov !== null ? Number(ov) : Number(effective || lot.billAmount || 0);
       completeBillResolveRef.current = resolve;
-      setCompleteBillInput(rawBill > 0 ? String(rawBill) : '');
+      setCompleteBillInput(isCombDup ? '0' : (rawBill > 0 ? String(rawBill) : ''));
       setCompleteBillError('');
       setCompleteBillModal({
         lot,
@@ -1532,6 +1550,17 @@ export default function GhausiaCollection() {
    * Party-facing figures stay on Party Ledger; this page’s owner tiles use the business-defined amount.
    */
   const getOwnerBillableAmount = (lot) => getBusinessBillAmount(lot);
+  const isCombinedDupatta = (l) => l.suitComponent === 'dupatta' && Number(l.billAmount || 0) === 0;
+  const renderOwnerBillableAmount = (l) => {
+    if (isCombinedDupatta(l)) {
+      return (
+        <span style={{ fontSize: 11, color: 'var(--warning, #d97706)', fontWeight: 600, background: 'var(--warning-bg, #fffbeb)', padding: '2px 8px', borderRadius: 12 }}>
+          Combined Bill
+        </span>
+      );
+    }
+    return `Rs${getOwnerBillableAmount(l).toLocaleString()}`;
+  };
   const billableTotal = billable.reduce((s, l) => s + getOwnerBillableAmount(l), 0);
 
   const billableFiltered = useMemo(() => {
@@ -1832,6 +1861,71 @@ export default function GhausiaCollection() {
     }
   };
 
+  const handleSeparateDupattaBill = async () => {
+    if (!editing || editing.suitComponent !== 'dupatta' || !editing.linkedLotId) return;
+    const mainLot = collectionLots.find(l => String(l.id || l._id) === String(editing.linkedLotId));
+    const mainBill = mainLot ? Number(mainLot.billAmount || 0) : 0;
+
+    const { value: formValues } = await Swal.fire({
+      title: 'Separate Dupatta Bill',
+      html: `
+        <div style="text-align: left; font-size: 14px; color: var(--text-secondary); margin-bottom: 12px;">
+          This Dupatta's bill is currently combined with the Main Lot.<br/>
+          Main Lot Bill: <strong>₨${mainBill.toLocaleString()}</strong>
+        </div>
+        <div style="margin-bottom: 12px; text-align: left;">
+          <label style="display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px;">New Dupatta Bill Amount</label>
+          <input id="swal-dup-bill" type="number" class="swal2-input" style="width: 100%; box-sizing: border-box; margin: 0;" placeholder="e.g. 500">
+        </div>
+        <div style="text-align: left;">
+          <label style="display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px;">New Main Lot Bill Amount</label>
+          <input id="swal-main-bill" type="number" class="swal2-input" style="width: 100%; box-sizing: border-box; margin: 0;" value="${mainBill}">
+          <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">(Adjust this to reduce the main lot's bill)</div>
+        </div>
+      `,
+      focusConfirm: false,
+      showCancelButton: true,
+      confirmButtonText: 'Save Changes',
+      preConfirm: () => {
+        const dup = document.getElementById('swal-dup-bill').value;
+        const main = document.getElementById('swal-main-bill').value;
+        if (!dup || Number(dup) <= 0) {
+          Swal.showValidationMessage('Enter a valid Dupatta bill amount');
+          return false;
+        }
+        return { dupAmt: Number(dup), mainAmt: Number(main) };
+      }
+    });
+
+    if (formValues) {
+      setLotSaving(true);
+      try {
+        await updateLot(editing.id || editing._id, { billAmount: formValues.dupAmt, totalAmount: formValues.dupAmt }, { businessOwnerId: lotBizId(editing) });
+        if (mainLot) {
+          await updateLot(mainLot.id || mainLot._id, { 
+            billAmount: formValues.mainAmt, 
+            totalAmount: formValues.mainAmt,
+            suitType: '3-piece',
+            ownerBillingChoice: 'separate',
+            dupattaDetails: { 
+              ...(mainLot.dupattaDetails || {}), 
+              partyId: editing.partyId || '',
+              partyName: editing.partyName || '',
+              billAmount: formValues.dupAmt 
+            }
+          }, { businessOwnerId: lotBizId(mainLot) });
+        }
+        setModal(null);
+        setEditing(null);
+        Swal.fire({ icon: 'success', title: 'Bill Separated', showConfirmButton: false, timer: 1500 });
+      } catch (e) {
+        Swal.fire('Error', 'Failed to separate bill', 'error');
+      } finally {
+        setLotSaving(false);
+      }
+    }
+  };
+
   const handlePartyChange = async (lotId, partyId) => {
     setInlineSummaryBusy(true);
     try {
@@ -1839,17 +1933,23 @@ export default function GhausiaCollection() {
       const biz = lot ? lotBizId(lot) : String(activeBusinessOwnerId || '').trim();
       const currentDate = new Date().toISOString().slice(0, 10);
       const selectedParty = parties.find((p) => p.id === partyId);
-      await updateLot(
-        lotId,
-        {
-          partyId: partyId || '',
-          partyName: selectedParty ? selectedParty.name : '',
-          status: partyId ? 'dispatched' : 'pending',
-          dispatchDate: partyId ? currentDate : '',
-        },
-        { businessOwnerId: biz }
-      );
-      if (partyId) {
+      
+      const currentStatus = lot?.status || 'pending';
+      const shouldUpdateStatus = currentStatus === 'pending' || currentStatus === 'dispatched';
+      
+      const payload = {
+        partyId: partyId || '',
+        partyName: selectedParty ? selectedParty.name : '',
+      };
+      
+      if (shouldUpdateStatus || !partyId) {
+        payload.status = partyId ? 'dispatched' : 'pending';
+        if (partyId) payload.dispatchDate = currentDate;
+      }
+      
+      await updateLot(lotId, payload, { businessOwnerId: biz });
+      
+      if (partyId && shouldUpdateStatus) {
         await updatePartyEdit(
           lotId,
           {
@@ -2341,7 +2441,7 @@ export default function GhausiaCollection() {
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
                       {partyEdits[l.id]?.amountChangeNote ? (
                         <div style={{ textAlign: 'right', color: 'var(--text-primary)' }}>
-                          <strong>₨{getOwnerBillableAmount(l).toLocaleString()}</strong>
+                          <strong>{renderOwnerBillableAmount(l)}</strong>
                           <div style={{ fontSize: 10, color: 'var(--warning)', marginTop: 2 }}>
                             Party ledger: Previous ₨
                             {Number(
@@ -2355,7 +2455,7 @@ export default function GhausiaCollection() {
                         </div>
                       ) : (
                         <strong style={{ color: 'var(--text-primary)' }}>
-                          ₨{getOwnerBillableAmount(l).toLocaleString()}
+                          {renderOwnerBillableAmount(l)}
                         </strong>
                       )}
                       <button
@@ -2755,7 +2855,7 @@ export default function GhausiaCollection() {
                       )}
                     </td>
                     <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--primary, #1e40af)' }}>
-                      ₨{getOwnerBillableAmount(l).toLocaleString()}
+                      {renderOwnerBillableAmount(l)}
                     </td>
                     <td>
                       <div style={{ display: 'flex', gap: 6 }}>
@@ -2835,7 +2935,7 @@ export default function GhausiaCollection() {
 
                 <div className="lot-tile-footer">
                   <span className="lot-tile-price">
-                    ₨{getOwnerBillableAmount(l).toLocaleString()}
+                    {renderOwnerBillableAmount(l)}
                   </span>
                   <div className="lot-tile-actions">
                     <button
@@ -2927,7 +3027,7 @@ export default function GhausiaCollection() {
                   <div className="gh-mob-bill-row">
                     <span style={{ fontSize: 13, color: 'var(--text-muted, #64748b)' }}>Bill Amount:</span>
                     <strong style={{ fontSize: 15, color: 'var(--primary, #1e40af)' }}>
-                      ₨{getOwnerBillableAmount(l).toLocaleString()}
+                      {renderOwnerBillableAmount(l)}
                     </strong>
                   </div>
                 </div>
@@ -2999,6 +3099,7 @@ export default function GhausiaCollection() {
                 setEditing(null);
               }
             }}
+            onSeparateBill={handleSeparateDupattaBill}
             parties={parties}
             saving={lotSaving}
             pickWorkspaceForNewLot={viewAllWorkspaces && !editing}
@@ -3050,7 +3151,18 @@ export default function GhausiaCollection() {
                 </>
               }
             >
-              {fromBillable ? (
+              {isCombinedDupatta(lot) ? (
+                <p
+                  style={{
+                    textAlign: 'left',
+                    fontSize: 13,
+                    margin: '0 0 12px',
+                    color: 'var(--text-secondary)',
+                  }}
+                >
+                  This lot&apos;s bill is <strong style={{ color: 'var(--warning, #d97706)' }}>combined</strong> with the main lot. You can complete and settle it directly (₨0 bill).
+                </p>
+              ) : fromBillable ? (
                 <p
                   style={{
                     textAlign: 'left',
@@ -3122,28 +3234,30 @@ export default function GhausiaCollection() {
                 <strong>Party:</strong> {partyLabel}
                 <br />
               </div>
-              <FormGroup
-                label={rawBill > 0 ? 'Bill amount (₨) — edit if needed' : 'Amount received (₨) *'}
-              >
-                <input
-                  className={`form-input${completeBillError ? ' input-error' : ''}`}
-                  type="number"
-                  min={1}
-                  step={1}
-                  value={completeBillInput}
-                  onChange={(e) => {
-                    setCompleteBillInput(e.target.value);
-                    setCompleteBillError('');
-                  }}
-                  placeholder={rawBill > 0 ? `Default ₨${amountBill}` : 'Amount (₨)'}
-                  autoFocus
-                />
-                {completeBillError && (
-                  <span style={{ color: 'var(--danger, #dc2626)', fontSize: 11, marginTop: 3, display: 'block' }}>
-                    {completeBillError}
-                  </span>
-                )}
-              </FormGroup>
+              {!isCombinedDupatta(lot) && (
+                <FormGroup
+                  label={rawBill > 0 ? 'Bill amount (₨) — edit if needed' : 'Amount received (₨) *'}
+                >
+                  <input
+                    className={`form-input${completeBillError ? ' input-error' : ''}`}
+                    type="number"
+                    min={0}
+                    step={1}
+                    value={completeBillInput}
+                    onChange={(e) => {
+                      setCompleteBillInput(e.target.value);
+                      setCompleteBillError('');
+                    }}
+                    placeholder={rawBill > 0 ? `Default ₨${amountBill}` : 'Amount (₨)'}
+                    autoFocus
+                  />
+                  {completeBillError && (
+                    <span style={{ color: 'var(--danger, #dc2626)', fontSize: 11, marginTop: 3, display: 'block' }}>
+                      {completeBillError}
+                    </span>
+                  )}
+                </FormGroup>
+              )}
               <strong>Owner Received:</strong> ₨{ownerReceivedNet.toLocaleString()}
             </Modal>
           );
