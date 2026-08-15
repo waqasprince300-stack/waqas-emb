@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Modal, FormGroup } from '../UI';
-import { latestDateFrom, formatDisplayDateTime, DateRangeSelect, isWithinDateRange } from '../../utils/dateFilters';
+import { latestDateFrom, formatDisplayDateTime, DateRangeSelect, isWithinDateRange, parseDateValue } from '../../utils/dateFilters';
 import { getBusinessBillAmount } from '../../utils/partyBillPrivacy';
 import { normalizedBusinessOwnerId } from '../../utils/businessWorkspace';
 import apiService from '../../services/api';
@@ -152,9 +152,14 @@ export default function OwnerLedgerModal({ ownerId, ownerName, payments, lots, o
   });
 
   ownerPayments.forEach((p) => {
-    const when = p.type === 'Tally' 
-      ? latestDateFrom(p, ['date']) || latestDateFrom(p, ['createdAt'])
-      : latestDateFrom(p, ['updatedAt', 'date']);
+    let when = parseDateValue(p.date) || parseDateValue(p.createdAt);
+    if (when && String(p.date || '').length === 10) {
+      // Inject the actual creation time so it doesn't show 12:00 AM and sorts properly
+      const created = parseDateValue(p.createdAt);
+      if (created) {
+        when.setHours(created.getHours(), created.getMinutes(), created.getSeconds());
+      }
+    }
     const sortMs = when ? when.getTime() : 0;
     const amt = Number(p.amount || 0);
     const isReceived = p.type === 'Received'; // Received from owner

@@ -92,6 +92,13 @@ function hasPositiveBillAmount(lot) {
 
 const _newDate = new Date().toISOString().split('T')[0];
 
+function checkIsCombinedDupatta(l) {
+  if (!l || l.suitComponent !== 'dupatta') return false;
+  if (l.ownerBillingChoice === 'combined') return true;
+  if (l.ownerBillingChoice === 'separate') return false;
+  return Number(l.billAmount || 0) === 0;
+}
+
 function resolveItemTypeFields(raw) {
   const t = String(raw?.itemType || raw?.fabric || '').trim();
   if (!t || BASE_FABRICS.includes(t)) {
@@ -804,7 +811,7 @@ function LotForm({
           </FormGroup>
         )}
         <FormGroup label="Bill Amount (₨)">
-          {initial && initial.suitComponent === 'dupatta' && Number(initial.billAmount || 0) === 0 ? (
+          {checkIsCombinedDupatta(initial) ? (
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               <div style={{ flex: 1, padding: '8px 12px', background: 'var(--card-bg)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text-muted)', fontSize: 13 }}>
                 Combined with main lot
@@ -1235,7 +1242,7 @@ export default function GhausiaCollection() {
 
   const promptBillAmountForCompletion = (lot, options = {}) =>
     new Promise((resolve) => {
-      const isCombDup = lot.suitComponent === 'dupatta' && Number(lot.billAmount || 0) === 0;
+      const isCombDup = checkIsCombinedDupatta(lot);
       const effective = getAdminLedgerOrBusinessBill(lot, partyEdits[lot.id] || {});
       const ov = options.billAmountOverride;
       const rawBill =
@@ -1440,9 +1447,6 @@ export default function GhausiaCollection() {
         lotLabel.includes(q) ||
         String(l.designNo || '')
           .toLowerCase()
-          .includes(q) ||
-        String(l.description || '')
-          .toLowerCase()
           .includes(q);
       if (!matchQ) return false;
       if (partyFilter !== 'All' && String(l.partyId || '') !== String(partyFilter)) return false;
@@ -1550,7 +1554,7 @@ export default function GhausiaCollection() {
    * Party-facing figures stay on Party Ledger; this page’s owner tiles use the business-defined amount.
    */
   const getOwnerBillableAmount = (lot) => getBusinessBillAmount(lot);
-  const isCombinedDupatta = (l) => l.suitComponent === 'dupatta' && Number(l.billAmount || 0) === 0;
+  const isCombinedDupatta = checkIsCombinedDupatta;
   const renderOwnerBillableAmount = (l) => {
     if (isCombinedDupatta(l)) {
       return (
@@ -2544,7 +2548,7 @@ export default function GhausiaCollection() {
         <SearchBar
           value={search}
           onChange={setSearch}
-          placeholder="Search lot no., design, description..."
+          placeholder="Search lot no. or design..."
         />
         <select
           className="form-select pl-toolbar-filter pl-toolbar-filter--party"

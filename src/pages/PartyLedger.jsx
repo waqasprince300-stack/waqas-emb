@@ -397,9 +397,6 @@ export default function PartyLedger() {
         lotLabel.includes(q) ||
         String(l.designNo || '')
           .toLowerCase()
-          .includes(q) ||
-        String(l.description || '')
-          .toLowerCase()
           .includes(q);
       const matchP = partyFilter === 'All' || samePartyId(l.partyId, partyFilter);
       const displayStatus = getDisplayStatus(l);
@@ -433,7 +430,6 @@ export default function PartyLedger() {
         if (lot.lotNo && String(lot.lotNo).toLowerCase().includes(q)) match = true;
         if (lot.lotNumber && String(lot.lotNumber).toLowerCase().includes(q)) match = true;
         if (lot.designNo && String(lot.designNo).toLowerCase().includes(q)) match = true;
-        if (lot.description && String(lot.description).toLowerCase().includes(q)) match = true;
         if (!match) return false;
       }
       return true;
@@ -1647,7 +1643,9 @@ export default function PartyLedger() {
                 }`,
               value: `₨${(partyBalanceInfo?.completedNet ?? 0).toLocaleString()}`,
               color: `${(partyBalanceInfo?.completedNet ?? 0) >= 0 ? 'var(--success, #0f766e)' : 'var(--danger, #dc2626)'}`,
-              sub: isParty ? 'Your ledger (received - completed bill)' : undefined,
+              sub: isParty 
+                ? 'Your ledger (received - completed bill)' 
+                : '(Calculated after deducting total advances from total payable)',
             },
             {
               key: 'overall-balance',
@@ -1771,7 +1769,7 @@ export default function PartyLedger() {
 
       {/* Toolbar */}
       <div className={`toolbar pl-toolbar${isParty ? ' pl-toolbar--party-user' : ''}`}>
-        <SearchBar value={search} onChange={setSearch} placeholder="Search lot no., design..." />
+        <SearchBar value={search} onChange={setSearch} placeholder="Search lot no. or design..." />
         {isAdmin && (
           <select
             className="form-select pl-toolbar-filter pl-toolbar-filter--workspace"

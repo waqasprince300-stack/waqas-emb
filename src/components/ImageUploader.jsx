@@ -234,7 +234,6 @@ export default function ImageUploader({
                 height: thumbSize,
                 borderRadius: 10,
                 border: '1px solid #E5E7EB',
-                overflow: 'hidden',
                 background: 'var(--primary-bg, #f8fafc)',
                 boxShadow: '0 1px 2px rgba(15,23,42,0.06)',
               }}
@@ -251,6 +250,8 @@ export default function ImageUploader({
                   width: '100%',
                   height: '100%',
                   lineHeight: 0,
+                  overflow: 'hidden',
+                  borderRadius: 9,
                 }}
               >
                 {kind === 'pdf' ? (
@@ -285,21 +286,26 @@ export default function ImageUploader({
                   title="Remove picture"
                   style={{
                     position: 'absolute',
-                    top: 2,
-                    right: 2,
-                    width: 20,
-                    height: 20,
+                    top: -4,
+                    right: -4,
+                    width: 24,
+                    height: 24,
                     borderRadius: '50%',
-                    border: 'none',
-                    background: 'rgba(17,24,39,0.75)',
-                    color: 'var(--card-bg, #ffffff)',
-                    fontSize: 13,
-                    lineHeight: '20px',
+                    border: '2px solid var(--card-bg, #ffffff)',
+                    background: 'var(--danger, #dc2626)',
+                    color: '#ffffff',
+                    fontSize: 16,
+                    lineHeight: '1',
                     cursor: 'pointer',
                     padding: 0,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    zIndex: 10,
+                    boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
                   }}
                 >
-                  ×
+                  &times;
                 </button>
               )}
             </div>

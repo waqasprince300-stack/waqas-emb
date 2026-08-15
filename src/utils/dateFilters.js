@@ -137,8 +137,20 @@ export const latestDateFrom = (item, keys) => {
   return latest;
 };
 
-/** Millis for sorting tables: updatedAt → createdAt → kind-specific fallbacks. */
 export function rowRecencyMs(row, kind) {
+  if (kind === 'payment') {
+    const dateObj = parseDateValue(row?.date);
+    if (dateObj) {
+      if (String(row?.date || '').length === 10) {
+        const created = parseDateValue(row?.createdAt);
+        if (created) {
+          dateObj.setHours(created.getHours(), created.getMinutes(), created.getSeconds());
+        }
+      }
+      return dateObj.getTime();
+    }
+  }
+
   const u = parseDateValue(row?.updatedAt)?.getTime();
   if (u != null && !Number.isNaN(u)) return u;
   const c = parseDateValue(row?.createdAt)?.getTime();
@@ -151,10 +163,6 @@ export function rowRecencyMs(row, kind) {
       'receivedDate',
     ]);
     return t ? t.getTime() : 0;
-  }
-  if (kind === 'payment') {
-    const d = parseDateValue(row?.date)?.getTime();
-    return d != null && !Number.isNaN(d) ? d : 0;
   }
   return 0;
 }

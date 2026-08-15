@@ -731,7 +731,8 @@ export default function Dashboard() {
                             </Pie>
                             <RechartsTooltip
                               formatter={(value, name, props) => [value + ' Lots (' + (hideAmounts ? '****' : '₨' + props.payload.revenue.toLocaleString()) + ')', name]}
-                              contentStyle={{ borderRadius: 8, border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+                              contentStyle={{ borderRadius: 8, border: '1px solid var(--border)', background: 'var(--card-bg)', color: 'var(--text-primary)', boxShadow: 'var(--shadow-md)' }}
+                              itemStyle={{ color: 'var(--text-primary)' }}
                             />
                           </PieChart>
                         </ResponsiveContainer>
@@ -773,7 +774,8 @@ export default function Dashboard() {
                           tickFormatter={(value) => hideAmounts ? '***' : ((value / 1000).toFixed(0) + 'k')}
                         />
                         <RechartsTooltip
-                          contentStyle={{ borderRadius: 8, border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+                          contentStyle={{ borderRadius: 8, border: '1px solid var(--border)', background: 'var(--card-bg)', color: 'var(--text-primary)', boxShadow: 'var(--shadow-md)' }}
+                          itemStyle={{ color: 'var(--text-primary)' }}
                           formatter={(value) => [hideAmounts ? '****' : ('₨ ' + value.toLocaleString()), 'Revenue']}
                           labelStyle={{ color: 'var(--text-primary, #0f172a)', fontWeight: 600, marginBottom: 4 }}
                         />
