@@ -10,6 +10,9 @@ import { ThemeProvider } from './context/ThemeContext';
 import ThemeToggle from './components/ThemeToggle';
 import { usePushNotifications } from './hooks/usePushNotifications';
 import IosInstallPrompt from './components/IosInstallPrompt';
+import MarqueeBanner from './components/MarqueeBanner';
+import BroadcastModal from './components/BroadcastModal';
+import PartyMotivationBanner from './components/PartyMotivationBanner';
 
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const GhausiaCollection = lazy(() => import('./pages/GhausiaCollection'));
@@ -43,6 +46,8 @@ function PersonalKhataAccessibleRoute({ sidebarOpen, setSidebarOpen }) {
 
 function Layout({ children, sidebarOpen, setSidebarOpen }) {
   const location = useLocation();
+  const { user, isAdmin } = useAuth();
+  const [broadcastModalOpen, setBroadcastModalOpen] = useState(false);
 
   useEffect(() => {
     if (window.matchMedia('(max-width: 768px)').matches) {
@@ -101,12 +106,26 @@ function Layout({ children, sidebarOpen, setSidebarOpen }) {
         className="app-top-actions"
         style={{ position: 'fixed', top: 'max(12px, env(safe-area-inset-top, 12px))', right: 'max(16px, env(safe-area-inset-right, 16px))', zIndex: 120, display: 'flex', alignItems: 'center', gap: '12px' }}
       >
+        {isAdmin && (
+          <button 
+            type="button" 
+            className="btn btn-primary" 
+            onClick={() => setBroadcastModalOpen(true)}
+            title="Broadcast Message"
+            style={{ borderRadius: '20px', padding: '6px 14px' }}
+          >
+            📢 <span className="hide-mobile">Broadcast</span>
+          </button>
+        )}
         <ThemeToggle />
         <NotificationBell />
       </div>
 
+      <BroadcastModal isOpen={broadcastModalOpen} onClose={() => setBroadcastModalOpen(false)} />
+
       <main className={`app-main${isKhataRoute ? ' app-main--khata' : ''}`}>
         <div className="app-main-inner">
+          <PartyMotivationBanner />
           <Suspense
             fallback={
               <div
@@ -299,6 +318,7 @@ function AppRoutes() {
 
   return (
     <SuperAdminShell>
+      <MarqueeBanner />
       <RouteChangeRefresher />
       <BootstrapErrorBanner />
       <BackgroundRefreshIndicator />

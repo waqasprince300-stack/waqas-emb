@@ -140,15 +140,8 @@ export const latestDateFrom = (item, keys) => {
 export function rowRecencyMs(row, kind) {
   if (kind === 'payment') {
     const dateObj = parseDateValue(row?.date);
-    if (dateObj) {
-      if (String(row?.date || '').length === 10) {
-        const created = parseDateValue(row?.createdAt);
-        if (created) {
-          dateObj.setHours(created.getHours(), created.getMinutes(), created.getSeconds());
-        }
-      }
-      return dateObj.getTime();
-    }
+    if (dateObj) return dateObj.getTime();
+    return 0;
   }
 
   const u = parseDateValue(row?.updatedAt)?.getTime();
@@ -185,6 +178,22 @@ function fallbackIdCompare(a, b) {
 
 /** Newest first (tables). kind: 'lot' | 'payment' | 'user'. */
 export function compareRowsByUpdatedNewestFirst(a, b, kind) {
+  if (kind === 'payment') {
+    // Primary sort: Date (descending)
+    const dateA = String(a?.date || '').trim();
+    const dateB = String(b?.date || '').trim();
+    if (dateA !== dateB) {
+      return dateB.localeCompare(dateA);
+    }
+    // Secondary sort: Actual entry time (descending)
+    const createdA = parseDateValue(a?.createdAt)?.getTime() || 0;
+    const createdB = parseDateValue(b?.createdAt)?.getTime() || 0;
+    if (createdA !== createdB) {
+      return createdB - createdA;
+    }
+    return fallbackIdCompare(a, b);
+  }
+
   const d = rowRecencyMs(b, kind) - rowRecencyMs(a, kind);
   if (d !== 0) return d;
   return fallbackIdCompare(a, b);

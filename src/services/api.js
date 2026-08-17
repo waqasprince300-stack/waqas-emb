@@ -716,6 +716,31 @@ class ApiService {
   async markAllNotificationsRead() {
     return this.request('/notifications/read-all', { method: 'POST' });
   }
+
+  // Admin Broadcasts
+  async getActiveBroadcasts() {
+    return this.request('/notifications/active-broadcasts');
+  }
+
+  async createBroadcast(data) {
+    return this.request('/notifications/broadcast', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async stopBroadcast(id) {
+    return this.request(`/notifications/broadcast/${id}/stop`, { method: 'PUT' });
+  }
+
+  // Party Motivation Insights
+  async getPartyMotivation() {
+    return this.request('/notifications/party-motivation');
+  }
+
+  async getAllPartyMotivation() {
+    return this.request('/notifications/all-party-motivation');
+  }
 }
 
 export const apiService = new ApiService();

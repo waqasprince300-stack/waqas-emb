@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import {
   LineChart,
@@ -32,6 +32,7 @@ import {
 } from '../utils/paymentDisplay';
 import { partyFacingLotStatusLabel, lotStatusBadgeKey } from '../utils/partyFacingLabels';
 import { getAdminLedgerOrBusinessBill } from '../utils/partyBillPrivacy';
+import { apiService } from '../services/api';
 
 function lotBelongsToPartyUser(lot, partyId, partyName) {
   const pid = String(partyId || '').trim();
@@ -69,6 +70,7 @@ export default function Dashboard() {
   const [customEnd, setCustomEnd] = useState('');
   const [hideAmounts, setHideAmounts] = useState(false);
   const [alertDaysThreshold, setAlertDaysThreshold] = useState(7);
+  const [adminPartyMotivation, setAdminPartyMotivation] = useState(null);
   const customRange = useMemo(
     () => ({ start: customStart, end: customEnd }),
     [customStart, customEnd]
@@ -123,7 +125,7 @@ export default function Dashboard() {
     const by = (s) => scopedLots.filter((l) => l.status === s).length;
     const paidTotal = scopedPayments
       .filter((p) => p.type === 'Paid')
-      .reduce((s, p) => s + Number(p.amount || 0), 0);
+      .reduce((s, p) => s + (Number(p.amount) || 0), 0);
     const partyApprovedDone = by('received back') + by('completed');
     const partyNeedsAttention = by('pending approval') + by('rejected');
     const partyInProgressRough =
@@ -172,7 +174,7 @@ export default function Dashboard() {
   const paidToNonOwnerParties = useMemo(() => {
     return scopedPayments
       .filter((p) => p.type === 'Paid' && String(p.party || '').toLowerCase() !== 'owner')
-      .reduce((s, p) => s + Number(p.amount || 0), 0);
+      .reduce((s, p) => s + (Number(p.amount) || 0), 0);
   }, [scopedPayments]);
 
   const recentPayments = useMemo(
@@ -248,12 +250,12 @@ export default function Dashboard() {
       const d = new Date(dStr);
       const mLabel = d.toLocaleString('default', { month: 'short', year: '2-digit' });
       if (monthsMap[mLabel]) {
-        monthsMap[mLabel].revenue += Number(l.billAmount || 0);
+        monthsMap[mLabel].revenue += (Number(getAdminLedgerOrBusinessBill(l, reportingPartyEdits[l.id] || {})) || 0);
       }
     });
 
     return Object.values(monthsMap).sort((a, b) => a.sortKey - b.sortKey);
-  }, [scopedLots, isParty]);
+  }, [scopedLots, isParty, reportingPartyEdits]);
 
   // Month-over-month calculation for the "Completed Revenue" card
   const momGrowth = useMemo(() => {
@@ -270,7 +272,7 @@ export default function Dashboard() {
   const lotStats = useMemo(() => {
     return scopedLots.reduce((acc, l) => {
       acc.byStatus[l.status] = (acc.byStatus[l.status] || 0) + 1;
-      const bill = Number(l.billAmount || 0);
+      const bill = (Number(getAdminLedgerOrBusinessBill(l, reportingPartyEdits[l.id] || {})) || 0);
       acc.totalLotValue += bill;
       if (l.status === 'received back') {
         acc.billable.push(l);
@@ -287,7 +289,7 @@ export default function Dashboard() {
       completedTotal: 0,
       totalLotValue: 0
     });
-  }, [scopedLots]);
+  }, [scopedLots, reportingPartyEdits]);
 
 
   const partyStats = useMemo(() => parties
@@ -297,7 +299,7 @@ export default function Dashboard() {
         id: p.id,
         name: p.name,
         total: lots.length,
-        value: lots.reduce((s, l) => s + Number(getAdminLedgerOrBusinessBill(l, reportingPartyEdits[l.id] || {}) || 0), 0),
+        value: lots.reduce((s, l) => s + (Number(getAdminLedgerOrBusinessBill(l, reportingPartyEdits[l.id] || {})) || 0), 0),
         completed: lots.filter((l) => l.status === 'completed').length,
         pending: lots.filter((l) => l.status === 'pending').length,
       };
@@ -306,13 +308,23 @@ export default function Dashboard() {
 
   const topParties = useMemo(() => [...partyStats].sort((a, b) => b.value - a.value).slice(0, 3), [partyStats]);
 
+  // Fetch admin party performance insights
+  useEffect(() => {
+    if (!isAdmin || isParty) return;
+    let cancelled = false;
+    apiService.getAllPartyMotivation().then(data => {
+      if (!cancelled && Array.isArray(data)) setAdminPartyMotivation(data);
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [isAdmin, isParty]);
+
   const fabricStats = useMemo(() => {
     const fabricMap = {};
     scopedLots.forEach(l => {
       const fabric = String(l.itemType || l.fabric || l.customFabric || 'Unknown').trim() || 'Unknown';
       if (!fabricMap[fabric]) fabricMap[fabric] = { name: fabric, count: 0, revenue: 0 };
       fabricMap[fabric].count += 1;
-      fabricMap[fabric].revenue += Number(l.billAmount || 0);
+      fabricMap[fabric].revenue += (Number(getAdminLedgerOrBusinessBill(l, reportingPartyEdits[l.id] || {})) || 0);
     });
     const sorted = Object.values(fabricMap).sort((a, b) => b.count - a.count);
     // Show top 4, group remaining into "Others" so pie chart total always matches Total Lots
@@ -324,7 +336,7 @@ export default function Dashboard() {
       { name: 'Others', count: 0, revenue: 0 }
     );
     return [...top, others];
-  }, [scopedLots]);
+  }, [scopedLots, reportingPartyEdits]);
 
   if (initialDataLoading) {
     return (
@@ -407,7 +419,7 @@ export default function Dashboard() {
 
   const ownerIn = scopedPayments
     .filter((p) => p.type === 'Received' && String(p.party || '').toLowerCase() === 'owner')
-    .reduce((s, p) => s + Number(p.amount || 0), 0);
+    .reduce((s, p) => s + (Number(p.amount) || 0), 0);
   /** Cash movements shown on dashboard: owner receipts vs payouts to parties (excludes "owner" payees). */
   const netOwnerVsParties = ownerIn - paidToNonOwnerParties;
 
@@ -432,9 +444,9 @@ export default function Dashboard() {
     sub: 'With assigned lots',
   };
 
-  const formatRupee = (n) => `₨${Number(n || 0).toLocaleString()}`;
+  const formatRupee = (n) => `₨${(Number(n) || 0).toLocaleString()}`;
   const formatSignedRupee = (n) => {
-    const v = Number(n || 0);
+    const v = (Number(n) || 0);
     if (v === 0) return '₨0';
     const abs = `₨${Math.abs(v).toLocaleString()}`;
     return v < 0 ? `−${abs}` : abs;
@@ -771,7 +783,12 @@ export default function Dashboard() {
                           axisLine={false}
                           tickLine={false}
                           tick={{ fill: 'var(--text-muted, #64748b)', fontSize: 12 }}
-                          tickFormatter={(value) => hideAmounts ? '***' : ((value / 1000).toFixed(0) + 'k')}
+                          tickFormatter={(value) => {
+                            if (hideAmounts) return '***';
+                            if (value >= 1000000) return (value / 1000000).toFixed(value % 1000000 === 0 ? 0 : 1) + 'M';
+                            if (value >= 1000) return (value / 1000).toFixed(0) + 'k';
+                            return value;
+                          }}
                         />
                         <RechartsTooltip
                           contentStyle={{ borderRadius: 8, border: '1px solid var(--border)', background: 'var(--card-bg)', color: 'var(--text-primary)', boxShadow: 'var(--shadow-md)' }}
@@ -954,7 +971,7 @@ export default function Dashboard() {
                               {workspaceDisplayTitleForLot(l, businessOwners)}
                             </td>
                             <td style={{ textAlign: 'right', fontWeight: 600, color: 'var(--primary-light, #0369a1)' }}>
-                              {hideAmounts ? '****' : `₨${Number(l.billAmount).toLocaleString()}`}
+                              {hideAmounts ? '****' : `₨${(Number(getAdminLedgerOrBusinessBill(l, reportingPartyEdits[l.id] || {})) || 0).toLocaleString()}`}
                             </td>
                           </tr>
                         ))}
@@ -1001,6 +1018,94 @@ export default function Dashboard() {
             </div>
           </div>
         </>
+      )}
+
+      {!isParty && adminPartyMotivation && adminPartyMotivation.length > 0 && (
+        <section style={{ marginBottom: 28 }}>
+          <div className="card">
+            <div className="card-header">
+              <span className="card-title">Party Performance Insights</span>
+              <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600 }}>Pichle 90 din</span>
+            </div>
+            <div className="card-body" style={{ padding: '16px' }}>
+              <div className="admin-perf-grid">
+                {adminPartyMotivation.map(p => {
+                  const s = p.stats || {};
+                  const badgeClass = s.rejectionRate === 0 && s.completedCount >= 3
+                    ? 'admin-perf-badge--good'
+                    : s.rejectionRate > 20
+                      ? 'admin-perf-badge--bad'
+                      : s.rejectionRate > 10
+                        ? 'admin-perf-badge--warn'
+                        : 'admin-perf-badge--good';
+                  const badgeLabel = s.rejectionRate === 0 && s.completedCount >= 3
+                    ? 'Excellent'
+                    : s.rejectionRate > 20
+                      ? 'Needs Work'
+                      : s.rejectionRate > 10
+                        ? 'Average'
+                        : 'Good';
+                  return (
+                    <div key={p.partyId} className="admin-perf-card">
+                      <div className="admin-perf-card-header">
+                        <span className="admin-perf-card-name">{p.partyName}</span>
+                        <span className={`admin-perf-badge ${badgeClass}`}>{badgeLabel}</span>
+                      </div>
+                      <div className="admin-perf-card-stats">
+                        {s.totalLots != null && (
+                          <div className="admin-perf-mini-stat">
+                            <span className="admin-perf-mini-stat-val">{s.totalLots}</span>
+                            <span className="admin-perf-mini-stat-lbl">Total</span>
+                          </div>
+                        )}
+                        {s.completedCount != null && (
+                          <div className="admin-perf-mini-stat">
+                            <span className="admin-perf-mini-stat-val" style={{ color: 'var(--success, #059669)' }}>{s.completedCount}</span>
+                            <span className="admin-perf-mini-stat-lbl">Done</span>
+                          </div>
+                        )}
+                        {s.avgReturnDays != null && (
+                          <div className="admin-perf-mini-stat">
+                            <span className="admin-perf-mini-stat-val">{s.avgReturnDays}d</span>
+                            <span className="admin-perf-mini-stat-lbl">Avg Days</span>
+                          </div>
+                        )}
+                        {s.streak > 0 && (
+                          <div className="admin-perf-mini-stat">
+                            <span className="admin-perf-mini-stat-val">{s.streak}🔥</span>
+                            <span className="admin-perf-mini-stat-lbl">Streak</span>
+                          </div>
+                        )}
+                        {s.rejectionRate != null && (
+                          <div className="admin-perf-mini-stat">
+                            <span className="admin-perf-mini-stat-val" style={s.rejectionRate > 15 ? { color: 'var(--danger, #ef4444)' } : {}}>{s.rejectionRate}%</span>
+                            <span className="admin-perf-mini-stat-lbl">Reject</span>
+                          </div>
+                        )}
+                        {s.completedThisMonth != null && (
+                          <div className="admin-perf-mini-stat">
+                            <span className="admin-perf-mini-stat-val">{s.completedThisMonth}</span>
+                            <span className="admin-perf-mini-stat-lbl">This Month</span>
+                          </div>
+                        )}
+                      </div>
+                      {p.messages && p.messages.length > 0 && (
+                        <div className="admin-perf-msgs">
+                          {p.messages.slice(0, 2).map((m, i) => (
+                            <div key={i} className="admin-perf-msg">
+                              <span className="admin-perf-msg-icon">{m.icon}</span>
+                              <span><strong>{m.title}</strong> — {m.body}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </section>
       )}
 
       <div style={{ marginBottom: 24 }}>
@@ -1127,7 +1232,7 @@ export default function Dashboard() {
                               : 'dash-recent-amount--out'
                             }`}
                         >
-                          {hideAmounts ? '****' : `₨${Number(p.amount || 0).toLocaleString()}`}
+                          {hideAmounts ? '****' : `₨${(Number(p.amount) || 0).toLocaleString()}`}
                         </div>
                       </li>
                     );
@@ -1172,7 +1277,7 @@ export default function Dashboard() {
                                 whiteSpace: 'nowrap',
                               }}
                             >
-                              {hideAmounts ? '****' : `₨${Number(p.amount || 0).toLocaleString()}`}
+                              {hideAmounts ? '****' : `₨${(Number(p.amount) || 0).toLocaleString()}`}
                             </td>
                           </tr>
                         );

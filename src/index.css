@@ -795,6 +795,46 @@ tbody tr:last-child td {
   box-shadow: var(--shadow);
 }
 
+/* Marquee Banner Styles */
+.marquee-container {
+  overflow: hidden;
+  white-space: nowrap;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  height: 40px;
+  font-size: 14px;
+  padding-bottom: max(0px, env(safe-area-inset-bottom, 0px));
+  z-index: 12000;
+}
+
+.marquee-text {
+  display: inline-block;
+  animation: slide-left 25s linear infinite;
+  will-change: transform;
+}
+
+@keyframes slide-left {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-33.33%); }
+}
+
+.marquee-container:hover .marquee-text,
+.marquee-container:active .marquee-text {
+  animation-play-state: paused;
+}
+
+@media (max-width: 640px) {
+  .marquee-container {
+    font-size: 12px;
+    padding: 6px 0;
+    padding-bottom: calc(6px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
 .card-header {
   display: flex;
   align-items: center;
@@ -3228,9 +3268,9 @@ tbody tr:last-child td {
   gap: 12px;
   padding: 16px;
   border-radius: 12px;
-  background: #fffbfa;
-  border: 1px solid #ffedd5;
-  border-left: 4px solid #f97316;
+  background: var(--warning-bg, #fffbfa);
+  border: 1px solid var(--warning-border, #ffedd5);
+  border-left: 4px solid var(--warning, #f97316);
 }
 
 .dash-alert-item.alert-danger {
@@ -3388,4 +3428,278 @@ tbody tr:last-child td {
 [data-theme='dark'],
 [data-theme='dark-iphone'] {
   color-scheme: dark;
+}
+.broadcast-modal-overlay { z-index: 12000; }
+
+/* ─── Party Motivation Banner ─── */
+.motivation-banner {
+  margin: 0 auto 20px;
+  max-width: 900px;
+  padding: 16px 18px 14px;
+  background: var(--card-bg, #ffffff);
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 14px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.04), 0 1px 3px rgba(0,0,0,0.06);
+  animation: motivationSlideIn 0.4s ease-out;
+  cursor: pointer; /* Makes it clear the whole thing is clickable */
+}
+.motivation-banner:hover {
+  border-color: var(--primary-light, #93c5fd);
+}
+@keyframes motivationSlideIn {
+  from { opacity: 0; transform: translateY(-12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.motivation-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.motivation-header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.motivation-header-icon {
+  font-size: 18px;
+}
+.motivation-header-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary, #0f172a);
+  letter-spacing: 0.01em;
+}
+.motivation-close-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: var(--primary-bg, #f1f5f9);
+  border-radius: 8px;
+  cursor: pointer;
+  color: var(--text-muted, #64748b);
+  transition: background 0.2s, color 0.2s;
+  font-size: 14px;
+  font-weight: bold;
+}
+.motivation-close-btn:hover, .motivation-banner:hover .motivation-close-btn {
+  background: var(--border, #e2e8f0);
+  color: var(--text-primary, #0f172a);
+}
+
+/* Stats row */
+.motivation-stats-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.motivation-stat {
+  flex: 1;
+  min-width: 70px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px 6px;
+  background: var(--primary-bg, #f8fafc);
+  border-radius: 10px;
+  border: 1px solid var(--border, #e2e8f0);
+}
+.motivation-stat-value {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--text-primary, #0f172a);
+  line-height: 1.2;
+}
+.motivation-stat-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted, #94a3b8);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-top: 2px;
+}
+
+/* Messages */
+.motivation-messages {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.motivation-msg {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  animation: motivationMsgFadeIn 0.35s ease-out both;
+}
+@keyframes motivationMsgFadeIn {
+  from { opacity: 0; transform: translateX(-8px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+.motivation-msg-icon {
+  font-size: 18px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.motivation-msg-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.motivation-msg-title {
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+.motivation-msg-body {
+  font-size: 12px;
+  color: var(--text-secondary, #475569);
+  line-height: 1.4;
+}
+
+
+/* Collapsed button */
+.motivation-collapsed-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 auto 16px;
+  padding: 8px 16px;
+  background: var(--card-bg, #ffffff);
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 20px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary, #475569);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+  transition: all 0.2s;
+}
+.motivation-collapsed-btn:hover {
+  background: var(--primary-bg, #f1f5f9);
+  border-color: var(--primary-light, #3b82f6);
+  color: var(--primary-light, #3b82f6);
+  box-shadow: 0 4px 12px rgba(59,130,246,0.12);
+}
+.motivation-collapsed-icon {
+  font-size: 16px;
+}
+
+/* ─── Admin Party Performance Cards ─── */
+.admin-perf-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
+  gap: 14px;
+}
+.admin-perf-card {
+  background: var(--card-bg, #ffffff);
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 12px;
+  padding: 14px 16px;
+  transition: box-shadow 0.2s, border-color 0.2s;
+}
+.admin-perf-card:hover {
+  box-shadow: 0 4px 16px rgba(0,0,0,0.06);
+  border-color: var(--primary-light, #93c5fd);
+}
+.admin-perf-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.admin-perf-card-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary, #0f172a);
+}
+.admin-perf-card-stats {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.admin-perf-mini-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.admin-perf-mini-stat-val {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--text-primary, #0f172a);
+  line-height: 1.2;
+}
+.admin-perf-mini-stat-lbl {
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--text-muted, #94a3b8);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.admin-perf-msgs {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.admin-perf-msg {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-secondary, #475569);
+  line-height: 1.3;
+}
+.admin-perf-msg-icon {
+  flex-shrink: 0;
+  font-size: 14px;
+}
+.admin-perf-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 700;
+}
+.admin-perf-badge--good {
+  background: var(--success-bg, #d1fae5);
+  color: var(--success, #059669);
+}
+.admin-perf-badge--warn {
+  background: var(--warning-bg, #fef3c7);
+  color: var(--warning, #d97706);
+}
+.admin-perf-badge--bad {
+  background: var(--danger-bg, #fee2e2);
+  color: var(--danger, #dc2626);
+}
+
+@media (max-width: 600px) {
+  .motivation-banner {
+    margin: 0 8px 14px;
+    padding: 12px 14px 10px;
+    border-radius: 12px;
+  }
+  .motivation-stats-row {
+    gap: 6px;
+  }
+  .motivation-stat {
+    padding: 6px 4px;
+    min-width: 60px;
+  }
+  .motivation-stat-value {
+    font-size: 14px;
+  }
+  .admin-perf-grid {
+    grid-template-columns: 1fr;
+  }
 }

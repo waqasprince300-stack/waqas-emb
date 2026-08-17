@@ -1440,6 +1440,7 @@ export default function GhausiaCollection() {
 
   const filtered = useMemo(() => {
     const list = effectiveCollectionLots.filter((l) => {
+      if (highlightedBillableLotId && String(l.id) !== String(highlightedBillableLotId)) return false;
       const q = debouncedSearch.toLowerCase();
       const lotLabel = (l.lotNumber || l.lotNo || '').toLowerCase();
       const matchQ =
@@ -1482,6 +1483,7 @@ export default function GhausiaCollection() {
     statusFilter,
     stuckLotIdsFilter,
     lotTableTab,
+    highlightedBillableLotId,
   ]);
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safeCurrentPage = Math.min(currentPage, totalPages);
@@ -1501,6 +1503,7 @@ export default function GhausiaCollection() {
   const visibleLots = useMemo(
     () =>
       effectiveCollectionLots.filter((l) => {
+        
         if (partyFilter !== 'All' && String(l.partyId || '') !== String(partyFilter)) return false;
         if (stuckLotIdsFilter.length > 0 && !stuckLotIdsFilter.includes(String(l.id))) return false;
         return isWithinDateRange(
@@ -1518,14 +1521,26 @@ export default function GhausiaCollection() {
           customRange
         );
       }),
-    [effectiveCollectionLots, partyFilter, dateRange, customRange, stuckLotIdsFilter]
+    [effectiveCollectionLots, partyFilter, dateRange, customRange, stuckLotIdsFilter, highlightedBillableLotId]
   );
 
   const completedLotsCount = useMemo(
-    () => visibleLots.filter((l) => l.status === 'completed').length,
-    [visibleLots]
+    () => {
+      let lots = visibleLots;
+      if (highlightedBillableLotId) {
+        lots = lots.filter(l => String(l.id) === String(highlightedBillableLotId));
+      }
+      return lots.filter((l) => l.status === 'completed').length;
+    },
+    [visibleLots, highlightedBillableLotId]
   );
-  const otherLotsCount = visibleLots.length - completedLotsCount;
+  const otherLotsCount = useMemo(() => {
+      let lots = visibleLots;
+      if (highlightedBillableLotId) {
+        lots = lots.filter(l => String(l.id) === String(highlightedBillableLotId));
+      }
+      return lots.length - lots.filter((l) => l.status === 'completed').length;
+  }, [visibleLots, highlightedBillableLotId]);
   const othersTabStatusLabel =
     statusFilter === 'All'
       ? 'Others'
@@ -1534,9 +1549,13 @@ export default function GhausiaCollection() {
         .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
         .join(' ');
   const othersTabCount = useMemo(() => {
+    let lots = visibleLots;
+    if (highlightedBillableLotId) {
+      lots = lots.filter(l => String(l.id) === String(highlightedBillableLotId));
+    }
     if (statusFilter === 'All') return otherLotsCount;
-    return visibleLots.filter((l) => l.status === statusFilter).length;
-  }, [visibleLots, statusFilter, otherLotsCount]);
+    return lots.filter((l) => l.status === statusFilter).length;
+  }, [visibleLots, statusFilter, otherLotsCount, highlightedBillableLotId]);
   const othersTabHint =
     statusFilter === 'All'
       ? 'Pending, dispatched, and received back (not completed)'
@@ -2423,7 +2442,16 @@ export default function GhausiaCollection() {
                     return (
                       <div
                         key={l.id}
-                        onClick={() => setHighlightedBillableLotId(isHighlighted ? null : l.id)}
+                        onClick={() => {
+                          const nextId = isHighlighted ? null : l.id;
+                          setHighlightedBillableLotId(nextId);
+                          if (nextId) {
+                            setLotTableTab('others');
+                            setStatusFilter('All');
+                            setPartyFilter('All');
+                            setDateRange('all');
+                          }
+                        }}
                         style={{
                           display: 'flex',
                           alignItems: 'center',

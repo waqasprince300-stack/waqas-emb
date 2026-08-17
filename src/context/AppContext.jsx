@@ -101,12 +101,15 @@ export function AppProvider({ children }) {
   const {
     notifications,
     notificationUnreadCount,
-    pendingLotNotice,
-    setPendingLotNotice,
     refreshNotifications,
     markNotificationRead,
     markAllNotificationsRead,
     clearPendingLotNotice,
+    pendingLotNotice,
+    setPendingLotNotice,
+    activeAnnouncement,
+    setActiveAnnouncement,
+    partyMotivation,
   } = useNotificationsData({ isAuthenticated, userRole: user?.role });
 
   const {
@@ -635,6 +638,17 @@ export function AppProvider({ children }) {
         void refreshNotifications();
       }
 
+      if (action === 'admin_broadcast_start') {
+        if (payload.targetPartyId === 'all' || payload.targetPartyId === String(user?.partyId) || user?.role === 'admin') {
+          setActiveAnnouncement({ ...payload, isActive: true });
+        }
+        return;
+      }
+      if (action === 'admin_broadcast_stop') {
+        setActiveAnnouncement(null);
+        return;
+      }
+
       if (Date.now() - lastAnyRefreshRef.current < REALTIME_MIN_INTERVAL_MS) {
         if (timer) clearTimeout(timer);
         timer = setTimeout(() => handleChange(null), REALTIME_MIN_INTERVAL_MS);
@@ -668,6 +682,8 @@ export function AppProvider({ children }) {
     isRefreshSuppressed,
     refreshNotifications,
     setPendingLotNotice,
+    setActiveAnnouncement,
+    user?.partyId,
   ]);
 
   useEffect(() => {
@@ -1000,6 +1016,9 @@ export function AppProvider({ children }) {
       markAllNotificationsRead,
       pendingLotNotice,
       clearPendingLotNotice,
+      activeAnnouncement,
+      setActiveAnnouncement,
+      partyMotivation,
     }),
     [
       parties,
@@ -1049,6 +1068,9 @@ export function AppProvider({ children }) {
       markAllNotificationsRead,
       pendingLotNotice,
       clearPendingLotNotice,
+      activeAnnouncement,
+      setActiveAnnouncement,
+      partyMotivation,
     ]
   );
 
