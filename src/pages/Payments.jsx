@@ -24,15 +24,7 @@ import {
   isOwnerBillSettlement,
 } from '../utils/paymentDisplay';
 
-function normalizeLotKey(linkedLot) {
-  return String(linkedLot || '')
-    .trim()
-    .toLowerCase();
-}
-
-function lotDisplayRef(l) {
-  return String(l.lotNumber ?? l.lotNo ?? '').trim();
-}
+import { normalizeLotKey, lotDisplayRef } from '../utils/lotKeyHelpers';
 
 /** Admin-approved / billable lot for party statement (mirrors Party Ledger “completed” side). */
 function isLotPartyBillableStatus(status) {
@@ -490,7 +482,7 @@ export default function Payments() {
     if (form.type === 'Received') {
       return lotsForLinkedReceived.filter(
         (l) =>
-          l.status !== 'completed' && !usedReceivedLotKeys.has(normalizeLotKey(lotDisplayRef(l)))
+          l.status === 'received back' && !usedReceivedLotKeys.has(normalizeLotKey(lotDisplayRef(l)))
       );
     }
     if (form.type !== 'Paid' || !form.party || form.party === 'Other') {
@@ -1237,6 +1229,11 @@ export default function Payments() {
                                 This lot&apos;s bill is combined with the main lot
                               </div>
                             )}
+                            {String(p.note || '').toLowerCase().includes('(difference)') && (
+                              <div style={{ fontSize: 10, color: 'var(--danger, #dc2626)', marginTop: 4, fontWeight: 700, background: 'var(--danger-bg, #fef2f2)', display: 'inline-block', padding: '2px 6px', borderRadius: 4 }}>
+                                + Rate Added
+                              </div>
+                            )}
                           </div>
                         ) : (
                           <span style={{ color: 'var(--text-muted)' }}>—</span>
@@ -1405,6 +1402,11 @@ export default function Payments() {
                         {!isParty && isCombinedDupatta && (
                           <div style={{ fontSize: 11, color: 'var(--warning, #d97706)', marginTop: 2, fontWeight: 600 }}>
                             This lot&apos;s bill is combined with the main lot
+                          </div>
+                        )}
+                        {String(p.note || '').toLowerCase().includes('(difference)') && (
+                          <div style={{ fontSize: 10, color: 'var(--danger, #dc2626)', marginTop: 4, fontWeight: 700, background: 'var(--danger-bg, #fef2f2)', display: 'inline-block', padding: '2px 6px', borderRadius: 4 }}>
+                            + Rate Added
                           </div>
                         )}
                       </div>

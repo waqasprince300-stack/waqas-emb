@@ -985,7 +985,7 @@ export default function PartyLedger() {
             title: isParty ? 'Ledger amount change' : 'Party bill amount change',
             icon: 'question',
             html: `
-            <div style="text-align:left;font-size:14px;line-height:1.6">
+            <div style="text-align:left;font-size:14px;line-height:1.6;color:var(--text-primary)">
               <div><strong>${isParty ? 'Your amount (old)' : 'Party ledger (old)'}:</strong> ₨${previousLedgerAmount.toLocaleString()}</div>
               <div><strong>${isParty ? 'Your amount (new)' : 'Party ledger (new)'}:</strong> ₨${nextLedgerAmount.toLocaleString()}</div>
               <div><strong>Difference:</strong> ₨${diff.toLocaleString()}</div>
@@ -1095,13 +1095,13 @@ export default function PartyLedger() {
           title: 'Confirm completed lot amount change',
           icon: 'warning',
           html: `
-            <div style="text-align:left;font-size:14px;line-height:1.6">
+            <div style="text-align:left;font-size:14px;line-height:1.6;color:var(--text-primary)">
               <div><strong>Owner amount:</strong> ₨${ghausiaAmount.toLocaleString()}</div>
               <div><strong>Current party ledger amount:</strong> ₨${previousLedgerAmount.toLocaleString()}</div>
               <div><strong>Updated party ledger amount:</strong> ₨${nextLedgerAmount.toLocaleString()}</div>
               <div><strong>Difference:</strong> ₨${difference.toLocaleString()}</div>
-              <div style="margin-top:10px;color:var(--warning, #92400e)">Only the party ledger is updated. The business (owner) bill on the lot is <strong>not</strong> changed — edit it in the collection workspace or when reviewing completion so the owner sees the correct amount.</div>
-              <div style="margin-top:8px;color:var(--text-muted, #64748b);font-size:12px">No payment transaction will be created automatically.</div>
+              <div style="margin-top:10px;color:var(--warning)">Only the party ledger is updated. The business (owner) bill on the lot is <strong>not</strong> changed — edit it in the collection workspace or when reviewing completion so the owner sees the correct amount.</div>
+              <div style="margin-top:8px;color:var(--text-muted);font-size:12px">No payment transaction will be created automatically.</div>
             </div>
           `,
           showCancelButton: true,
@@ -2379,7 +2379,7 @@ export default function PartyLedger() {
                           emptyLabel={isParty && displayStatus !== 'Pending' ? 'Add bill' : 'No bill'}
                           onUpload={isParty && displayStatus !== 'Pending' ? (f) => handleDirectBillUpload(l, f) : undefined}
                         />
-                        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                        <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                           {displayStatus !== 'Pending' && renderLotPicturesButton(l, pe)}
                           {displayStatus !== 'Completed' && !(displayStatus === 'Pending' && isParty) && (
                             <button
@@ -2391,20 +2391,63 @@ export default function PartyLedger() {
                               Edit
                             </button>
                           )}
+                          {displayStatus === 'Completed' && isParty && (
+                            (() => {
+                              const req = pe.billRevisionRequest;
+                              const st = String(req?.status || '').toLowerCase();
+                              if (st === 'pending') {
+                                return (
+                                  <span style={{ fontSize: 12, color: 'var(--warning, #92400e)', fontWeight: 600 }}>
+                                    Change requested
+                                  </span>
+                                );
+                              }
+                              return (
+                                <button
+                                  onClick={() =>
+                                    setRevisionRequest({ lot: l, newAmount: String(getPartyLedgerBillNumeric(pe) ?? ''), reason: '' })
+                                  }
+                                  style={{ padding: '4px 12px', fontSize: 12, fontWeight: 600, borderRadius: 6, cursor: 'pointer', background: 'var(--primary-bg, #FFF7ED)', color: 'var(--warning, #c2410c)', border: '1px solid var(--warning-bg, #fed7aa)', fontFamily: 'Inter, sans-serif' }}
+                                >
+                                  {st === 'rejected' ? 'Request again' : 'Request bill change'}
+                                </button>
+                              );
+                            })()
+                          )}
+                          {isAdmin && pe.billRevisionRequest && String(pe.billRevisionRequest.status || '').toLowerCase() === 'pending' && (
+                            <button
+                              onClick={() => setRevisionReview({ lot: l, updateOwnerBill: true, useCustomOwner: false, customOwnerAmount: '', rejectionNote: '' })}
+                              style={{ padding: '4px 12px', fontSize: 12, fontWeight: 700, borderRadius: 6, cursor: 'pointer', background: 'var(--warning, #f59e0b)', color: 'var(--card-bg, #ffffff)', border: 'none', fontFamily: 'Inter, sans-serif' }}
+                            >
+                              Review request
+                            </button>
+                          )}
                         </div>
                       </div>
                     </div>
 
                     <div className="lot-tile-bill">
                       <span style={{ fontSize: 13, color: 'var(--text-muted, #64748b)' }}>{isParty ? 'Your ledger:' : 'Bill Amount:'}</span>
-                      <strong style={{ fontSize: 16, color: 'var(--primary, #1e40af)' }}>
-                        {partyBillOnly == null ? '—' : `₨${partyBillOnly.toLocaleString()}`}
-                      </strong>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                        <strong style={{ fontSize: 16, color: 'var(--primary, #1e40af)' }}>
+                          {partyBillOnly == null ? '—' : `₨${partyBillOnly.toLocaleString()}`}
+                        </strong>
+                        {pe.billRevisionRequest && String(pe.billRevisionRequest.status || '').toLowerCase() === 'pending' && (
+                          <div style={{ fontSize: 11, color: 'var(--warning, #b45309)', marginTop: 2 }}>
+                            Change requested: ₨{pe.billRevisionRequest.fromAmount} → ₨{pe.billRevisionRequest.toAmount}
+                          </div>
+                        )}
+                        {pe.billRevisionRequest && String(pe.billRevisionRequest.status || '').toLowerCase() === 'rejected' && (
+                          <div style={{ fontSize: 11, color: 'var(--danger, #b91c1c)', marginTop: 2 }}>
+                            Change request rejected
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
 
                   <div className="lot-tile-footer" style={{ justifyContent: 'flex-end' }}>
-                    {displayStatus !== 'Completed' && !(displayStatus === 'Pending' && isParty) && (
+                    {displayStatus !== 'Completed' && displayStatus !== 'Pending review' && !(displayStatus === 'Pending' && isParty) && (
                       <select
                         className="form-select"
                         style={{ fontSize: 12, padding: '4px 8px', borderRadius: 6, width: '100%', maxWidth: '100%', textAlign: 'center' }}
@@ -2496,19 +2539,62 @@ export default function PartyLedger() {
                             Edit
                           </button>
                         )}
+                        {displayStatus === 'Completed' && isParty && (
+                          (() => {
+                            const req = pe.billRevisionRequest;
+                            const st = String(req?.status || '').toLowerCase();
+                            if (st === 'pending') {
+                              return (
+                                <span style={{ fontSize: 12, color: 'var(--warning, #92400e)', fontWeight: 600 }}>
+                                  Change requested
+                                </span>
+                              );
+                            }
+                            return (
+                              <button
+                                onClick={() =>
+                                  setRevisionRequest({ lot: l, newAmount: String(getPartyLedgerBillNumeric(pe) ?? ''), reason: '' })
+                                }
+                                style={{ padding: '4px 12px', fontSize: 12, fontWeight: 600, borderRadius: 6, cursor: 'pointer', background: 'var(--primary-bg, #FFF7ED)', color: 'var(--warning, #c2410c)', border: '1px solid var(--warning-bg, #fed7aa)', fontFamily: 'Inter, sans-serif' }}
+                              >
+                                {st === 'rejected' ? 'Request again' : 'Request bill change'}
+                              </button>
+                            );
+                          })()
+                        )}
+                        {isAdmin && pe.billRevisionRequest && String(pe.billRevisionRequest.status || '').toLowerCase() === 'pending' && (
+                          <button
+                            onClick={() => setRevisionReview({ lot: l, updateOwnerBill: true, useCustomOwner: false, customOwnerAmount: '', rejectionNote: '' })}
+                            style={{ padding: '4px 12px', fontSize: 12, fontWeight: 700, borderRadius: 6, cursor: 'pointer', background: 'var(--warning, #f59e0b)', color: 'var(--card-bg, #ffffff)', border: 'none', fontFamily: 'Inter, sans-serif' }}
+                          >
+                            Review request
+                          </button>
+                        )}
                       </div>
                     </div>
 
                     <div className="pl-mob-bill-row">
                       <span style={{ fontSize: 13, color: 'var(--text-muted, #64748b)' }}>{isParty ? 'Your ledger:' : 'Bill Amount:'}</span>
-                      <strong style={{ fontSize: 15, color: 'var(--primary, #1e40af)' }}>
-                        {partyBillOnly == null ? '—' : `₨${partyBillOnly.toLocaleString()}`}
-                      </strong>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                        <strong style={{ fontSize: 15, color: 'var(--primary, #1e40af)' }}>
+                          {partyBillOnly == null ? '—' : `₨${partyBillOnly.toLocaleString()}`}
+                        </strong>
+                        {pe.billRevisionRequest && String(pe.billRevisionRequest.status || '').toLowerCase() === 'pending' && (
+                          <div style={{ fontSize: 11, color: 'var(--warning, #b45309)', marginTop: 2 }}>
+                            Change requested: ₨{pe.billRevisionRequest.fromAmount} → ₨{pe.billRevisionRequest.toAmount}
+                          </div>
+                        )}
+                        {pe.billRevisionRequest && String(pe.billRevisionRequest.status || '').toLowerCase() === 'rejected' && (
+                          <div style={{ fontSize: 11, color: 'var(--danger, #b91c1c)', marginTop: 2 }}>
+                            Change request rejected
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
 
                   <div className="pl-mob-footer" style={{ justifyContent: 'flex-end' }}>
-                    {displayStatus !== 'Completed' && !(displayStatus === 'Pending' && isParty) && (
+                    {displayStatus !== 'Completed' && displayStatus !== 'Pending review' && !(displayStatus === 'Pending' && isParty) && (
                       <select
                         className="form-select"
                         style={{ fontSize: 13, padding: '6px 10px', borderRadius: 6, width: '100%', maxWidth: '100%', textAlign: 'center' }}

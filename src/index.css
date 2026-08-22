@@ -30,6 +30,7 @@ body {
 :root {
   --primary: #1e40af;
   --primary-light: #3b82f6;
+  --primary-text: #ffffff;
   --primary-bg: #eff6ff;
   --success: #15803d;
   --success-bg: #f0fdf4;
@@ -61,6 +62,7 @@ body {
   /* Google Pixel Material You Warm Theme (Finalized Yesterday) */
   --primary: #f5b989; /* Material You warm primary */
   --primary-light: #ffccaa;
+  --primary-text: #1a1a1a;
   --primary-bg: #413531; /* Pixel surface container highest */
   
   --success: #81c995;
@@ -102,6 +104,7 @@ body {
 [data-theme='dark-iphone'] {
   --primary: #0A84FF;
   --primary-light: #409CFF;
+  --primary-text: #ffffff;
   --primary-bg: #1C1C1E;
   --success: #30D158;
   --success-bg: rgba(48, 209, 88, 0.15);
@@ -962,6 +965,7 @@ tbody tr:last-child td {
   margin-bottom: 24px;
   flex-wrap: wrap;
   gap: 12px;
+  padding-right: 220px; /* Space for fixed app-top-actions */
 }
 
 .mobile-only-sticky-action {
@@ -1427,6 +1431,7 @@ tbody tr:last-child td {
     flex-direction: column;
     align-items: flex-start;
     gap: 16px;
+    padding-right: 130px;
   }
 
   .page-title {
@@ -3326,6 +3331,39 @@ tbody tr:last-child td {
   width: 100%;
 }
 
+@media (max-width: 600px) {
+  .swal2-title {
+    font-size: 1.25rem !important;
+  }
+}
+
+/* Billable Row Mobile Responsiveness */
+.billable-row-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 768px) {
+  .billable-row {
+    flex-direction: column;
+    align-items: flex-start !important;
+    gap: 4px !important;
+    padding: 6px 8px !important;
+  }
+  .billable-row-title {
+    white-space: normal;
+    overflow: visible;
+  }
+  .billable-row-right {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}
+
 @media (max-width: 768px) {
   .dash-desktop-only {
     display: none !important;
@@ -3429,6 +3467,25 @@ tbody tr:last-child td {
 [data-theme='dark-iphone'] {
   color-scheme: dark;
 }
+
+/* SweetAlert2 Dark Mode Overrides */
+[data-theme='dark'] .swal2-popup,
+[data-theme='dark-iphone'] .swal2-popup {
+  background: var(--card-bg) !important;
+  color: var(--text-primary) !important;
+  border: 1px solid var(--border) !important;
+}
+
+[data-theme='dark'] .swal2-title,
+[data-theme='dark-iphone'] .swal2-title {
+  color: var(--text-primary) !important;
+}
+
+[data-theme='dark'] .swal2-html-container,
+[data-theme='dark-iphone'] .swal2-html-container {
+  color: var(--text-secondary) !important;
+}
+
 .broadcast-modal-overlay { z-index: 12000; }
 
 /* ─── Party Motivation Banner ─── */

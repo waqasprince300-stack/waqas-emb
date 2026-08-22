@@ -794,22 +794,37 @@ export function AppProvider({ children }) {
   const updateLot = useCallback(
     async (id, patch, opts = {}) => {
       const { businessOwnerId } = opts;
-      const updated = normalizeLotData(
-        await trackWrite(apiService.updateGhausiaLot(id, patch, businessOwnerId))
-      );
-      const idStr = String(id);
+      const response = await trackWrite(apiService.updateGhausiaLot(id, patch, businessOwnerId));
+      
+      const isArr = Array.isArray(response);
+      const updatedLots = isArr ? response.map(normalizeLotData) : [normalizeLotData(response)];
+      
+      const applyUpdates = (arr) => {
+        let next = [...arr];
+        for (const lot of updatedLots) {
+          const lotIdStr = String(lot.id);
+          const idx = next.findIndex(x => String(x.id) === lotIdStr);
+          if (idx !== -1) {
+             next[idx] = lot;
+          } else {
+             next.push(lot);
+          }
+        }
+        return next;
+      };
+
       setGhausiaLots((arr) => {
-        const has = arr.some((x) => String(x.id) === idStr);
+        const has = arr.some((x) => String(x.id) === String(id));
         if (!has) return arr;
-        return arr.map((x) => (String(x.id) === idStr ? updated : x));
+        return applyUpdates(arr);
       });
       if (user?.role === 'admin') {
-        setAdminReportingLots((arr) => arr.map((x) => (String(x.id) === idStr ? updated : x)));
+        setAdminReportingLots((arr) => applyUpdates(arr));
       }
       if (user?.role === 'party') {
-        setPartyCrossLots((arr) => arr.map((x) => (String(x.id) === idStr ? updated : x)));
+        setPartyCrossLots((arr) => applyUpdates(arr));
       }
-      return updated;
+      return isArr ? updatedLots : updatedLots[0];
     },
     [trackWrite, user?.role]
   );
@@ -817,14 +832,30 @@ export function AppProvider({ children }) {
   const deleteLot = useCallback(
     async (id, opts = {}) => {
       const { businessOwnerId } = opts;
-      await trackWrite(apiService.deleteGhausiaLot(id, businessOwnerId));
+      const response = await trackWrite(apiService.deleteGhausiaLot(id, businessOwnerId));
       const idStr = String(id);
-      setGhausiaLots((arr) => arr.filter((x) => String(x.id) !== idStr));
+      
+      const deletedLinkedIdStr = response && response.deletedLinkedId ? String(response.deletedLinkedId) : null;
+      const updatedLinkedLotRaw = response && response.updatedLinkedLot ? response.updatedLinkedLot : null;
+      const updatedLinkedLot = updatedLinkedLotRaw ? normalizeLotData(updatedLinkedLotRaw) : null;
+      
+      const applyUpdates = (arr) => {
+        let next = arr.filter((x) => String(x.id) !== idStr);
+        if (deletedLinkedIdStr) {
+          next = next.filter((x) => String(x.id) !== deletedLinkedIdStr);
+        }
+        if (updatedLinkedLot) {
+          next = next.map((x) => String(x.id) === String(updatedLinkedLot.id) ? updatedLinkedLot : x);
+        }
+        return next;
+      };
+
+      setGhausiaLots(applyUpdates);
       if (user?.role === 'admin') {
-        setAdminReportingLots((arr) => arr.filter((x) => String(x.id) !== idStr));
+        setAdminReportingLots(applyUpdates);
       }
       if (user?.role === 'party') {
-        setPartyCrossLots((arr) => arr.filter((x) => String(x.id) !== idStr));
+        setPartyCrossLots(applyUpdates);
       }
     },
     [trackWrite, user?.role]
@@ -852,12 +883,13 @@ export function AppProvider({ children }) {
 
   const approveLotCompletion = useCallback(
     async (lotId, opts = {}) => {
-      const { businessOwnerId, ownerBillingChoice, ownerBillAmount, resolvedBusinessBill } = opts;
+      const { businessOwnerId, ownerBillingChoice, ownerBillAmount, resolvedBusinessBill, skipBillable } = opts;
       const raw = await trackWrite(
         apiService.approveLotCompletion(lotId, {
           businessOwnerId,
           ownerBillingChoice,
           ownerBillAmount,
+          skipBillable,
         })
       );
 

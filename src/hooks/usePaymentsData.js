@@ -31,12 +31,12 @@ export function usePaymentsData({ trackWrite, userRole }) {
       const { businessOwnerId } = opts;
       await trackWrite(apiService.deletePayment(id, businessOwnerId));
       const idStr = String(id);
-      setPayments((arr) => arr.filter((x) => String(x.id) !== idStr));
+      setPayments((arr) => arr.filter((x) => String(x.id || x._id) !== idStr));
       if (userRole === 'admin') {
-        setAdminReportingPayments((arr) => arr.filter((x) => String(x.id) !== idStr));
+        setAdminReportingPayments((arr) => arr.filter((x) => String(x.id || x._id) !== idStr));
       }
       if (userRole === 'party') {
-        setPartyCrossPayments((arr) => arr.filter((x) => String(x.id) !== idStr));
+        setPartyCrossPayments((arr) => arr.filter((x) => String(x.id || x._id) !== idStr));
       }
     },
     [trackWrite, userRole]

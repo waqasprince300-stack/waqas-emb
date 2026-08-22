@@ -493,9 +493,10 @@ class ApiService {
   }
 
   async approveLotCompletion(id, opts = {}) {
-    const { businessOwnerId, ownerBillingChoice, ownerBillAmount } = opts || {};
+    const { businessOwnerId, ownerBillingChoice, ownerBillAmount, skipBillable } = opts || {};
     const body = {};
     if (ownerBillingChoice) body.ownerBillingChoice = ownerBillingChoice;
+    if (skipBillable) body.skipBillable = skipBillable;
     if (
       ownerBillAmount != null &&
       ownerBillAmount !== '' &&

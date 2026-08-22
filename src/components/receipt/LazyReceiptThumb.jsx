@@ -42,8 +42,8 @@ export default function LazyReceiptThumb({
       lastReceiptVersionRef.current = ledgerReceiptsVersion;
       if (receiptPreviewKind(receiptProp) === 'none') {
         fetchedForRef.current = '';
-        setLocalReceipt('');
-        setChecked(false);
+        // We do NOT clear localReceipt here so it doesn't flash a skeleton.
+        // It will silently refetch in the background.
       }
     }
   }, [ledgerReceiptsVersion, receiptProp]);
@@ -117,6 +117,8 @@ export default function LazyReceiptThumb({
         if (r) {
           setLocalReceipt(r);
           patchLotReceipt?.(id, r);
+        } else {
+          setLocalReceipt('');
         }
       } catch {
         // No bill on this lot (404) or a transient error: show the empty label and stop.
@@ -124,6 +126,7 @@ export default function LazyReceiptThumb({
         // which re-runs every row's effect and turns one miss into an API-call loop.
         if (!cancelled) {
           fetchedForRef.current = fetchKey;
+          setLocalReceipt('');
         }
       } finally {
         if (!cancelled) {

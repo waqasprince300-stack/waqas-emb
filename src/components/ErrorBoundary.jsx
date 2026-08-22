@@ -17,12 +17,29 @@ class ErrorBoundary extends React.Component {
   render() {
     if (this.state.hasError) {
       return (
-        <div className="p-6 m-4 bg-red-50 text-red-700 border border-red-200 rounded-lg shadow-sm">
-          <h2 className="text-lg font-bold mb-2">Something went wrong.</h2>
-          <p className="text-sm opacity-80 mb-4">{this.state.error?.toString()}</p>
+        <div style={{
+          padding: 24,
+          margin: 16,
+          background: 'var(--danger-bg, #fef2f2)',
+          color: 'var(--danger, #dc2626)',
+          border: '1px solid var(--danger-border, #fecaca)',
+          borderRadius: 12,
+          boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
+        }}>
+          <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>Something went wrong.</h2>
+          <p style={{ fontSize: 14, opacity: 0.8, marginBottom: 16 }}>{this.state.error?.toString()}</p>
           <button 
             onClick={() => window.location.reload()}
-            className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
+            style={{
+              padding: '8px 16px',
+              background: 'var(--danger, #dc2626)',
+              color: '#fff',
+              border: 'none',
+              borderRadius: 8,
+              cursor: 'pointer',
+              fontWeight: 600,
+              fontSize: 14,
+            }}
           >
             Refresh Page
           </button>

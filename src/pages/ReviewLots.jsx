@@ -9,20 +9,12 @@ import LoaderDashboard from '../components/LoaderDashboard';
 import { compareRowsByUpdatedNewestFirst, formatDisplayDateTime } from '../utils/dateFilters';
 import { getAdminLedgerOrBusinessBill } from '../utils/partyBillPrivacy';
 
-function normalizeLotKey(linkedLot) {
-  return String(linkedLot || '')
-    .trim()
-    .toLowerCase();
-}
-
-function lotKeyFromLot(l) {
-  return String(l.lotNumber ?? l.lotNo ?? '').trim();
-}
+import { normalizeLotKey, lotKeyFromLot } from '../utils/lotKeyHelpers';
 
 function hasOwnerReceivedForLot(lot, payments) {
   const k = normalizeLotKey(lotKeyFromLot(lot));
   if (!k || !Array.isArray(payments)) return false;
-  return payments.some((p) => p.type === 'Received' && normalizeLotKey(p.linkedLot) === k);
+  return payments.some((p) => String(p.party || '').trim().toLowerCase() === 'owner' && normalizeLotKey(p.linkedLot) === k);
 }
 
 function pendingRevisionIsReal(pe) {
@@ -88,9 +80,7 @@ export default function ReviewLots() {
   const [rejectModal, setRejectModal] = useState(null);
   const [rejectReason, setRejectReason] = useState('');
   const [receiptPreview, setReceiptPreview] = useState(null);
-  const [approveBillingModal, setApproveBillingModal] = useState(null);
-  const [ownerBillingChoice, setOwnerBillingChoice] = useState('sync_party');
-  const [customOwnerBillInput, setCustomOwnerBillInput] = useState('');
+
 
   const businessName = (bizId) =>
     businessOwners.find((b) => String(b.id ?? b._id) === String(bizId || ''))?.name || '—';
@@ -156,23 +146,57 @@ export default function ReviewLots() {
 
   const handleApprove = async (lot) => {
     const pe = reportingPartyEdits[lot.id] || {};
-    const needsChoice = needsOwnerBillingChoice(lot, pe, reportingPayments);
-    const showDelta = pendingRevisionIsReal(pe);
+    const ownerSettledForLot = hasOwnerReceivedForLot(lot, reportingPayments);
 
-    if (!needsChoice) {
+    if (ownerSettledForLot) {
+      // Simplified workflow for already billed lots
       const ok = await Swal.fire({
-        title: 'Approve completion?',
-        text: `${lot.lotNo || lot.lotNumber} will become billable to owner (received back).`,
+        title: 'Already billed to owner',
+        text: `This lot's bill has already been billed to the owner. Do you want to add any difference in the owner bill amount now?`,
         icon: 'question',
         showCancelButton: true,
-        confirmButtonText: 'Approve',
+        showDenyButton: true,
+        confirmButtonText: 'Yes (Add Difference)',
+        denyButtonText: 'No (Keep Same)',
         cancelButtonText: 'Cancel',
       });
-      if (!ok.isConfirmed) return;
+      
+      if (ok.isDismissed) return; // Cancelled
+      
+      let finalOwnerBillAmount = undefined;
+      let skipBillable = false;
+
+      if (ok.isDenied) {
+        // No (Keep Same) -> Skip billable, go straight to completed
+        skipBillable = true;
+      } else if (ok.isConfirmed) {
+        // Yes (Add Difference) -> Ask for the new total bill amount
+        const partyBillNow = peBill(lot.id, lot);
+        const oldOwnerBill = Number(pe.amountChangeNote?.ghausiaAmount || lot.billAmount || 0);
+        const { value: customAmount } = await Swal.fire({
+          title: 'Enter new Owner Bill Amount',
+          input: 'number',
+          inputValue: partyBillNow,
+          html: `<div style="font-size: 14px; margin-bottom: 6px;">Previous Owner Bill: <strong>₨${oldOwnerBill.toLocaleString()}</strong></div><div style="font-size: 13px; color: var(--text-muted);">The difference will be calculated automatically in the Billable list.</div>`,
+          showCancelButton: true,
+          inputValidator: (value) => {
+            if (!value || Number(value) < 0) {
+              return 'Enter a valid positive number';
+            }
+          }
+        });
+        
+        if (!customAmount) return; // Cancelled second popup
+        finalOwnerBillAmount = Number(customAmount);
+        skipBillable = false; // Go to billable to settle difference
+      }
+
       setBusyId(lot.id);
       try {
         await approveLotCompletion(lot.id, {
           businessOwnerId: lot.businessOwnerId,
+          ...(finalOwnerBillAmount !== undefined ? { ownerBillingChoice: 'custom_ghausia', ownerBillAmount: finalOwnerBillAmount } : {}),
+          skipBillable,
         });
         Swal.fire({
           toast: true,
@@ -186,17 +210,9 @@ export default function ReviewLots() {
       } catch (e) {
         if (isStaleLotApprovalError(e)) {
           refreshData?.({ force: true });
-          Swal.fire({
-            icon: 'info',
-            title: 'Lot already updated',
-            text: 'This lot is no longer awaiting approval (it was already approved, rejected, or changed). The list has been refreshed.',
-          });
+          Swal.fire({ icon: 'info', title: 'Lot already updated', text: 'This lot is no longer awaiting approval.' });
         } else {
-          Swal.fire({
-            icon: 'error',
-            title: 'Could not approve',
-            text: String(e?.message || e || ''),
-          });
+          Swal.fire({ icon: 'error', title: 'Could not approve', text: String(e?.message || e || '') });
         }
       } finally {
         setBusyId(null);
@@ -204,71 +220,22 @@ export default function ReviewLots() {
       return;
     }
 
-    setOwnerBillingChoice(showDelta ? 'sync_party' : 'keep_ghausia');
-    const ownerSettledForLot = hasOwnerReceivedForLot(lot, reportingPayments);
-    const revisionIncrease = partyRevisionPositiveDelta(pe);
-    const allowDeltaOnlyOption = showDelta && ownerSettledForLot && revisionIncrease > 0;
-    const partyBillNow = peBill(lot.id, lot);
-    const ghausiaNow = Number(lot.billAmount || 0);
-    setCustomOwnerBillInput(String(showDelta ? partyBillNow : ghausiaNow));
-    setApproveBillingModal({
-      lot,
-      pe,
-      showDelta,
-      allowDeltaOnlyOption,
-      revisionIncrease,
+    // Normal workflow for lots NOT billed to owner yet
+    const ok = await Swal.fire({
+      title: 'Approve completion?',
+      text: `${lot.lotNo || lot.lotNumber} will become billable to owner (received back).`,
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonText: 'Approve',
+      cancelButtonText: 'Cancel',
     });
-  };
-
-  const submitApproveWithBilling = async () => {
-    if (!approveBillingModal) return;
-    const { lot, allowDeltaOnlyOption, revisionIncrease } = approveBillingModal;
-    if (ownerBillingChoice === 'delta_only' && !allowDeltaOnlyOption) {
-      await Swal.fire({
-        icon: 'warning',
-        title: 'Pick another option',
-        text: '“Owner billed for party increase only” is only available when a Received payment from the owner is already linked to this lot and the party increased the ledger.',
-      });
-      return;
-    }
-    let ownerBillAmount;
-    if (ownerBillingChoice === 'custom_ghausia') {
-      const raw = String(customOwnerBillInput ?? '')
-        .replace(/,/g, '')
-        .trim();
-      const n = Number(raw);
-      if (!Number.isFinite(n) || n < 0) {
-        await Swal.fire({
-          icon: 'warning',
-          title: 'Enter a valid amount',
-          text: 'Set the owner bill amount (0 or greater).',
-        });
-        return;
-      }
-      ownerBillAmount = n;
-    }
-
-    let resolvedBusinessBill;
-    if (ownerBillingChoice === 'sync_party') {
-      resolvedBusinessBill = peBill(lot.id, lot);
-    } else if (ownerBillingChoice === 'custom_ghausia') {
-      resolvedBusinessBill = ownerBillAmount;
-    } else if (ownerBillingChoice === 'delta_only') {
-      resolvedBusinessBill = revisionIncrease;
-    }
-
+    if (!ok.isConfirmed) return;
+    
     setBusyId(lot.id);
     try {
       await approveLotCompletion(lot.id, {
         businessOwnerId: lot.businessOwnerId,
-        ownerBillingChoice,
-        ...(ownerBillAmount != null ? { ownerBillAmount } : {}),
-        ...(resolvedBusinessBill != null && Number.isFinite(resolvedBusinessBill)
-          ? { resolvedBusinessBill }
-          : {}),
       });
-      setApproveBillingModal(null);
-      setCustomOwnerBillInput('');
       Swal.fire({
         toast: true,
         position: 'top-end',
@@ -280,8 +247,6 @@ export default function ReviewLots() {
       });
     } catch (e) {
       if (isStaleLotApprovalError(e)) {
-        setApproveBillingModal(null);
-        setCustomOwnerBillInput('');
         refreshData?.({ force: true });
         Swal.fire({
           icon: 'info',
@@ -590,246 +555,7 @@ export default function ReviewLots() {
         )}
       </div>
 
-      {approveBillingModal && (
-        <Modal
-          wide
-          title={`Approve — owner bill (${approveBillingModal.lot.lotNo || approveBillingModal.lot.lotNumber})`}
-          onClose={() => {
-            if (busyId) return;
-            setApproveBillingModal(null);
-            setCustomOwnerBillInput('');
-          }}
-          onFormSubmit={() => {
-            void submitApproveWithBilling();
-          }}
-          footer={
-            <>
-              <button
-                type="button"
-                className="btn btn-ghost"
-                disabled={busyId}
-                onClick={() => {
-                  setApproveBillingModal(null);
-                  setCustomOwnerBillInput('');
-                }}
-              >
-                Cancel
-              </button>
-              <button type="submit" className="btn btn-success" disabled={busyId}>
-                {busyId ? (
-                  <>
-                    <Loader /> Approving…
-                  </>
-                ) : (
-                  'Approve with this billing option'
-                )}
-              </button>
-            </>
-          }
-        >
-          {(() => {
-            const { lot, pe, showDelta, allowDeltaOnlyOption, revisionIncrease } =
-              approveBillingModal;
-            const partyBill = peBill(lot.id, lot);
-            const ghausia = Number(lot.billAmount || 0);
-            const pr = pe.pendingRevision;
-            return (
-              <>
-                <p
-                  style={{
-                    fontSize: 14,
-                    color: 'var(--text-secondary)',
-                    marginBottom: 16,
-                    lineHeight: 1.5,
-                  }}
-                >
-                  This lot needs a billing choice for the <strong>Business Owner</strong> side
-                  {showDelta
-                    ? ' because the party changed the ledger amount while awaiting review'
-                    : ''}
-                  {hasOwnerReceivedForLot(lot, reportingPayments)
-                    ? ', and there is already a Received payment recorded against this lot number.'
-                    : '.'}
-                </p>
-                <div
-                  style={{
-                    fontSize: 13,
-                    marginBottom: 16,
-                    padding: '12px 14px',
-                    background: 'var(--primary-bg, #f8fafc)',
-                    borderRadius: 8,
-                    border: '1px solid var(--border)',
-                  }}
-                >
-                  <div>
-                    <strong>Party ledger (approved submission):</strong> ₨
-                    {partyBill.toLocaleString()}
-                  </div>
-                  <div>
-                    <strong>Current Owner bill on lot:</strong> ₨{ghausia.toLocaleString()}
-                  </div>
-                  {showDelta && pr ? (
-                    <div style={{ marginTop: 6 }}>
-                      <strong>Party revision:</strong> ₨{Number(pr.fromAmount).toLocaleString()} → ₨
-                      {Number(pr.toAmount).toLocaleString()} (positive difference ₨
-                      {revisionIncrease.toLocaleString()})
-                    </div>
-                  ) : null}
-                </div>
-                {showDelta && !allowDeltaOnlyOption ? (
-                  <p
-                    style={{
-                      fontSize: 12,
-                      color: 'var(--text-muted)',
-                      marginBottom: 14,
-                      lineHeight: 1.45,
-                    }}
-                  >
-                    <strong>Note:</strong> “Owner billed for party increase only” is shown only when
-                    a <strong>Received</strong> payment from the owner is already linked to this lot
-                    (business already settled for this lot number) and the party increased the
-                    ledger. Otherwise use match, keep, or <strong>set custom owner bill</strong>.
-                  </p>
-                ) : null}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                  <label
-                    style={{
-                      display: 'flex',
-                      gap: 10,
-                      alignItems: 'flex-start',
-                      cursor: 'pointer',
-                      fontSize: 14,
-                    }}
-                  >
-                    <input
-                      type="radio"
-                      name="ownerBilling"
-                      checked={ownerBillingChoice === 'sync_party'}
-                      onChange={() => setOwnerBillingChoice('sync_party')}
-                    />
-                    <span>
-                      <strong>Match Owner bill to party ledger</strong> — set the lot&apos;s bill
-                      to ₨{partyBill.toLocaleString()} (full party amount drives owner billing).
-                    </span>
-                  </label>
-                  <label
-                    style={{
-                      display: 'flex',
-                      gap: 10,
-                      alignItems: 'flex-start',
-                      cursor: 'pointer',
-                      fontSize: 14,
-                    }}
-                  >
-                    <input
-                      type="radio"
-                      name="ownerBilling"
-                      checked={ownerBillingChoice === 'keep_ghausia'}
-                      onChange={() => setOwnerBillingChoice('keep_ghausia')}
-                    />
-                    <span>
-                      <strong>Keep current Owner bill</strong> — leave the lot bill at ₨
-                      {ghausia.toLocaleString()} (party ledger still stores the party figure).
-                    </span>
-                  </label>
-                  <div
-                    style={{
-                      border: '1px solid var(--border)',
-                      borderRadius: 8,
-                      padding: '12px 14px',
-                      background: ownerBillingChoice === 'custom_ghausia' ? 'var(--primary-bg, #eff6ff)' : 'var(--primary-bg, #fafafa)',
-                    }}
-                  >
-                    <label
-                      style={{
-                        display: 'flex',
-                        gap: 10,
-                        alignItems: 'flex-start',
-                        cursor: 'pointer',
-                        fontSize: 14,
-                        marginBottom: ownerBillingChoice === 'custom_ghausia' ? 10 : 0,
-                      }}
-                    >
-                      <input
-                        type="radio"
-                        name="ownerBilling"
-                        checked={ownerBillingChoice === 'custom_ghausia'}
-                        onChange={() => setOwnerBillingChoice('custom_ghausia')}
-                      />
-                      <span>
-                        <strong>Set custom owner bill</strong> — choose any amount to bill
-                        the business (owner) side. Use when the party changed their ledger and you
-                        need a different owner figure than &quot;match party&quot; or &quot;keep
-                        current&quot;.
-                      </span>
-                    </label>
-                    {ownerBillingChoice === 'custom_ghausia' ? (
-                      <div style={{ marginLeft: 28, maxWidth: 300 }}>
-                        <span
-                          style={{
-                            display: 'block',
-                            fontSize: 12,
-                            fontWeight: 600,
-                            color: 'var(--text-secondary)',
-                            marginBottom: 6,
-                          }}
-                        >
-                          Owner bill (₨)
-                        </span>
-                        <input
-                          type="number"
-                          className="form-input"
-                          min={0}
-                          step={1}
-                          value={customOwnerBillInput}
-                          onChange={(e) => setCustomOwnerBillInput(e.target.value)}
-                          onFocus={() => setOwnerBillingChoice('custom_ghausia')}
-                        />
-                        <div
-                          style={{
-                            fontSize: 11,
-                            color: 'var(--text-muted)',
-                            marginTop: 6,
-                            lineHeight: 1.4,
-                          }}
-                        >
-                          Reference: party ledger ₨{partyBill.toLocaleString()}
-                          {' · '}
-                          current lot bill ₨{ghausia.toLocaleString()}
-                        </div>
-                      </div>
-                    ) : null}
-                  </div>
-                  {allowDeltaOnlyOption ? (
-                    <label
-                      style={{
-                        display: 'flex',
-                        gap: 10,
-                        alignItems: 'flex-start',
-                        cursor: 'pointer',
-                        fontSize: 14,
-                      }}
-                    >
-                      <input
-                        type="radio"
-                        name="ownerBilling"
-                        checked={ownerBillingChoice === 'delta_only'}
-                        onChange={() => setOwnerBillingChoice('delta_only')}
-                      />
-                      <span>
-                        <strong>Owner billed for party increase only</strong> — set the owner bill
-                        to ₨{revisionIncrease.toLocaleString()} (only the positive change since the
-                        party&apos;s previous figure). Use this when the owner was already billed
-                        for the earlier amount.
-                      </span>
-                    </label>
-                  ) : null}
-                </div>
-              </>
-            );
-          })()}
-        </Modal>
-      )}
+
 
       {rejectModal && (
         <Modal

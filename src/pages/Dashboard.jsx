@@ -338,6 +338,19 @@ export default function Dashboard() {
     return [...top, others];
   }, [scopedLots, reportingPartyEdits]);
 
+  // TAT Calculation
+  const avgTatDisplay = useMemo(() => {
+    const lotsWithTatDates = scopedLots.filter(l => l.dispatchDate && l.receivedBackDate);
+    if (lotsWithTatDates.length === 0) return 'N/A';
+    const totalDays = lotsWithTatDates.reduce((sum, l) => {
+      const end = new Date(l.receivedBackDate);
+      const start = new Date(l.dispatchDate);
+      const diffTime = Math.max(0, end - start);
+      return sum + Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    }, 0);
+    return `${(totalDays / lotsWithTatDates.length).toFixed(1)} Days`;
+  }, [scopedLots]);
+
   if (initialDataLoading) {
     return (
       <div
@@ -390,22 +403,7 @@ export default function Dashboard() {
   const completedCount = byStatus('completed');
   const rejectedCount = byStatus('rejected');
 
-  // TAT Calculation
-  const completedLotsWithDates = scopedLots.filter(l =>
-    String(l.status || '').toLowerCase() === 'completed' && (l.completionApprovedAt || l.updatedAt) && (l.allotDate || l.createdAt)
-  );
-  let avgTatDisplay = 'N/A';
-  if (completedLotsWithDates.length > 0) {
-    const totalDays = completedLotsWithDates.reduce((sum, l) => {
-      const end = new Date(l.completionApprovedAt || l.updatedAt);
-      const start = new Date(l.allotDate || l.createdAt);
-      const diffTime = Math.abs(end - start);
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-      return sum + diffDays;
-    }, 0);
-    const avgDays = (totalDays / completedLotsWithDates.length).toFixed(1);
-    avgTatDisplay = `${avgDays} Days`;
-  }
+
 
   // WIP Value Calculation
   const wipLots = scopedLots.filter(l => ['dispatched', 'pending approval', 'received back'].includes(String(l.status || '').toLowerCase()));
@@ -595,7 +593,7 @@ export default function Dashboard() {
               <div className="stat-card-modern" style={{ '--card-accent': 'var(--danger, #ec4899)' }}>
                 <div className="stat-label" style={{ textTransform: 'uppercase' }}>Average TAT</div>
                 <div className="stat-value" style={{ color: 'var(--danger, #ec4899)' }}>{avgTatDisplay}</div>
-                <div className="stat-sub">Pending to Complete</div>
+                <div className="stat-sub">Dispatch to Received Back</div>
               </div>
               <div className="stat-card-modern" style={{ '--card-accent': 'var(--primary-light, #0ea5e9)' }}>
                 <div className="stat-label" style={{ textTransform: 'uppercase' }}>WIP Value</div>

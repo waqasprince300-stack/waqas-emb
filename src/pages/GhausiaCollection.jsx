@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef, useEffect } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import Swal from 'sweetalert2';
 import { useLocation } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
@@ -1244,24 +1244,26 @@ export default function GhausiaCollection() {
     new Promise((resolve) => {
       const isCombDup = checkIsCombinedDupatta(lot);
       const effective = getAdminLedgerOrBusinessBill(lot, partyEdits[lot.id] || {});
+      const unpaid = getOwnerUnpaidBalance(lot);
       const ov = options.billAmountOverride;
       const rawBill =
-        ov !== undefined && ov !== null ? Number(ov) : Number(effective || lot.billAmount || 0);
+        ov !== undefined && ov !== null ? Number(ov) : Number(lot.billAmount || 0);
       completeBillResolveRef.current = resolve;
-      setCompleteBillInput(isCombDup ? '0' : (rawBill > 0 ? String(rawBill) : ''));
+      setCompleteBillInput(isCombDup ? '0' : (unpaid > 0 ? String(unpaid) : '0'));
       setCompleteBillError('');
       setCompleteBillModal({
         lot,
         fromBillable: !!options.fromBillable,
         billAmountOverride: options.billAmountOverride,
+        unpaidBalance: unpaid,
+        totalBill: rawBill,
       });
     });
 
   const persistLotCompletedWithPayment = async (lot, billAmount, options = {}) => {
     const { fromBillable = false } = options;
     const lotKey = String(lot.id);
-    // Guard against double submission (rapid clicks / a stale re-render re-triggering) which
-    // would create a duplicate Owner payment.
+    // Guard against double submission
     if (completingLotsRef.current.has(lotKey)) return;
     completingLotsRef.current.add(lotKey);
     setCompletionPersistingLotId(lot.id);
@@ -1276,24 +1278,58 @@ export default function GhausiaCollection() {
           : billAmount,
       ...(fromBillable ? { completedFromBillable: false } : {}),
     };
+    
+    // Bug Fix: Check existing owner payments for this lot to prevent double billing
+    const normKey = normalizeLotNumberKey(lot.lotNumber || lot.lotNo);
+    const existingOwnerPayments = payments.filter(
+      (p) => normalizeLotNumberKey(p.linkedLot) === normKey && String(p.party || '').trim().toLowerCase() === 'owner'
+    );
+    const existingPaidToOwner = existingOwnerPayments
+      .filter((p) => p.type === 'Paid')
+      .reduce((s, p) => s + p.amount, 0);
+    const existingReceivedFromOwner = existingOwnerPayments
+      .filter((p) => p.type === 'Received')
+      .reduce((s, p) => s + p.amount, 0);
+      
+    // The "net" amount already billed to the owner.
+    const expectedAmount = Number(lot.billAmount || 0);
+    const isReEditedLot = fromBillable && !!partyEdits[lot.id]?.amountChangeNote;
+    
+    // We will use the amount entered by the user (billAmount parameter) as the payment amount if it's > 0.
+    // This respects the user's manual input in the popup (which now correctly pre-fills with the unpaid balance).
+    const paymentAmount = Number(billAmount) || 0;
+    
+    let paymentType = 'Paid'; // Default for Owner Bills
+    if (fromBillable) {
+      // Whether it's a re-edited lot (price difference) or a normal/defective lot,
+      // the user expects these to be "Bills" to the owner, which requires type: 'Paid'
+      paymentType = 'Paid';
+    } else {
+      paymentType = 'Paid'; // If they ever complete normally, they likely also expect a bill
+    }
+
     const linkedLot = String(lot.lotNumber || lot.lotNo || '').trim();
     const partyName =
       (lot.partyName && String(lot.partyName).trim()) ||
       (lot.partyId ? getPartyName(lot.partyId) : '') ||
       '';
     const designNo = String(lot.designNo || '').trim() || '—';
-    const optimisticPayment = {
-      id: `optimistic-${lotKey}-${Date.now()}`,
-      type: fromBillable ? 'Paid' : 'Received',
-      amount: Number(billAmount),
-      party: 'Owner',
-      date: today,
-      linkedLot,
-      note: fromBillable
-        ? `Billable lot settled — Party: ${partyName || '—'}; Design: ${designNo}; Type: ${lot.itemType || lot.fabric || '—'}`
-        : `Lot completed — Party: ${partyName || '—'}; Design: ${designNo}; Type: ${lot.itemType || lot.fabric || '—'}`,
-      businessOwnerId: lotBizId(lot),
-    };
+    
+    let optimisticPayment = null;
+    if (paymentAmount > 0) {
+      optimisticPayment = {
+        id: `optimistic-${lotKey}-${Date.now()}`,
+        type: paymentType,
+        amount: paymentAmount,
+        party: 'Owner',
+        date: today,
+        linkedLot,
+        note: fromBillable
+          ? (isReEditedLot ? `Billable lot settled (difference) — Party: ${partyName || '—'}; Design: ${designNo}` : `Defective lot settled — Party: ${partyName || '—'}`)
+          : `Lot completed — Party: ${partyName || '—'}; Design: ${designNo}; Type: ${lot.itemType || lot.fabric || '—'}`,
+        businessOwnerId: lotBizId(lot),
+      };
+    }
 
     setOptimisticCompletions((prev) => ({
       ...prev,
@@ -1320,19 +1356,29 @@ export default function GhausiaCollection() {
         console.error(_e);
       });
 
-      const paymentPromise = (
-        fromBillable
-          ? recordOwnerBillableSettlementPayment({ ...lot, ...lotUpdate }, billAmount, today)
-          : recordOwnerReceivedForCompletedLot({ ...lot, ...lotUpdate }, billAmount, today)
-      ).catch(() => {
-        Swal.fire({
-          icon: 'warning',
-          title: 'Lot updated; payment failed',
-          text: fromBillable
-            ? 'The lot was marked completed, but saving the settlement payment failed. Add a Paid → Owner entry from Payment Management if needed.'
-            : 'The lot was marked completed with a bill amount, but saving the owner payment failed. Add it manually from Payment Management if needed.',
+      let paymentPromise = Promise.resolve();
+      if (paymentAmount > 0) {
+        // Use addPayment directly to respect the correctly calculated paymentType
+        paymentPromise = addPayment(
+          {
+            type: paymentType,
+            amount: paymentAmount,
+            party: 'Owner',
+            date: today,
+            linkedLot,
+            note: fromBillable
+              ? (isReEditedLot ? `Billable lot settled (difference) — Party: ${partyName || '—'}; Design: ${designNo}` : `Defective lot settled — Party: ${partyName || '—'}`)
+              : `Lot completed — Party: ${partyName || '—'}; Design: ${designNo}; Type: ${lot.itemType || lot.fabric || '—'}`,
+          },
+          { businessOwnerId: lotBizId(lot) }
+        ).catch(() => {
+          Swal.fire({
+            icon: 'warning',
+            title: 'Lot updated; payment failed',
+            text: 'The lot was marked completed, but saving the payment failed. Add it manually if needed.',
+          });
         });
-      });
+      }
 
       await Promise.all([partyEditPromise, paymentPromise]);
     } finally {
@@ -1345,7 +1391,6 @@ export default function GhausiaCollection() {
   const handleCompleteFromBillable = async (lot) => {
     const amount = await promptBillAmountForCompletion(lot, {
       fromBillable: true,
-      billAmountOverride: getOwnerBillableAmount(lot),
     });
     if (amount == null) return;
     await persistLotCompletedWithPayment(lot, amount, { fromBillable: true });
@@ -1521,7 +1566,7 @@ export default function GhausiaCollection() {
           customRange
         );
       }),
-    [effectiveCollectionLots, partyFilter, dateRange, customRange, stuckLotIdsFilter, highlightedBillableLotId]
+    [effectiveCollectionLots, partyFilter, dateRange, customRange, stuckLotIdsFilter]
   );
 
   const completedLotsCount = useMemo(
@@ -1569,10 +1614,35 @@ export default function GhausiaCollection() {
     [visibleLots]
   );
   /**
-   * Amount billable to owner: workspace lot bill only (not party ledger `partyBillAmount`).
    * Party-facing figures stay on Party Ledger; this page’s owner tiles use the business-defined amount.
    */
   const getOwnerBillableAmount = (lot) => getBusinessBillAmount(lot);
+
+  const getOwnerSettledAmount = useCallback(
+    (lot) => {
+      const normKey = normalizeLotNumberKey(lot.lotNumber || lot.lotNo);
+      const existingOwnerPayments = payments.filter(
+        (p) => normalizeLotNumberKey(p.linkedLot) === normKey && String(p.party || '').trim().toLowerCase() === 'owner'
+      );
+      const existingPaidToOwner = existingOwnerPayments
+        .filter((p) => p.type === 'Paid')
+        .reduce((s, p) => s + p.amount, 0);
+        
+      // Only count 'Paid' payments as they represent the actual "Bills" sent to the owner.
+      // 'Received' payments are cash receipts and shouldn't reduce the unbilled balance.
+      return existingPaidToOwner;
+    },
+    [payments]
+  );
+
+  const getOwnerUnpaidBalance = useCallback(
+    (lot) => {
+      const expectedAmount = getBusinessBillAmount(lot);
+      const totalSettled = getOwnerSettledAmount(lot);
+      return Math.max(0, expectedAmount - totalSettled);
+    },
+    [getOwnerSettledAmount, partyEdits]
+  );
   const isCombinedDupatta = checkIsCombinedDupatta;
   const renderOwnerBillableAmount = (l) => {
     if (isCombinedDupatta(l)) {
@@ -1584,7 +1654,18 @@ export default function GhausiaCollection() {
     }
     return `Rs${getOwnerBillableAmount(l).toLocaleString()}`;
   };
-  const billableTotal = billable.reduce((s, l) => s + getOwnerBillableAmount(l), 0);
+
+  const renderOwnerUnpaidBalance = (l) => {
+    if (isCombinedDupatta(l)) {
+      return (
+        <span style={{ fontSize: 11, color: 'var(--warning, #d97706)', fontWeight: 600, background: 'var(--warning-bg, #fffbeb)', padding: '2px 8px', borderRadius: 12 }}>
+          Combined Bill
+        </span>
+      );
+    }
+    return `Rs${getOwnerUnpaidBalance(l).toLocaleString()}`;
+  };
+  const billableTotal = billable.reduce((s, l) => s + getOwnerUnpaidBalance(l), 0);
 
   const billableFiltered = useMemo(() => {
     const q = debouncedBillableSearch.trim().toLowerCase();
@@ -1879,6 +1960,13 @@ export default function GhausiaCollection() {
     try {
       await deleteLot(deleteTarget.id, { businessOwnerId: lotBizId(deleteTarget) });
       setDeleteTarget(null);
+    } catch (e) {
+      Swal.fire({
+        icon: 'error',
+        title: 'Delete Failed',
+        text: e?.message || 'Could not delete the lot. Please try again.',
+        confirmButtonColor: 'var(--danger, #dc2626)',
+      });
     } finally {
       setDeleteLoading(false);
     }
@@ -2452,6 +2540,7 @@ export default function GhausiaCollection() {
                             setDateRange('all');
                           }
                         }}
+                        className="billable-row"
                         style={{
                           display: 'flex',
                           alignItems: 'center',
@@ -2466,30 +2555,45 @@ export default function GhausiaCollection() {
                           transition: 'background 0.2s',
                         }}
                       >
-                      <span style={{ flex: '1 1 auto', minWidth: 0, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {l.lotNumber || l.lotNo} / {l.designNo} —{' '}
+                      <span className="billable-row-title" style={{ flex: '1 1 auto', color: 'var(--text-primary)' }}>
+                        <strong>{l.lotNumber || l.lotNo} / {l.designNo}</strong> —{' '}
                         <span style={{ color: 'var(--text-secondary)' }}>{l.partyName || '—'}</span>
                       </span>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-                      {partyEdits[l.id]?.amountChangeNote ? (
-                        <div style={{ textAlign: 'right', color: 'var(--text-primary)' }}>
-                          <strong>{renderOwnerBillableAmount(l)}</strong>
-                          <div style={{ fontSize: 10, color: 'var(--warning)', marginTop: 2 }}>
-                            Party ledger: Previous ₨
-                            {Number(
-                              partyEdits[l.id].amountChangeNote.previousAmount || 0
-                            ).toLocaleString()}{' '}
-                            → Updated ₨
-                            {Number(
-                              partyEdits[l.id].amountChangeNote.updatedAmount || 0
-                            ).toLocaleString()}
+                    <div className="billable-row-right" style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                      {(() => {
+                        const settled = getOwnerSettledAmount(l);
+                        return partyEdits[l.id]?.amountChangeNote ? (
+                          <div style={{ textAlign: 'right', color: 'var(--text-primary)' }}>
+                            <strong>{renderOwnerUnpaidBalance(l)}</strong>
+                            {settled > 0 && (
+                              <div style={{ fontSize: 10, color: 'var(--success, #16a34a)', marginTop: 2 }}>
+                                Owner already billed: ₨{settled.toLocaleString()}
+                              </div>
+                            )}
+                            <div style={{ fontSize: 10, color: 'var(--warning)', marginTop: 2 }}>
+                              Party ledger: Previous ₨
+                              {Number(
+                                partyEdits[l.id].amountChangeNote.previousAmount || 0
+                              ).toLocaleString()}{' '}
+                              → Updated ₨
+                              {Number(
+                                partyEdits[l.id].amountChangeNote.updatedAmount || 0
+                              ).toLocaleString()}
+                            </div>
                           </div>
-                        </div>
-                      ) : (
-                        <strong style={{ color: 'var(--text-primary)' }}>
-                          {renderOwnerBillableAmount(l)}
-                        </strong>
-                      )}
+                        ) : (
+                          <div style={{ textAlign: 'right' }}>
+                            <strong style={{ color: 'var(--text-primary)' }}>
+                              {renderOwnerUnpaidBalance(l)}
+                            </strong>
+                            {settled > 0 && (
+                              <div style={{ fontSize: 10, color: 'var(--success, #16a34a)', marginTop: 2 }}>
+                                Owner already billed: ₨{settled.toLocaleString()}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
                       <button
                         type="button"
                         className="btn btn-sm"
@@ -2498,7 +2602,7 @@ export default function GhausiaCollection() {
                           e.stopPropagation();
                           handleCompleteFromBillable(l);
                         }}
-                        style={{ whiteSpace: 'nowrap', background: 'var(--primary)', color: '#000', border: 'none', fontWeight: 600, padding: '4px 10px', fontSize: 11.5 }}
+                        style={{ whiteSpace: 'nowrap', background: 'var(--primary)', color: 'var(--primary-text, #fff)', border: 'none', fontWeight: 600, padding: '4px 10px', fontSize: 11.5 }}
                       >
                         {completionPersistingLotId === l.id ? (
                           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
@@ -3150,7 +3254,7 @@ export default function GhausiaCollection() {
           const ov = completeBillModal.billAmountOverride;
           const effective = getAdminLedgerOrBusinessBill(lot, partyEdits[lot.id] || {});
           const rawBill =
-            ov !== undefined && ov !== null ? Number(ov) : Number(effective || lot.billAmount || 0);
+            ov !== undefined && ov !== null ? Number(ov) : Number(lot.billAmount || 0);
           const confirmAmt = Number(completeBillInput);
           const amountForOwnerCheck =
             !Number.isNaN(confirmAmt) && confirmAmt > 0 ? confirmAmt : rawBill;
@@ -3194,6 +3298,18 @@ export default function GhausiaCollection() {
                 >
                   This lot&apos;s bill is <strong style={{ color: 'var(--warning, #d97706)' }}>combined</strong> with the main lot. You can complete and settle it directly (₨0 bill).
                 </p>
+              ) : completeBillModal.unpaidBalance === 0 ? (
+                <p
+                  style={{
+                    textAlign: 'left',
+                    fontSize: 13,
+                    margin: '0 0 12px',
+                    color: 'var(--text-secondary)',
+                  }}
+                >
+                  <strong style={{ color: 'var(--success, #16a34a)', display: 'block', marginBottom: 6 }}>Is lot ka pura bill clear ho chuka hai!</strong>
+                  Iska total bill <strong>₨{amountBill}</strong> pehle hi clear ho chuka hai. &quot;Complete&quot; par click karein taa k lot mukammal ho jaye (koi nayi payment record nahi hogi).
+                </p>
               ) : fromBillable ? (
                 <p
                   style={{
@@ -3203,29 +3319,25 @@ export default function GhausiaCollection() {
                     color: 'var(--text-secondary)',
                   }}
                 >
-                  Confirm the bill amount for this lot. It will move to <strong>Completed</strong>,
-                  the <strong>Owner Received</strong> total will go down by this amount, and a{' '}
-                  <strong>Paid → Owner</strong> row will be saved in Payment Management (linked to
-                  this lot).
-                  {rawBill > 0 ? (
+                  Neechay is lot ki baqi (unpaid) amount confirm karein. Lot <strong>Completed</strong> ho jayega, 
+                  aur Payment Management mein is amount ka naya bill (<strong>Bill → Owner</strong>) record ho jayega.
+                  {completeBillModal.totalBill > 0 ? (
                     <>
                       {' '}
-                      Current bill: <strong>₨{amountBill}</strong> (edit below if needed).
+                      Total bill: <strong>₨{amountBill}</strong>. Baqi udhaar: <strong>₨{completeBillModal.unpaidBalance.toLocaleString()}</strong>.
                     </>
                   ) : (
-                    <> No bill amount on file (₨{amountBill}) — enter the amount below.</>
+                    <> Is lot ka koi bill save nahi hai — neechay amount likhein.</>
                   )}
                   {amountForOwnerCheck > 0 && ownerReceivedNet < amountForOwnerCheck && (
                     <span
                       style={{ display: 'block', marginTop: 10, color: 'var(--warning, #b45309)', fontWeight: 600 }}
                     >
-                      Owner Received (after other settlements) is less than this bill — after
-                      completion, Owner Received will show as <strong>Pending to owner</strong>{' '}
-                      until recorded receipts catch up.
+                      Aap k paas Owner ka advance (Received) cash khatam hai — yeh lot complete karne k baad Owner ka khata minus mein (<strong>Pending udhaar</strong>) chala jayega jab tak k aap naya cash receive nahi karte.
                     </span>
                   )}
                 </p>
-              ) : rawBill > 0 ? (
+              ) : completeBillModal.totalBill > 0 ? (
                 <p
                   style={{
                     textAlign: 'left',
@@ -3234,9 +3346,7 @@ export default function GhausiaCollection() {
                     color: 'var(--text-secondary)',
                   }}
                 >
-                  This lot has a bill amount of <strong>₨{amountBill}</strong>. You can keep it or
-                  change it below. Completing will add a <strong>Received</strong> entry in Payment
-                  Management using the amount you confirm.
+                  Is lot ka total bill <strong>₨{amountBill}</strong> hai, aur baqi <strong>₨{completeBillModal.unpaidBalance.toLocaleString()}</strong> udhaar rehta hai. Isay complete karne par Payment Management mein (<strong>Received</strong>) ki payment record hogi jo amount aap neechay confirm karenge.
                 </p>
               ) : (
                 <p
@@ -3247,9 +3357,7 @@ export default function GhausiaCollection() {
                     color: 'var(--text-secondary)',
                   }}
                 >
-                  This lot has no bill amount (₨{amountBill}). Enter the amount received from the
-                  owner to mark it completed and add a <strong>Received</strong> entry in Payment
-                  Management.
+                  Is lot ka koi bill save nahi hai. Owner se jo amount aap ne li hai wo neechay likhein taa k lot mukammal ho aur Payment Management mein (<strong>Received</strong>) ki entry save ho jaye.
                 </p>
               )}
               <div
@@ -3266,9 +3374,9 @@ export default function GhausiaCollection() {
                 <strong>Party:</strong> {partyLabel}
                 <br />
               </div>
-              {!isCombinedDupatta(lot) && (
+              {!isCombinedDupatta(lot) && completeBillModal.unpaidBalance > 0 && (
                 <FormGroup
-                  label={rawBill > 0 ? 'Bill amount (₨) — edit if needed' : 'Amount received (₨) *'}
+                  label={rawBill > 0 ? 'Baqi udhaar amount (₨) — zaroorat ho toh change karein' : 'Vasool ki gayi amount (₨) *'}
                 >
                   <input
                     className={`form-input${completeBillError ? ' input-error' : ''}`}
@@ -3280,7 +3388,7 @@ export default function GhausiaCollection() {
                       setCompleteBillInput(e.target.value);
                       setCompleteBillError('');
                     }}
-                    placeholder={rawBill > 0 ? `Default ₨${amountBill}` : 'Amount (₨)'}
+                    placeholder={rawBill > 0 ? `Default ₨${completeBillModal.unpaidBalance.toLocaleString()}` : 'Amount (₨)'}
                     autoFocus
                   />
                   {completeBillError && (
@@ -3462,7 +3570,7 @@ export default function GhausiaCollection() {
       {deleteTarget && (
         <ConfirmDialog
           message={
-            deleteTarget.suitComponent === 'main' && deleteTarget.linkedLotId
+            (deleteTarget.suitComponent !== 'dupatta' && (deleteTarget.linkedLotId || (deleteTarget.suitType === '3-piece' && collectionLots.some(l => String(l.linkedLotId) === String(deleteTarget.id)))))
               ? `Delete lot ${deleteTarget.lotNumber || deleteTarget.lotNo} / ${deleteTarget.designNo}? This will also delete the linked Dupatta lot. This action cannot be undone.`
               : deleteTarget.suitComponent === 'dupatta' && deleteTarget.linkedLotId
               ? `Delete lot ${deleteTarget.lotNumber || deleteTarget.lotNo} / ${deleteTarget.designNo}? This will downgrade the linked Main lot to a 2-piece suit. This action cannot be undone.`
