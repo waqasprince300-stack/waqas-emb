@@ -51,15 +51,22 @@ export function FormGroup({ label, children, half }) {
 
 export function StatusBadge({ status, label }) {
   const map = {
-    Pending: 'badge badge-pending',
-    Dispatched: 'badge badge-dispatched',
+    'Pending': 'badge badge-pending',
+    'Dispatched': 'badge badge-dispatched',
     'Received Back': 'badge badge-received',
-    Completed: 'badge badge-completed',
+    'Completed': 'badge badge-completed',
     'In Progress': 'badge badge-inprogress',
     'Pending Approval': 'badge badge-inprogress',
-    Rejected: 'badge badge-dispatched',
+    'Rejected': 'badge badge-dispatched',
   };
-  return <span className={map[status] || 'badge'}>{label || status}</span>;
+  // Normalize to title-case so both 'pending approval' and 'Pending Approval' match
+  const titleCase = String(status || '')
+    .trim()
+    .toLowerCase()
+    .split(' ')
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ');
+  return <span className={map[titleCase] || 'badge'}>{label || status}</span>;
 }
 
 export function ActionBtn({ variant = 'edit', onClick }) {

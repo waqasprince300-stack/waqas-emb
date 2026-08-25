@@ -75,9 +75,11 @@ export default function LedgerFilterBar({
             value={dateRange}
             onChange={setDateRange}
             customStart={customStart}
-            setCustomStart={setCustomStart}
             customEnd={customEnd}
-            setCustomEnd={setCustomEnd}
+            onCustomChange={({ start, end }) => {
+              setCustomStart(start);
+              setCustomEnd(end);
+            }}
           />
         </div>
       </div>

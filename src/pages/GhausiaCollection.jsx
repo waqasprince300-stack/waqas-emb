@@ -1641,7 +1641,7 @@ export default function GhausiaCollection() {
       const totalSettled = getOwnerSettledAmount(lot);
       return Math.max(0, expectedAmount - totalSettled);
     },
-    [getOwnerSettledAmount, partyEdits]
+    [getOwnerSettledAmount]
   );
   const isCombinedDupatta = checkIsCombinedDupatta;
   const renderOwnerBillableAmount = (l) => {
@@ -1892,6 +1892,30 @@ export default function GhausiaCollection() {
     try {
       if (prev) {
         await updateLot(prev.id, lotPayloadForApi, { businessOwnerId: targetBiz });
+
+        // Auto-sync lot number and design number to the linked lot (e.g. Dupatta <-> Main)
+        if (prev.linkedLotId && (saveForm.lotNumber !== prev.lotNumber || saveForm.designNo !== prev.designNo)) {
+          const linkedLot = collectionLots.find((l) => String(l.id || l._id) === String(prev.linkedLotId));
+          const syncUpdates = {};
+          if (saveForm.lotNumber !== prev.lotNumber) {
+            let syncedLotNum = String(saveForm.lotNumber || '').trim();
+            if (linkedLot && linkedLot.suitComponent === 'dupatta') {
+              syncedLotNum = syncedLotNum.endsWith('-D') ? syncedLotNum : syncedLotNum + '-D';
+            } else if (linkedLot && linkedLot.suitComponent === 'main') {
+              syncedLotNum = syncedLotNum.endsWith('-D') ? syncedLotNum.slice(0, -2) : syncedLotNum;
+            }
+            syncUpdates.lotNumber = syncedLotNum;
+            syncUpdates.lotNo = syncedLotNum;
+          }
+          if (saveForm.designNo !== prev.designNo) {
+            syncUpdates.designNo = saveForm.designNo;
+          }
+          try {
+            await updateLot(prev.linkedLotId, syncUpdates, { businessOwnerId: targetBiz });
+          } catch (err) {
+            console.warn('Failed to sync lot details to linked lot', err);
+          }
+        }
         if (saveForm.status === 'completed') {
           await updatePartyEdit(
             prev.id,

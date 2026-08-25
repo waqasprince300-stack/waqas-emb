@@ -28,11 +28,7 @@ export const normalizeLotData = (lot) => {
   const partyId = lot.partyId != null && lot.partyId !== '' ? String(lot.partyId) : '';
   const status =
     typeof lot.status === 'string'
-      ? lot.status
-          .split(' ')
-          .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-          .join(' ')
-          .toLowerCase()
+      ? lot.status.trim().toLowerCase()
       : 'pending';
 
   return {
