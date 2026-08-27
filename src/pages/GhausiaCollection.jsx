@@ -37,1036 +37,23 @@ import {
   BASE_MACHINE_HEADS,
   rememberLotFormSave,
 } from '../utils/lotFieldMemory';
+import {
+  STATUS_OPTIONS,
+  lotSaveErrorToast,
+  normalizeLotNumberKey,
+  messageFromLotSaveError,
+  hasPositiveBillAmount,
+  checkIsCombinedDupatta,
+} from '../utils/ghausiaHelpers';
 
-const BASE_FABRICS = ['Lawn', 'Velvet', 'Cambric'];
-const COLOR_OPTIONS = Array.from({ length: 13 }, (_, i) => i);
-const STATUS_OPTIONS = [
-  'pending',
-  'dispatched',
-  'pending approval',
-  'rejected',
-  'received back',
-  'completed',
-];
-
-function lotSaveErrorToast(title) {
-  Swal.fire({
-    toast: true,
-    position: 'top-end',
-    icon: 'error',
-    title,
-    showConfirmButton: false,
-    timer: 4500,
-    timerProgressBar: true,
-  });
-}
-
-function normalizeLotNumberKey(value) {
-  return String(value || '')
-    .trim()
-    .toLowerCase();
-}
-
-function messageFromLotSaveError(err) {
-  const msg = String(err?.message || err || '');
-  const httpMatch = msg.match(/^HTTP (\d+):\s*(.*)$/is);
-  if (httpMatch) {
-    const status = Number(httpMatch[1]);
-    const body = (httpMatch[2] || '').trim();
-    if (status === 409 && body) return body;
-    if (body && (status === 400 || status === 403)) return body;
-  }
-  if (/already exists in this collection/i.test(msg)) return msg;
-  if (/E11000|duplicate key|dup key/i.test(msg)) {
-    if (/lotNumber/i.test(msg)) {
-      return 'A lot with this lot number already exists in this business collection. Use a different number, or switch collection if you meant another workspace.';
-    }
-    return 'Duplicate record: this value is already in use.';
-  }
-  return 'Could not save the lot. Please try again.';
-}
-
-function hasPositiveBillAmount(lot) {
-  return Number(lot?.billAmount || 0) > 0;
-}
-
-const _newDate = new Date().toISOString().split('T')[0];
-
-function checkIsCombinedDupatta(l) {
-  if (!l || l.suitComponent !== 'dupatta') return false;
-  if (l.ownerBillingChoice === 'combined') return true;
-  if (l.ownerBillingChoice === 'separate') return false;
-  return Number(l.billAmount || 0) === 0;
-}
-
-function resolveItemTypeFields(raw) {
-  const t = String(raw?.itemType || raw?.fabric || '').trim();
-  if (!t || BASE_FABRICS.includes(t)) {
-    return { itemType: t || 'Lawn', customFabric: '' };
-  }
-  const remembered = getRememberedItemTypes();
-  const hit = remembered.find((x) => x.toLowerCase() === t.toLowerCase());
-  if (hit) return { itemType: hit, customFabric: '' };
-  return { itemType: '__custom', customFabric: t };
-}
-
-function LotForm({
-  initial,
-  onSave,
-  onClose,
-  parties,
-  saving,
-  pickWorkspaceForNewLot,
-  workspaceOwnerOptions,
-  defaultNewLotOwnerId,
-  onJumpToLinkedLot,
-  onSeparateBill,
-}) {
-  const blank = {
-    lotNumber: '',
-    lotNo: '',
-    designNo: '',
-    description: '',
-    itemType: 'Lawn',
-    fabric: 'Lawn',
-    customFabric: '',
-    colors: 0,
-    quantity: '',
-    pieces: '',
-    unit: 'pieces',
-    rate: '',
-    billAmount: '',
-    //  totalAmount: '',
-    //  notes: '',
-    allotDate: new Date().toISOString().slice(0, 10),
-    partyId: '',
-    partyName: '',
-    status: 'pending',
-    dispatchDate: '',
-    receivedBackDate: '',
-    saveBusinessOwnerId: defaultNewLotOwnerId || '',
-    suitType: '2-piece',
-    isRework: false,
-    ownerBillingChoice: 'separate',
-    dupattaDetails: { partyId: '', partyName: '', itemType: '', customFabric: '', fabric: '', quantity: '', billAmount: '' },
-  };
-  const itemTypeOptions = useMemo(
-    () => [...BASE_FABRICS, ...getRememberedItemTypes().filter((t) => !BASE_FABRICS.includes(t))],
-    []
-  );
-
-  const [headConfig, setHeadConfig] = useState(() => getMachineHeadConfig());
-  const [headList, setHeadList] = useState(() => getAllMachineHeads());
-  const [selectedHead, setSelectedHead] = useState(() => {
-    const cfg = getMachineHeadConfig();
-    if (initial?.colors > 0 && initial?.pieces > 0) {
-      const inferred = Math.round(Number(initial.pieces) / Number(initial.colors));
-      if (inferred > 0) return inferred;
-    }
-    return cfg.defaultHead;
-  });
-  const [customHeadInput, setCustomHeadInput] = useState('');
-  const [showHeadAdd, setShowHeadAdd] = useState(false);
-
-  const [form, setForm] = useState(() => {
-    if (!initial) return blank;
-    const typeFields = resolveItemTypeFields(initial);
-    return {
-      ...blank,
-      ...initial,
-      lotNumber: initial.lotNumber || initial.lotNo || '',
-      lotNo: initial.lotNo || initial.lotNumber || '',
-      ...typeFields,
-      fabric: typeFields.itemType === '__custom' ? typeFields.customFabric : typeFields.itemType,
-      pieces: initial.pieces ?? '',
-      partyId:
-        initial.partyId ||
-        parties.find((p) => p.name === (initial.partyName || initial.party))?.id ||
-        '',
-      partyName: parties.find((p) => p.id === initial.partyId)?.name || initial.partyName || '',
-      saveBusinessOwnerId:
-        initial.businessOwnerId != null && initial.businessOwnerId !== ''
-          ? String(initial.businessOwnerId)
-          : defaultNewLotOwnerId || '',
-      suitType: initial.suitType || '2-piece',
-      isRework: initial.isRework || false,
-      ownerBillingChoice: initial.ownerBillingChoice || 'separate',
-      dupattaDetails: initial.dupattaDetails || { partyId: '', partyName: '', rate: '', fabric: '', quantity: '', billAmount: '' },
-    };
-  });
-  const [errors, setErrors] = useState({});
-  const isNewLot = !initial;
-  const [bulkMode, setBulkMode] = useState(false);
-  const [bulkCount, setBulkCount] = useState(5);
-
-  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
-
-  const selectHead = (headCount) => {
-    const h = Math.round(Number(headCount));
-    if (!h || h < 1) return;
-    setSelectedHead(h);
-    setForm((f) => ({
-      ...f,
-      pieces: f.colors > 0 ? String(Number(f.colors) * h) : f.pieces,
-    }));
-  };
-
-  const setColorsAndPieces = (colorsVal) => {
-    const c = Number(colorsVal);
-    setForm((f) => ({
-      ...f,
-      colors: c,
-      pieces: c > 0 ? String(c * selectedHead) : '',
-    }));
-  };
-
-  const addCustomHead = () => {
-    const n = Math.round(Number(customHeadInput));
-    if (!n || n < 1) return;
-    const cfg = addCustomMachineHead(n);
-    setHeadConfig(cfg);
-    setHeadList(getAllMachineHeads());
-    selectHead(n);
-    setCustomHeadInput('');
-  };
-
-  const makeDefaultHead = (headCount) => {
-    const cfg = setDefaultMachineHead(headCount);
-    setHeadConfig(cfg);
-    selectHead(headCount);
-  };
-
-  const removeCustomHead = (headCount) => {
-    const cfg = removeCustomMachineHead(headCount);
-    setHeadConfig(cfg);
-    setHeadList(getAllMachineHeads());
-    if (selectedHead === headCount) {
-      selectHead(cfg.defaultHead);
-    }
-  };
-
-  const bulkLotNumbers = useMemo(() => {
-    if (!isNewLot || !bulkMode) return null;
-    return generateSerialLotNumbers(form.lotNumber, bulkCount);
-  }, [isNewLot, bulkMode, form.lotNumber, bulkCount]);
-
-  const { recentParties, otherParties } = useMemo(() => {
-    const recentIds = getRecentPartyIds();
-    const recent = [];
-    const others = [];
-    for (const p of parties) {
-      if (recentIds.includes(String(p.id))) recent.push(p);
-      else others.push(p);
-    }
-    recent.sort((a, b) => recentIds.indexOf(String(a.id)) - recentIds.indexOf(String(b.id)));
-    return { recentParties: recent, otherParties: others };
-  }, [parties]);
-
-  const validate = () => {
-    const newErrors = {};
-    if (!form.designNo.trim()) newErrors.designNo = 'Design Number is required';
-    if (pickWorkspaceForNewLot && !String(form.saveBusinessOwnerId || '').trim()) {
-      newErrors.saveBusinessOwnerId = 'Select a business collection for this lot';
-    }
-    if (isNewLot && bulkMode) {
-      const count = Number(bulkCount);
-      if (!Number.isFinite(count) || count < 2 || count > 100) {
-        newErrors.bulkCount = 'Enter 2–100 lots';
-      } else if (!bulkLotNumbers) {
-        newErrors.lotNumber = 'Use a starting lot ending in digits (e.g. L-10)';
-      }
-    }
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
-
-  const saveOwnerForPayload = pickWorkspaceForNewLot
-    ? String(form.saveBusinessOwnerId || '').trim()
-    : initial?.businessOwnerId
-      ? String(initial.businessOwnerId)
-      : String(defaultNewLotOwnerId || '').trim();
-
-  const handleSave = async () => {
-    if (!validate()) return;
-    
-    const lotNumber = (form.lotNumber || form.lotNo || '').trim();
-    if (!lotNumber) {
-      const confirm = await Swal.fire({
-        title: 'Save without Lot Number?',
-        text: 'You have not entered a lot number. Are you sure you want to save this work as unnumbered?',
-        icon: 'warning',
-        showCancelButton: true,
-        confirmButtonColor: 'var(--purple, #4f46e5)',
-        cancelButtonColor: 'var(--text-muted, #94a3b8)',
-        confirmButtonText: 'Yes, save without number',
-        cancelButtonText: 'Cancel'
-      });
-      if (!confirm.isConfirmed) return;
-    }
-    
-    const finalType = form.itemType === '__custom' ? form.customFabric : form.itemType;
-    let finalDupattaDetails = form.dupattaDetails;
-    if (form.suitType === '3-piece') {
-      const dFinalType = form.dupattaDetails.itemType === '__custom' ? form.dupattaDetails.customFabric : form.dupattaDetails.itemType;
-      finalDupattaDetails = {
-        ...form.dupattaDetails,
-        fabric: dFinalType,
-        itemType: dFinalType,
-      };
-    }
-
-    const quantityValue = Number(form.quantity || form.pieces || 0);
-    const selectedParty = parties.find((p) => p.id === form.partyId);
-    const partyName = selectedParty?.name || form.partyName || '';
-    const partyId = form.partyId || '';
-
-    let syncMainLotPieces = false;
-    if (initial && (initial.suitType === '3-piece' || form.suitType === '3-piece')) {
-      const initialPieces = Number(initial.quantity || initial.pieces || 0);
-      if (quantityValue !== initialPieces) {
-        if (initial.suitComponent === 'main' || !initial.suitComponent) {
-          const dQty = Number(finalDupattaDetails.quantity || 0);
-          if (dQty !== quantityValue && form.suitType === '3-piece') {
-            const res = await Swal.fire({
-              title: 'Sync Dupatta Pieces?',
-              text: `You changed the Main lot pieces to ${quantityValue}. Do you want to automatically update the Dupatta lot pieces to ${quantityValue} as well?`,
-              icon: 'question',
-              showCancelButton: true,
-              confirmButtonText: 'Yes, update Dupatta too',
-              cancelButtonText: 'No, leave it as is'
-            });
-            if (res.isConfirmed) {
-              finalDupattaDetails.quantity = String(quantityValue);
-            }
-          }
-        } else if (initial.suitComponent === 'dupatta') {
-          const res = await Swal.fire({
-            title: 'Sync Main Lot Pieces?',
-            text: `You changed the Dupatta pieces to ${quantityValue}. Do you want to automatically update the Main lot pieces to ${quantityValue} as well?`,
-            icon: 'question',
-            showCancelButton: true,
-            confirmButtonText: 'Yes, update Main lot too',
-            cancelButtonText: 'No, leave it as is'
-          });
-          if (res.isConfirmed) {
-            syncMainLotPieces = true;
-          }
-        }
-      }
-    }
-
-    const basePayload = {
-      ...form,
-      saveBusinessOwnerId: saveOwnerForPayload,
-      fabric: finalType,
-      itemType: finalType,
-      quantity: quantityValue,
-      pieces: quantityValue,
-      rate: 0,
-      billAmount: Number(form.billAmount || 0),
-      unit: form.unit || 'pieces',
-      partyId,
-      partyName,
-      machineHead: selectedHead,
-      suitType: form.suitType,
-      isRework: form.isRework,
-      ...(form.suitType === '3-piece'
-        ? {
-            dupattaDetails: finalDupattaDetails,
-            ownerBillingChoice: form.ownerBillingChoice,
-          }
-        : {}),
-      ...(syncMainLotPieces ? { syncMainLotPieces } : {})
-    };
-
-    if (isNewLot && bulkMode && bulkLotNumbers && bulkLotNumbers.length > 1) {
-      await onSave({
-        ...basePayload,
-        status: 'pending',
-        bulkLotNumbers,
-      });
-      return;
-    }
-
-    await onSave({
-      ...basePayload,
-      lotNumber,
-      lotNo: lotNumber,
-    });
-  };
-
-  const saveButtonLabel = (() => {
-    if (saving) return 'Saving…';
-    if (isNewLot && bulkMode && bulkLotNumbers && bulkLotNumbers.length > 1) {
-      return `Save ${bulkLotNumbers.length} lots`;
-    }
-    return 'Save Lot';
-  })();
-
-  const compactToolbar = (
-    <div
-      style={{
-        marginBottom: 10,
-        paddingBottom: 8,
-        borderBottom: '1px solid var(--primary-bg, #f1f5f9)',
-        display: 'flex',
-        flexWrap: 'wrap',
-        gap: '6px 10px',
-        alignItems: 'center',
-        fontSize: 12,
-      }}
-    >
-      <span style={{ fontWeight: 700, color: 'var(--text-muted, #94a3b8)' }}>Head</span>
-      {headList.map((h) => {
-        const active = selectedHead === h;
-        const isDefault = headConfig.defaultHead === h;
-        return (
-          <button
-            key={h}
-            type="button"
-            title={isDefault ? 'Default head' : `Use ${h} heads per color`}
-            onClick={() => selectHead(h)}
-            style={{
-              padding: '3px 9px',
-              borderRadius: 6,
-              border: active ? '1px solid var(--purple, #4f46e5)' : '1px solid var(--border, #e2e8f0)',
-              background: active ? 'var(--primary-bg, #eef2ff)' : 'var(--card-bg, #fff)',
-              color: active ? 'var(--primary, #3730a3)' : 'var(--text-secondary, #475569)',
-              fontWeight: active ? 800 : 600,
-              fontSize: 12,
-              cursor: 'pointer',
-              lineHeight: 1.3,
-            }}
-          >
-            {h}
-            {isDefault ? '·' : ''}
-          </button>
-        );
-      })}
-      <button
-        type="button"
-        title="Add custom head"
-        onClick={() => setShowHeadAdd((v) => !v)}
-        style={{
-          padding: '3px 8px',
-          borderRadius: 6,
-          border: '1px dashed var(--border, #cbd5e1)',
-          background: 'var(--card-bg, #fff)',
-          color: 'var(--text-muted, #64748b)',
-          fontSize: 12,
-          fontWeight: 700,
-          cursor: 'pointer',
-        }}
-      >
-        +
-      </button>
-      {showHeadAdd ? (
-        <>
-          <input
-            type="number"
-            min={1}
-            value={customHeadInput}
-            onChange={(e) => setCustomHeadInput(e.target.value)}
-            placeholder="#"
-            style={{
-              width: 48,
-              padding: '3px 6px',
-              fontSize: 12,
-              borderRadius: 6,
-              border: '1px solid var(--border, #e2e8f0)',
-            }}
-          />
-          <button
-            type="button"
-            className="btn btn-ghost btn-sm"
-            style={{ padding: '2px 8px', fontSize: 11 }}
-            onClick={addCustomHead}
-          >
-            Add
-          </button>
-          {selectedHead !== headConfig.defaultHead ? (
-            <button
-              type="button"
-              className="btn btn-ghost btn-sm"
-              style={{ padding: '2px 8px', fontSize: 11 }}
-              title={`Set ${selectedHead} as default`}
-              onClick={() => makeDefaultHead(selectedHead)}
-            >
-              Default {selectedHead}
-            </button>
-          ) : null}
-          {!BASE_MACHINE_HEADS.includes(selectedHead) ? (
-            <button
-              type="button"
-              className="btn btn-ghost btn-sm"
-              style={{ padding: '2px 8px', fontSize: 11, color: 'var(--danger, #dc2626)' }}
-              title={`Delete custom head ${selectedHead}`}
-              onClick={() => removeCustomHead(selectedHead)}
-            >
-              Delete {selectedHead}
-            </button>
-          ) : null}
-        </>
-      ) : null}
-
-      {isNewLot ? (
-        <>
-          <span style={{ color: 'var(--border, #e2e8f0)', userSelect: 'none' }}>|</span>
-          <label
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 5,
-              cursor: 'pointer',
-              color: 'var(--text-secondary, #475569)',
-              fontWeight: 600,
-            }}
-          >
-            <input
-              type="checkbox"
-              checked={bulkMode}
-              onChange={(e) => setBulkMode(e.target.checked)}
-            />
-            Serial lots
-          </label>
-          {bulkMode ? (
-            <>
-              <input
-                type="number"
-                min={2}
-                max={100}
-                value={bulkCount}
-                onChange={(e) => setBulkCount(e.target.value)}
-                title="How many lots"
-                style={{
-                  width: 52,
-                  padding: '3px 6px',
-                  fontSize: 12,
-                  borderRadius: 6,
-                  border: errors.bulkCount ? '1px solid var(--danger, #dc2626)' : '1px solid var(--border, #e2e8f0)',
-                }}
-              />
-              {bulkLotNumbers && bulkLotNumbers.length > 1 ? (
-                <span
-                  style={{
-                    color: 'var(--text-muted, #94a3b8)',
-                    fontSize: 11,
-                    maxWidth: 200,
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  {previewSerialLotNumbers(bulkLotNumbers, 3)}
-                </span>
-              ) : null}
-            </>
-          ) : null}
-          {errors.bulkCount ? (
-            <span style={{ color: 'var(--danger, #dc2626)', fontSize: 11 }}>{errors.bulkCount}</span>
-          ) : null}
-          {bulkMode && !bulkLotNumbers && form.lotNumber.trim() ? (
-            <span style={{ color: 'var(--warning, #b45309)', fontSize: 11 }}>Lot needs digits</span>
-          ) : null}
-        </>
-      ) : null}
-    </div>
-  );
-
-  return (
-    <form
-      onSubmit={(e) => {
-        e.preventDefault();
-        void handleSave();
-      }}
-    >
-      {compactToolbar}
-
-      {/* Linked Lot Navigation */}
-      {!isNewLot && form.linkedLotId && (
-        <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'flex-end' }}>
-          <button
-            type="button"
-            className="btn btn-ghost btn-sm"
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--purple, #4f46e5)', fontWeight: 600, background: 'var(--primary-bg, #eef2ff)' }}
-            onClick={() => onJumpToLinkedLot && onJumpToLinkedLot(form.linkedLotId)}
-          >
-            {form.suitComponent === 'dupatta' ? '🔗 View Main Lot' : '🔗 View Dupatta'}
-          </button>
-        </div>
-      )}
-      
-      {/* Suit Type & Rework Controls */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 16 }}>
-        {(!initial || initial.suitComponent !== 'dupatta') && (
-          <div style={{ display: 'flex', gap: '8px' }}>
-            {['2-piece', '3-piece', 'dupatta-only'].map(type => (
-              <button
-                key={type}
-                type="button"
-                onClick={() => set('suitType', type)}
-                style={{
-                  flex: 1,
-                  padding: '8px 4px',
-                  borderRadius: '8px',
-                  border: form.suitType === type ? '2px solid var(--purple, #4f46e5)' : '1px solid var(--border, #e2e8f0)',
-                  backgroundColor: form.suitType === type ? 'var(--primary-bg, #eef2ff)' : 'transparent',
-                  color: form.suitType === type ? 'var(--primary, #3730a3)' : 'var(--text-secondary, #475569)',
-                  fontWeight: form.suitType === type ? '600' : '400',
-                  cursor: 'pointer',
-                  fontSize: '13px',
-                  transition: 'all 0.2s'
-                }}
-              >
-                {type === '2-piece' ? '2-Piece' : type === '3-piece' ? '3-Piece' : 'Dupatta Only'}
-              </button>
-            ))}
-          </div>
-        )}
-        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--text-secondary, #475569)', fontWeight: 600, cursor: 'pointer' }}>
-          <input
-            type="checkbox"
-            checked={form.isRework}
-            onChange={(e) => set('isRework', e.target.checked)}
-            style={{ width: 16, height: 16, accentColor: 'var(--warning, #b45309)' }}
-            disabled={!isNewLot && initial?.suitComponent === 'dupatta' && initial?.linkedLotId}
-          />
-          Mark as Rework / Claim
-        </label>
-      </div>
-
-      <div className="grid-2">
-        {pickWorkspaceForNewLot && (
-          <FormGroup label="Business collection *">
-            <select
-              className={`form-select${errors.saveBusinessOwnerId ? ' input-error' : ''}`}
-              value={form.saveBusinessOwnerId}
-              onChange={(e) => set('saveBusinessOwnerId', e.target.value)}
-            >
-              <option value="">— Select collection —</option>
-              {(workspaceOwnerOptions || []).map((o) => (
-                <option key={o.id || o._id} value={String(o.id || o._id)}>
-                  {o.name}
-                </option>
-              ))}
-            </select>
-            {errors.saveBusinessOwnerId && (
-              <span style={{ color: 'var(--danger, #dc2626)', fontSize: 11, marginTop: 3, display: 'block' }}>
-                {errors.saveBusinessOwnerId}
-              </span>
-            )}
-          </FormGroup>
-        )}
-        <FormGroup label={isNewLot && bulkMode ? 'Starting lot number' : 'Lot Number'}>
-          <input
-            className={`form-input${errors.lotNumber ? ' input-error' : ''}`}
-            value={form.lotNumber}
-            onChange={(e) => {
-              const v = e.target.value;
-              set('lotNumber', v);
-              set('lotNo', v);
-            }}
-            placeholder={isNewLot && bulkMode ? 'e.g. L-10 (serials from here)' : 'e.g. L-10 (Leave blank if unnumbered)'}
-            autoComplete="off"
-            disabled={!isNewLot && initial?.suitComponent === 'dupatta' && initial?.linkedLotId}
-          />
-          {!isNewLot && initial?.suitComponent === 'dupatta' && initial?.linkedLotId && (
-            <span style={{ fontSize: 11, color: 'var(--text-muted, #64748b)', display: 'block', marginTop: 4 }}>
-              Edit from the Main Lot to change the suit&apos;s Lot Number.
-            </span>
-          )}
-        </FormGroup>
-        <FormGroup label="Design Number *">
-          <input
-            className={`form-input${errors.designNo ? ' input-error' : ''}`}
-            value={form.designNo}
-            onChange={(e) => set('designNo', e.target.value)}
-            placeholder="e.g. D-101"
-            autoComplete="off"
-            spellCheck={false}
-            disabled={!isNewLot && initial?.suitComponent === 'dupatta' && initial?.linkedLotId}
-          />
-          {errors.designNo && (
-            <span style={{ color: 'var(--danger, #dc2626)', fontSize: 11, marginTop: 3, display: 'block' }}>
-              {errors.designNo}
-            </span>
-          )}
-        </FormGroup>
-        <FormGroup label="Description">
-          <input
-            className="form-input"
-            value={form.description}
-            onChange={(e) => set('description', e.target.value)}
-            placeholder="e.g. Floral Print"
-            disabled={!isNewLot && initial?.suitComponent === 'dupatta' && initial?.linkedLotId}
-          />
-        </FormGroup>
-        <FormGroup label="Fabric">
-          <select
-            className="form-select"
-            value={form.itemType}
-            onChange={(e) => set('itemType', e.target.value)}
-          >
-            {itemTypeOptions.map((f) => (
-              <option key={f} value={f}>
-                {f}
-              </option>
-            ))}
-            <option value="__custom">+ New fabric…</option>
-          </select>
-          {form.itemType === '__custom' && (
-            <input
-              className="form-input"
-              style={{ marginTop: 6 }}
-              value={form.customFabric}
-              onChange={(e) => set('customFabric', e.target.value)}
-              placeholder="Enter new fabric"
-            />
-          )}
-        </FormGroup>
-        <FormGroup label="Colors (0–12)">
-          <select
-            className="form-select"
-            value={form.colors}
-            onChange={(e) => setColorsAndPieces(e.target.value)}
-            disabled={!isNewLot && initial?.suitComponent === 'dupatta' && initial?.linkedLotId}
-          >
-            {COLOR_OPTIONS.map((n) => (
-              <option key={n} value={n}>
-                {n} color{n !== 1 ? 's' : ''}
-              </option>
-            ))}
-          </select>
-        </FormGroup>
-        <FormGroup label="Pieces">
-          <input
-            className="form-input"
-            type="number"
-            min="0"
-            value={form.pieces}
-            onChange={(e) => set('pieces', e.target.value)}
-            placeholder="0"
-          />
-        </FormGroup>
-        <FormGroup label="Allot Date">
-          <input
-            className="form-input"
-            type="date"
-            value={form.allotDate}
-            onChange={(e) => set('allotDate', e.target.value)}
-            disabled={!isNewLot && initial?.suitComponent === 'dupatta' && initial?.linkedLotId}
-          />
-        </FormGroup>
-        <FormGroup label="Party">
-          <select
-            className="form-select"
-            value={form.partyId}
-            autoFocus={!initial}
-            onChange={(e) => {
-              const selectedParty = parties.find((p) => p.id === e.target.value);
-              set('partyId', e.target.value);
-              set('partyName', selectedParty ? selectedParty.name : '');
-            }}
-          >
-            <option value="">— Select Party —</option>
-            {recentParties.length > 0 && (
-              <optgroup label="Recent">
-                {recentParties.map((p) => (
-                  <option key={`recent-${p.id}`} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </optgroup>
-            )}
-            <optgroup label={recentParties.length > 0 ? 'All parties' : 'Parties'}>
-              {(recentParties.length > 0 ? otherParties : parties).map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </optgroup>
-          </select>
-        </FormGroup>
-        {!(isNewLot && bulkMode) && (
-          <FormGroup label="Status">
-            <select
-              className="form-select"
-              style={
-                form.status === 'completed'
-                  ? { backgroundColor: 'var(--success-bg, #dcfce7)', color: 'var(--success, #166534)', borderColor: 'var(--success-bg, #bbf7d0)', fontWeight: '600' }
-                  : {}
-              }
-              value={form.status}
-              onChange={(e) => set('status', e.target.value)}
-            >
-              {STATUS_OPTIONS.map((s) => (
-                <option key={s} value={s}>
-                  {s
-                    .split(' ')
-                    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-                    .join(' ')}
-                </option>
-              ))}
-            </select>
-          </FormGroup>
-        )}
-        <FormGroup label="Bill Amount (₨)">
-          {checkIsCombinedDupatta(initial) ? (
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              <div style={{ flex: 1, padding: '8px 12px', background: 'var(--card-bg)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text-muted)', fontSize: 13 }}>
-                Combined with main lot
-              </div>
-              <button
-                type="button"
-                className="btn btn-secondary"
-                onClick={onSeparateBill}
-              >
-                Separate Bill
-              </button>
-            </div>
-          ) : (
-            <input
-              className="form-input"
-              type="number"
-              min="0"
-              value={form.billAmount}
-              onChange={(e) => set('billAmount', e.target.value)}
-              placeholder="45000"
-            />
-          )}
-        </FormGroup>
-        {/* <FormGroup label="Notes">
-          <input className="form-input" value={form.notes} onChange={e => set('notes', e.target.value)} placeholder="Optional notes" />
-        </FormGroup> */}
-        {(form.status === 'dispatched' ||
-          form.status === 'received back' ||
-          form.status === 'completed') && (
-            <FormGroup label="Dispatch Date">
-              <input
-                className="form-input"
-                type="date"
-                value={form.dispatchDate}
-                onChange={(e) => set('dispatchDate', e.target.value)}
-              />
-            </FormGroup>
-          )}
-        {(form.status === 'received back' || form.status === 'completed') && (
-          <FormGroup label="Received Back Date">
-            <input
-              className="form-input"
-              type="date"
-              value={form.receivedBackDate}
-              onChange={(e) => set('receivedBackDate', e.target.value)}
-            />
-          </FormGroup>
-        )}
-      </div>
-
-      {/* Dupatta Details Section for 3-Piece */}
-      {(!initial || initial.suitComponent !== 'dupatta') && (
-        <div 
-          style={{
-            display: 'grid',
-            gridTemplateRows: form.suitType === '3-piece' ? '1fr' : '0fr',
-            transition: 'grid-template-rows 0.4s cubic-bezier(0.4, 0, 0.2, 1), margin-top 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
-            marginTop: form.suitType === '3-piece' ? 24 : 0,
-            opacity: form.suitType === '3-piece' ? 1 : 0,
-            pointerEvents: form.suitType === '3-piece' ? 'auto' : 'none',
-          }}
-        >
-          <div style={{ overflow: 'hidden' }}>
-            <div
-              style={{
-                padding: 16,
-                background: 'var(--dupatta-box-bg, rgba(168, 85, 247, 0.06))',
-                borderRadius: 12,
-                border: '1px solid var(--dupatta-box-border, rgba(168, 85, 247, 0.2))',
-                boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.02)',
-                transform: form.suitType === '3-piece' ? 'translateY(0)' : 'translateY(-10px)',
-                transition: 'transform 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
-              }}
-            >
-          <h4 style={{ margin: '0 0 16px 0', color: 'var(--text-secondary, #334155)', fontSize: 15, fontWeight: 700 }}>Dupatta Details</h4>
-          <div className="grid-2">
-            <FormGroup label="Dupatta Party">
-                <select
-                  className="form-select"
-                  value={form.dupattaDetails.partyId}
-                  onChange={(e) => {
-                    const selectedParty = parties.find(p => p.id === e.target.value);
-                    set('dupattaDetails', {
-                      ...form.dupattaDetails,
-                      partyId: e.target.value,
-                      partyName: selectedParty ? selectedParty.name : ''
-                    });
-                  }}
-                >
-                  <option value="">— Select Party —</option>
-                  {recentParties.length > 0 && (
-                    <optgroup label="Recent">
-                      {recentParties.map((p) => (
-                        <option key={`dupatta-recent-${p.id}`} value={p.id}>
-                          {p.name}
-                        </option>
-                      ))}
-                    </optgroup>
-                  )}
-                  <optgroup label={recentParties.length > 0 ? 'All parties' : 'Parties'}>
-                    {(recentParties.length > 0 ? otherParties : parties).map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name}
-                      </option>
-                    ))}
-                  </optgroup>
-                </select>
-              </FormGroup>
-            
-            <FormGroup label="Fabric">
-              <select
-                className="form-select"
-                value={form.dupattaDetails.itemType}
-                onChange={(e) => set('dupattaDetails', { ...form.dupattaDetails, itemType: e.target.value })}
-              >
-                <option value="">— Select Fabric —</option>
-                {itemTypeOptions.map((f) => (
-                  <option key={f} value={f}>
-                    {f}
-                  </option>
-                ))}
-                <option value="__custom">+ New fabric…</option>
-              </select>
-              {form.dupattaDetails.itemType === '__custom' && (
-                <input
-                  className="form-input"
-                  style={{ marginTop: 6 }}
-                  value={form.dupattaDetails.customFabric}
-                  onChange={(e) => set('dupattaDetails', { ...form.dupattaDetails, customFabric: e.target.value })}
-                  placeholder="Enter new fabric"
-                />
-              )}
-            </FormGroup>
-
-            <FormGroup label="Quantity / Pieces">
-              <input
-                className="form-input"
-                type="number"
-                min="0"
-                value={form.dupattaDetails.quantity !== '' ? form.dupattaDetails.quantity : form.pieces}
-                onChange={(e) => set('dupattaDetails', { ...form.dupattaDetails, quantity: e.target.value })}
-                placeholder="0"
-              />
-            </FormGroup>
-
-            {form.ownerBillingChoice === 'separate' && (
-              <FormGroup label="Dupatta Owner Bill (₨)">
-                <input
-                  className="form-input"
-                  type="number"
-                  min="0"
-                  value={form.dupattaDetails.billAmount || ''}
-                  onChange={(e) => set('dupattaDetails', { ...form.dupattaDetails, billAmount: e.target.value })}
-                  placeholder="e.g. 5000"
-                />
-              </FormGroup>
-            )}
-          </div>
-
-          <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px dashed var(--border, #cbd5e1)' }}>
-            <h5 style={{ margin: '0 0 10px 0', fontSize: 13, color: 'var(--text-secondary, #475569)' }}>Owner Billing Preference</h5>
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <button
-                type="button"
-                onClick={() => set('ownerBillingChoice', 'separate')}
-                style={{
-                  flex: 1,
-                  padding: '8px',
-                  borderRadius: '6px',
-                  border: form.ownerBillingChoice === 'separate' ? '1px solid var(--success, #10b981)' : '1px solid var(--border, #e2e8f0)',
-                  background: form.ownerBillingChoice === 'separate' ? 'var(--success-bg, #ecfdf5)' : 'var(--card-bg, #ffffff)',
-                  color: form.ownerBillingChoice === 'separate' ? 'var(--success, #10b981)' : 'var(--text-muted, #64748b)',
-                  fontSize: '12px',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  textAlign: 'left'
-                }}
-              >
-                <div style={{ marginBottom: 4 }}>Separate Bills</div>
-                <div style={{ fontSize: '10px', fontWeight: 400 }}>Main & Dupatta lots will each bill the owner their respective amounts.</div>
-              </button>
-              <button
-                type="button"
-                onClick={async () => {
-                  if (form.ownerBillingChoice === 'combined') return;
-                  const dupattaBill = Number(form.dupattaDetails.billAmount) || 0;
-                  if (dupattaBill > 0) {
-                    const result = await Swal.fire({
-                      title: 'Combine Bills?',
-                      text: `Do you want to add the Dupatta bill (Rs ${dupattaBill}) to the Main lot bill? The Dupatta bill will be set to 0.`,
-                      icon: 'question',
-                      showCancelButton: true,
-                      confirmButtonText: 'Yes, Combine',
-                      cancelButtonText: 'Cancel'
-                    });
-                    if (result.isConfirmed) {
-                      setForm(f => ({
-                        ...f,
-                        ownerBillingChoice: 'combined',
-                        billAmount: (Number(f.billAmount) || 0) + dupattaBill,
-                        dupattaDetails: { ...f.dupattaDetails, billAmount: 0 }
-                      }));
-                    }
-                  } else {
-                    set('ownerBillingChoice', 'combined');
-                  }
-                }}
-                style={{
-                  flex: 1,
-                  padding: '8px',
-                  borderRadius: '6px',
-                  border: form.ownerBillingChoice === 'combined' ? '1px solid var(--warning, #f59e0b)' : '1px solid var(--border, #e2e8f0)',
-                  background: form.ownerBillingChoice === 'combined' ? 'var(--warning-bg, #fffbeb)' : 'var(--card-bg, #ffffff)',
-                  color: form.ownerBillingChoice === 'combined' ? 'var(--warning, #d97706)' : 'var(--text-muted, #64748b)',
-                  fontSize: '12px',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  textAlign: 'left'
-                }}
-              >
-                <div style={{ marginBottom: 4 }}>Combined Bill</div>
-                <div style={{ fontSize: '10px', fontWeight: 400 }}>Main lot will combine both bills. Dupatta lot will show ₨0 for owner.</div>
-              </button>
-            </div>
-          </div>
-        </div>
-        </div>
-        </div>
-      )}
-
-      <div
-        className="modal-footer"
-        style={{ padding: '16px 0 0', borderTop: '1px solid var(--border)', marginTop: 24 }}
-      >
-        <button type="button" className="btn btn-ghost" onClick={onClose} disabled={saving}>
-          Cancel
-        </button>
-        <button
-          type="submit"
-          className="btn btn-primary"
-          disabled={saving}
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
-        >
-          {saving ? (
-            <>
-              <Loader /> Saving…
-            </>
-          ) : (
-            saveButtonLabel
-          )}
-        </button>
-      </div>
-    </form>
-  );
-}
+// Sub-components
+import LotForm from '../components/ghausia/LotForm';
+import SummaryCards from '../components/ghausia/SummaryCards';
+import BillableSection from '../components/ghausia/BillableSection';
+import LotTableDesktop from '../components/ghausia/LotTableDesktop';
+import LotMobileViews from '../components/ghausia/LotMobileViews';
+import PaymentModal from '../components/ghausia/PaymentModal';
+import CompleteBillModal from '../components/ghausia/CompleteBillModal';
 
 export default function GhausiaCollection() {
   const location = useLocation();
@@ -1202,16 +189,6 @@ export default function GhausiaCollection() {
     });
   };
 
-  const _statusMeta = {
-    pending: { className: 'badge badge-pending', label: 'Pending' },
-    dispatched: { className: 'badge badge-dispatched', label: 'Dispatched' },
-    'received back': { className: 'badge badge-received', label: 'Received Back' },
-    completed: { className: 'badge badge-completed', label: 'Completed' },
-    'in progress': { className: 'badge badge-inprogress', label: 'In Progress' },
-    'pending approval': { className: 'badge badge-inprogress', label: 'Awaiting approval' },
-    rejected: { className: 'badge badge-dispatched', label: 'Rejected' },
-  };
-
   const activeWorkspace = useMemo(() => {
     if (viewAllWorkspaces) return { name: 'All workspaces' };
     return businessOwners.find((o) => String(o.id || o._id) === String(activeBusinessOwnerId));
@@ -1242,13 +219,12 @@ export default function GhausiaCollection() {
 
   const promptBillAmountForCompletion = (lot, options = {}) =>
     new Promise((resolve) => {
-      const isCombDup = checkIsCombinedDupatta(lot);
-      const effective = getAdminLedgerOrBusinessBill(lot, partyEdits[lot.id] || {});
       const unpaid = getOwnerUnpaidBalance(lot);
       const ov = options.billAmountOverride;
       const rawBill =
         ov !== undefined && ov !== null ? Number(ov) : Number(lot.billAmount || 0);
       completeBillResolveRef.current = resolve;
+      const isCombDup = checkIsCombinedDupatta(lot);
       setCompleteBillInput(isCombDup ? '0' : (unpaid > 0 ? String(unpaid) : '0'));
       setCompleteBillError('');
       setCompleteBillModal({
@@ -1263,7 +239,6 @@ export default function GhausiaCollection() {
   const persistLotCompletedWithPayment = async (lot, billAmount, options = {}) => {
     const { fromBillable = false } = options;
     const lotKey = String(lot.id);
-    // Guard against double submission
     if (completingLotsRef.current.has(lotKey)) return;
     completingLotsRef.current.add(lotKey);
     setCompletionPersistingLotId(lot.id);
@@ -1279,34 +254,13 @@ export default function GhausiaCollection() {
       ...(fromBillable ? { completedFromBillable: false } : {}),
     };
     
-    // Bug Fix: Check existing owner payments for this lot to prevent double billing
     const normKey = normalizeLotNumberKey(lot.lotNumber || lot.lotNo);
     const existingOwnerPayments = payments.filter(
       (p) => normalizeLotNumberKey(p.linkedLot) === normKey && String(p.party || '').trim().toLowerCase() === 'owner'
     );
-    const existingPaidToOwner = existingOwnerPayments
-      .filter((p) => p.type === 'Paid')
-      .reduce((s, p) => s + p.amount, 0);
-    const existingReceivedFromOwner = existingOwnerPayments
-      .filter((p) => p.type === 'Received')
-      .reduce((s, p) => s + p.amount, 0);
-      
-    // The "net" amount already billed to the owner.
-    const expectedAmount = Number(lot.billAmount || 0);
     const isReEditedLot = fromBillable && !!partyEdits[lot.id]?.amountChangeNote;
-    
-    // We will use the amount entered by the user (billAmount parameter) as the payment amount if it's > 0.
-    // This respects the user's manual input in the popup (which now correctly pre-fills with the unpaid balance).
     const paymentAmount = Number(billAmount) || 0;
-    
-    let paymentType = 'Paid'; // Default for Owner Bills
-    if (fromBillable) {
-      // Whether it's a re-edited lot (price difference) or a normal/defective lot,
-      // the user expects these to be "Bills" to the owner, which requires type: 'Paid'
-      paymentType = 'Paid';
-    } else {
-      paymentType = 'Paid'; // If they ever complete normally, they likely also expect a bill
-    }
+    const paymentType = 'Paid';
 
     const linkedLot = String(lot.lotNumber || lot.lotNo || '').trim();
     const partyName =
@@ -1358,7 +312,6 @@ export default function GhausiaCollection() {
 
       let paymentPromise = Promise.resolve();
       if (paymentAmount > 0) {
-        // Use addPayment directly to respect the correctly calculated paymentType
         paymentPromise = addPayment(
           {
             type: paymentType,
@@ -1416,27 +369,6 @@ export default function GhausiaCollection() {
     );
   };
 
-  /** Settlement for billable lots: records Paid → Owner so it appears in Payment Management and reduces Owner Received net. */
-  const recordOwnerBillableSettlementPayment = async (lotRef, amount, paymentDate) => {
-    const linkedLot = String(lotRef.lotNumber || lotRef.lotNo || '').trim();
-    const partyName =
-      (lotRef.partyName && String(lotRef.partyName).trim()) ||
-      (lotRef.partyId ? getPartyName(lotRef.partyId) : '') ||
-      '';
-    const designNo = String(lotRef.designNo || '').trim() || '—';
-    await addPayment(
-      {
-        type: 'Paid',
-        amount: Number(amount),
-        party: 'Owner',
-        date: paymentDate,
-        linkedLot,
-        note: `Billable lot settled — Party: ${partyName || '—'}; Design: ${designNo}; Type: ${lotRef.itemType || lotRef.fabric || '—'}`,
-      },
-      { businessOwnerId: lotBizId(lotRef) }
-    );
-  };
-
   const setLotStatus = async (lot, newStatus) => {
     if (newStatus === 'dispatched' && !lot.partyId) {
       Swal.fire({ icon: 'warning', title: 'Select a Party', text: 'You must assign a party before dispatching this lot.' });
@@ -1483,6 +415,7 @@ export default function GhausiaCollection() {
     }
   };
 
+  // ─── Filtered & Paginated Lots ───
   const filtered = useMemo(() => {
     const list = effectiveCollectionLots.filter((l) => {
       if (highlightedBillableLotId && String(l.id) !== String(highlightedBillableLotId)) return false;
@@ -1548,7 +481,6 @@ export default function GhausiaCollection() {
   const visibleLots = useMemo(
     () =>
       effectiveCollectionLots.filter((l) => {
-        
         if (partyFilter !== 'All' && String(l.partyId || '') !== String(partyFilter)) return false;
         if (stuckLotIdsFilter.length > 0 && !stuckLotIdsFilter.includes(String(l.id))) return false;
         return isWithinDateRange(
@@ -1606,6 +538,7 @@ export default function GhausiaCollection() {
       ? 'Pending, dispatched, and received back (not completed)'
       : `${othersTabStatusLabel} lots in the current filters`;
 
+  // ─── Billable Lots ───
   const billable = useMemo(
     () =>
       [...visibleLots.filter((l) => l.status === 'received back')].sort((a, b) =>
@@ -1613,9 +546,7 @@ export default function GhausiaCollection() {
       ),
     [visibleLots]
   );
-  /**
-   * Party-facing figures stay on Party Ledger; this page’s owner tiles use the business-defined amount.
-   */
+
   const getOwnerBillableAmount = (lot) => getBusinessBillAmount(lot);
 
   const getOwnerSettledAmount = useCallback(
@@ -1627,9 +558,6 @@ export default function GhausiaCollection() {
       const existingPaidToOwner = existingOwnerPayments
         .filter((p) => p.type === 'Paid')
         .reduce((s, p) => s + p.amount, 0);
-        
-      // Only count 'Paid' payments as they represent the actual "Bills" sent to the owner.
-      // 'Received' payments are cash receipts and shouldn't reduce the unbilled balance.
       return existingPaidToOwner;
     },
     [payments]
@@ -1707,11 +635,9 @@ export default function GhausiaCollection() {
   );
   const ownerReceivedNet = ownerIn - ownerPaidToOwner - billableSettledTotal;
   const ownerReceivedIsPending = ownerReceivedNet < 0;
-  const _partyOut = effectivePayments
-    .filter((p) => p.type === 'Paid')
-    .reduce((s, p) => s + p.amount, 0);
   const statsRefreshing = lotSaving || paymentSaving || deleteLoading || inlineSummaryBusy;
 
+  // ─── Lot CRUD handlers ───
   const openEdit = (lot) => {
     let editPayload = lot;
     if (lot.suitType === '3-piece' && lot.suitComponent === 'main' && lot.linkedLotId) {
@@ -1868,13 +794,10 @@ export default function GhausiaCollection() {
         if (prev && String(l.id) === String(prev.id)) return false;
         if (String(l.businessOwnerId ?? '') !== targetBiz) return false;
         if (normalizeLotNumberKey(l.lotNumber ?? l.lotNo) !== lotKey) return false;
-        
-        // Allowed to have same lot number if they are different suit components or different rework status
         const thisSuitComp = saveForm.suitComponent || 'main';
         const thatSuitComp = l.suitComponent || 'main';
         const thisRework = Boolean(saveForm.isRework);
         const thatRework = Boolean(l.isRework);
-        
         return thisSuitComp === thatSuitComp && thisRework === thatRework;
       });
       if (dupLocal) {
@@ -1893,7 +816,7 @@ export default function GhausiaCollection() {
       if (prev) {
         await updateLot(prev.id, lotPayloadForApi, { businessOwnerId: targetBiz });
 
-        // Auto-sync lot number and design number to the linked lot (e.g. Dupatta <-> Main)
+        // Auto-sync lot number and design number to the linked lot
         if (prev.linkedLotId && (saveForm.lotNumber !== prev.lotNumber || saveForm.designNo !== prev.designNo)) {
           const linkedLot = collectionLots.find((l) => String(l.id || l._id) === String(prev.linkedLotId));
           const syncUpdates = {};
@@ -2144,29 +1067,7 @@ export default function GhausiaCollection() {
     }
   };
 
-  const _handleDeletePayment = async (id) => {
-    const result = await Swal.fire({
-      title: 'Delete Payment?',
-      text: 'This action cannot be undone.',
-      icon: 'warning',
-      showCancelButton: true,
-      confirmButtonColor: 'var(--danger, #dc2626)',
-      cancelButtonColor: 'var(--text-muted, #6b7280)',
-      confirmButtonText: 'Yes, delete it',
-    });
-    if (result.isConfirmed) {
-      try {
-        await deletePayment(id, { businessOwnerId: activeBusinessOwnerId });
-      } catch (e) {
-        Swal.fire({
-          icon: 'error',
-          title: 'Error',
-          text: String(e?.message || e || 'Could not delete payment'),
-        });
-      }
-    }
-  };
-
+  // ─── Loading ───
   if (initialDataLoading || (!viewAllWorkspaces && scopedDataLoading)) {
     return (
       <div
@@ -2185,6 +1086,7 @@ export default function GhausiaCollection() {
 
   return (
     <div>
+      {/* Hero / Header */}
       <div
         className="ghausia-collection-page-hero"
         style={{
@@ -2256,7 +1158,7 @@ export default function GhausiaCollection() {
               }}
             >
               {viewAllWorkspaces
-                ? 'Showing lots across every workspace. Pick a single workspace here to anchor new payments and the add-lot flow, or use “Business collection” in the lot form when adding in this view.'
+                ? 'Showing lots across every workspace. Pick a single workspace here to anchor new payments and the add-lot flow, or use "Business collection" in the lot form when adding in this view.'
                 : 'Manage design lots, statuses, and owner billing for this business. Use the dropdown below to switch workspace or view all workspaces.'}
             </p>
           </div>
@@ -2356,348 +1258,43 @@ export default function GhausiaCollection() {
         </div>
       </div>
 
-      {/* Summary */}
-      <div style={{ position: 'relative', marginBottom: 22 }}>
-        {statsRefreshing && (
-          <div
-            aria-busy="true"
-            aria-live="polite"
-            style={{
-              position: 'absolute',
-              inset: 0,
-              zIndex: 2,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 10,
-              background: 'rgba(255, 255, 255, 0.72)',
-              backdropFilter: 'blur(2px)',
-              borderRadius: 12,
-              pointerEvents: 'none',
-            }}
-          >
-            <Loader />
-            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>
-              Updating…
-            </span>
-          </div>
-        )}
-        {showSummaryCards && (
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
-              gap: 12,
-            }}
-          >
-          {[
-            { label: 'Total Lots', value: visibleLots.length, color: 'var(--primary, #1e40af)' },
-            { label: 'Billable Lots', value: billable.length, color: 'var(--danger, #dc2626)' },
-            {
-              label: 'Billable Amount',
-              value: `₨${billableTotal.toLocaleString()}`,
-              color: 'var(--danger, #dc2626)',
-            },
-            {
-              label: 'Received from Owner',
-              value: ownerReceivedIsPending
-                ? 'Pending to owner'
-                : `₨${ownerReceivedNet.toLocaleString()}`,
-              color: ownerReceivedIsPending ? 'var(--warning, #d97706)' : 'var(--success, #15803d)',
-            },
-            {
-              label: `${billableTotal - ownerReceivedNet >= 0 ? 'Receivable from Owner' : 'Advance from Owner'}`,
-              value: `₨${(billableTotal - ownerReceivedNet).toLocaleString()}`,
-              color: billableTotal - ownerReceivedNet >= 0 ? 'var(--success, #15803d)' : 'var(--danger, #dc2626)',
-            },
-          ].map((c) => (
-            <div key={c.label} className="stat-card">
-              <div className="stat-label">{c.label}</div>
-              <div style={{ fontSize: 18, fontWeight: 700, color: c.color }}>{c.value}</div>
-            </div>
-          ))}
-        </div>
-        )}
-      </div>
+      {/* Summary Cards */}
+      <SummaryCards
+        showSummaryCards={showSummaryCards}
+        visibleLots={visibleLots}
+        billable={billable}
+        billableTotal={billableTotal}
+        ownerReceivedNet={ownerReceivedNet}
+        ownerReceivedIsPending={ownerReceivedIsPending}
+        statsRefreshing={statsRefreshing}
+      />
 
-      {/* Payment Panel */}
-      <div className="card" style={{ marginBottom: 22 }}>
-        <div
-          className="card-header"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 10,
-          }}
-        >
-          <span className="card-title">
-            Billable lots to Owner
-            {billable.length > 0 && (
-              <span style={{ marginLeft: 8, fontSize: 12, fontWeight: 600, color: '#92600A' }}>
-                ({billable.length})
-              </span>
-            )}
-          </span>
-          {billable.length > 0 && (
-            <button
-              type="button"
-              className="btn btn-sm"
-              onClick={() => setBillableCollapsed((v) => !v)}
-              style={{
-                background: 'transparent',
-                border: '1px solid var(--border)',
-                color: 'var(--text-secondary)',
-              }}
-            >
-              {billableCollapsed ? 'Show' : 'Hide'}
-            </button>
-          )}
-        </div>
-        {/* <div style={{ padding: 0 }}>
-          {payments.length === 0 ? (
-            <p style={{ padding: 16, color: 'var(--text-muted)', fontSize: 13 }}>No payments yet.</p>
-          ) : (
-            <div style={{ overflowX: 'auto', marginBottom:10 }} className='table-wrapper'>
-              <table>
-                <thead>
-                  <tr>
-                    <th>Date</th><th>Type</th><th>Party / From</th>
-                    <th>Linked Lot</th><th>Note</th><th style={{ textAlign: 'right' }}>Amount</th><th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {payments.map(p => (
-                    <tr key={p.id}>
-                      <td>{formatDisplayDate(p.date)}</td>
-                      <td>
-                        <span style={{
-                          background: p.type === 'Received' ? 'var(--success-bg, #f0fdf4)' : 'var(--danger-bg, #fef2f2)',
-                          color: p.type === 'Received' ? 'var(--success, #166534)' : 'var(--danger, #991b1b)',
-                          border: `1px solid ${p.type === 'Received' ? 'var(--success-bg, #bbf7d0)' : 'var(--danger-bg, #fecaca)'}`,
-                          borderRadius: 20, padding: '2px 10px', fontSize: 11.5, fontWeight: 600,
-                        }}>{p.type}</span>
-                      </td>
-                      <td>{p.party}</td>
-                      <td>{p.linkedLot || '—'}</td>
-                      <td style={{ color: 'var(--text-secondary)', fontSize: 12 }}>{p.note}</td>
-                      <td style={{ textAlign: 'right', fontWeight: 700, color: p.type === 'Received' ? 'var(--success, #15803d)' : 'var(--danger, #dc2626)' }}>
-                        ₨{p.amount.toLocaleString()}
-                      </td>
-                      <td>
-                        <button className="btn-icon" onClick={() => _handleDeletePayment(p.id)} title="Delete">
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke='var(--danger, #dc2626)' strokeWidth="2">
-                            <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/>
-                            <path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
-                          </svg>
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div> */}
-        {billable.length > 0 && !billableCollapsed && (
-          <div
-            style={{
-              margin: '0',
-              background: 'var(--card-bg)',
-              border: '1px solid var(--primary)',
-              borderRadius: 10,
-              padding: 14,
-              boxShadow: '0 4px 14px rgba(0,0,0,0.05)',
-            }}
-          >
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: 10,
-                flexWrap: 'wrap',
-                marginBottom: 12,
-              }}
-            >
-              <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
-                Billable to Owner — <span style={{ color: 'var(--primary)' }}>{billable.length} lots</span> · Total: ₨
-                {billableTotal.toLocaleString()}
-              </div>
-              <input
-                type="text"
-                value={billableSearch}
-                onChange={(e) => setBillableSearch(e.target.value)}
-                placeholder="Search lot, design, party…"
-                style={{
-                  fontSize: 12.5,
-                  padding: '6px 10px',
-                  borderRadius: 8,
-                  border: '1px solid var(--border)',
-                  background: 'var(--body-bg)',
-                  color: 'var(--text-primary)',
-                  minWidth: 200,
-                  flex: '0 1 240px',
-                }}
-              />
-            </div>
-
-            {billableFiltered.length === 0 ? (
-              <div style={{ fontSize: 13, color: 'var(--text-secondary)', padding: '8px 0' }}>
-                No billable lots match “{billableSearch}”.
-              </div>
-            ) : (
-              <>
-                <div style={{ marginTop: 8 }}>
-                  {billablePageItems.map((l) => {
-                    const isHighlighted = highlightedBillableLotId === l.id;
-                    return (
-                      <div
-                        key={l.id}
-                        onClick={() => {
-                          const nextId = isHighlighted ? null : l.id;
-                          setHighlightedBillableLotId(nextId);
-                          if (nextId) {
-                            setLotTableTab('others');
-                            setStatusFilter('All');
-                            setPartyFilter('All');
-                            setDateRange('all');
-                          }
-                        }}
-                        className="billable-row"
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          gap: 8,
-                          flexWrap: 'nowrap',
-                          fontSize: 12,
-                          padding: '10px 8px',
-                          cursor: 'pointer',
-                          background: isHighlighted ? 'color-mix(in srgb, var(--primary) 20%, transparent)' : 'transparent',
-                          borderBottom: isHighlighted ? '1px solid var(--primary)' : '1px solid var(--border)',
-                          transition: 'background 0.2s',
-                        }}
-                      >
-                      <span className="billable-row-title" style={{ flex: '1 1 auto', color: 'var(--text-primary)' }}>
-                        <strong>{l.lotNumber || l.lotNo} / {l.designNo}</strong> —{' '}
-                        <span style={{ color: 'var(--text-secondary)' }}>{l.partyName || '—'}</span>
-                      </span>
-                    <div className="billable-row-right" style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-                      {(() => {
-                        const settled = getOwnerSettledAmount(l);
-                        return partyEdits[l.id]?.amountChangeNote ? (
-                          <div style={{ textAlign: 'right', color: 'var(--text-primary)' }}>
-                            <strong>{renderOwnerUnpaidBalance(l)}</strong>
-                            {settled > 0 && (
-                              <div style={{ fontSize: 10, color: 'var(--success, #16a34a)', marginTop: 2 }}>
-                                Owner already billed: ₨{settled.toLocaleString()}
-                              </div>
-                            )}
-                            <div style={{ fontSize: 10, color: 'var(--warning)', marginTop: 2 }}>
-                              Party ledger: Previous ₨
-                              {Number(
-                                partyEdits[l.id].amountChangeNote.previousAmount || 0
-                              ).toLocaleString()}{' '}
-                              → Updated ₨
-                              {Number(
-                                partyEdits[l.id].amountChangeNote.updatedAmount || 0
-                              ).toLocaleString()}
-                            </div>
-                          </div>
-                        ) : (
-                          <div style={{ textAlign: 'right' }}>
-                            <strong style={{ color: 'var(--text-primary)' }}>
-                              {renderOwnerUnpaidBalance(l)}
-                            </strong>
-                            {settled > 0 && (
-                              <div style={{ fontSize: 10, color: 'var(--success, #16a34a)', marginTop: 2 }}>
-                                Owner already billed: ₨{settled.toLocaleString()}
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })()}
-                      <button
-                        type="button"
-                        className="btn btn-sm"
-                        disabled={completionPersistingLotId === l.id}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleCompleteFromBillable(l);
-                        }}
-                        style={{ whiteSpace: 'nowrap', background: 'var(--primary)', color: 'var(--primary-text, #fff)', border: 'none', fontWeight: 600, padding: '4px 10px', fontSize: 11.5 }}
-                      >
-                        {completionPersistingLotId === l.id ? (
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                            <Loader /> ...
-                          </span>
-                        ) : (
-                          'Complete'
-                        )}
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-              </div>
-
-                {billablePageCount > 1 && (
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      gap: 10,
-                      flexWrap: 'wrap',
-                      marginTop: 12,
-                    }}
-                  >
-                    <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                      Showing {(billableSafePage - 1) * BILLABLE_PAGE_SIZE + 1}–
-                      {Math.min(billableSafePage * BILLABLE_PAGE_SIZE, billableFiltered.length)} of{' '}
-                      {billableFiltered.length}
-                    </span>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <button
-                        type="button"
-                        className="btn btn-sm"
-                        disabled={billableSafePage <= 1}
-                        onClick={() => setBillablePage((p) => Math.max(1, p - 1))}
-                        style={{
-                          background: 'var(--card-bg)',
-                          border: '1px solid var(--border)',
-                          color: 'var(--text-primary)',
-                          opacity: billableSafePage <= 1 ? 0.5 : 1,
-                        }}
-                      >
-                        ‹ Prev
-                      </button>
-                      <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-primary)' }}>
-                        {billableSafePage} / {billablePageCount}
-                      </span>
-                      <button
-                        type="button"
-                        className="btn btn-sm"
-                        disabled={billableSafePage >= billablePageCount}
-                        onClick={() => setBillablePage((p) => Math.min(billablePageCount, p + 1))}
-                        style={{
-                          background: 'var(--card-bg)',
-                          border: '1px solid var(--border)',
-                          color: 'var(--text-primary)',
-                          opacity: billableSafePage >= billablePageCount ? 0.5 : 1,
-                        }}
-                      >
-                        Next ›
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-        )}
-      </div>
+      {/* Billable Section */}
+      <BillableSection
+        billable={billable}
+        billableTotal={billableTotal}
+        billableCollapsed={billableCollapsed}
+        setBillableCollapsed={setBillableCollapsed}
+        billableSearch={billableSearch}
+        setBillableSearch={setBillableSearch}
+        billableFiltered={billableFiltered}
+        billablePageItems={billablePageItems}
+        billableSafePage={billableSafePage}
+        billablePageCount={billablePageCount}
+        setBillablePage={setBillablePage}
+        BILLABLE_PAGE_SIZE={BILLABLE_PAGE_SIZE}
+        highlightedBillableLotId={highlightedBillableLotId}
+        setHighlightedBillableLotId={setHighlightedBillableLotId}
+        setLotTableTab={setLotTableTab}
+        setStatusFilter={setStatusFilter}
+        setPartyFilter={setPartyFilter}
+        setDateRange={setDateRange}
+        completionPersistingLotId={completionPersistingLotId}
+        handleCompleteFromBillable={handleCompleteFromBillable}
+        getOwnerSettledAmount={getOwnerSettledAmount}
+        renderOwnerUnpaidBalance={renderOwnerUnpaidBalance}
+        partyEdits={partyEdits}
+      />
 
       {/* Toolbar */}
       <div className="toolbar pl-toolbar">
@@ -2814,7 +1411,7 @@ export default function GhausiaCollection() {
           ))}
         </div>
 
-        {/* View Switcher: Table View vs Tile View (Mobile Only) */}
+        {/* View Switcher */}
         <div className="mobile-view-switcher" style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
           <button
             type="button"
@@ -2835,372 +1432,42 @@ export default function GhausiaCollection() {
         </div>
       </div>
 
-      {/* Table for Desktop & Tablet (Always visible on Desktop > 768px) */}
-      <div className="table-wrapper desktop-only-table">
-        <div className="table-scroll">
-          <table className="ledger-table">
-            <thead>
-              <tr>
-                <th>Lot No</th>
-                <th>Design No</th>
-                <th>Description</th>
-                <th>Fabric</th>
-                <th>Colors</th>
-                <th>Pieces</th>
-                <th>Allot Date</th>
-                <th>Business</th>
-                <th>Party Name</th>
-                <th>Status</th>
-                <th style={{ textAlign: 'right' }}>Bill Amount</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.length === 0 ? (
-                <tr>
-                  <td colSpan={12}>
-                    <EmptyState message="No lots found" />
-                  </td>
-                </tr>
-              ) : (
-                paginatedLots.map((l) => (
-                  <tr key={l.id} className={l.suitComponent === 'dupatta' ? 'lot-row-dupatta' : l.suitComponent === 'main' && l.suitType === '3-piece' ? 'lot-row-main' : ''}>
-                    <td style={{ fontWeight: 700, color: 'var(--primary, #1e40af)', whiteSpace: 'nowrap' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        {l.lotNumber || <span style={{ color: 'var(--text-muted, #94a3b8)', fontStyle: 'italic', fontWeight: 500 }}>(No Lot)</span>}
-                        {l.suitComponent === 'dupatta' && (
-                          <button type="button" onClick={() => openEdit(l)} style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', background: 'var(--primary-bg, #fdf4ff)', color: 'var(--primary, #a21caf)', border: '1px solid var(--border, #f5d0fe)', borderRadius: 4, cursor: 'pointer' }}>Dupatta</button>
-                        )}
-                        {l.suitComponent === 'main' && l.suitType === '3-piece' && (
-                          <button type="button" onClick={() => openEdit(l)} style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', background: 'var(--primary-bg, #eff6ff)', color: 'var(--primary, #1d4ed8)', border: '1px solid var(--border, #bfdbfe)', borderRadius: 4, cursor: 'pointer' }}>Main Lot</button>
-                        )}
-                        {l.isRework && (
-                          <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', background: 'var(--primary-bg, #fffbeb)', color: 'var(--primary, #b45309)', border: '1px solid var(--border, #fde68a)', borderRadius: 4 }}>Rework</span>
-                        )}
-                        {l.linkedLotId && (
-                          <div title="Jump to linked lot">
-                            <button
-                              type="button"
-                              onClick={() => openLinkedLot(l.linkedLotId)}
-                              style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', background: 'var(--primary-bg, #f8fafc)', color: 'var(--text-secondary, #334155)', border: '1px solid var(--border, #cbd5e1)', borderRadius: 4, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}
-                            >
-                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
-                              {l.suitComponent === 'main' ? 'View Dupatta' : 'View Main'}
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </td>
-                    <td style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{l.designNo}</td>
-                    <td className="desc-col">{l.description}</td>
-                    <td>
-                      <span
-                        style={{
-                          background: 'var(--primary-bg, #F0F9FF)',
-                          color: 'var(--primary, #0369a1)',
-                          border: '1px solid var(--border, #BAE6FD)',
-                          borderRadius: 6,
-                          padding: '2px 8px',
-                          fontSize: 12,
-                        }}
-                      >
-                        {l.itemType || l.fabric}
-                      </span>
-                    </td>
-                    <td>{l.colors}</td>
-                    <td>{l.pieces}</td>
-                    <td>{formatDisplayDate(l.allotDate)}</td>
-                    <td style={{ color: 'var(--text-secondary)', fontSize: 13, maxWidth: 160 }}>
-                      {workspaceDisplayTitleForLot(l, businessOwners)}
-                    </td>
-                    <td>
-                      <select
-                        className="form-select"
-                        style={{
-                          width: '100%',
-                          fontSize: 13,
-                          paddingTop: 4,
-                          paddingBottom: 4,
-                          borderRadius: 4,
-                        }}
-                        value={l.partyId || ''}
-                        onChange={(e) => handlePartyChange(l.id, e.target.value)}
-                      >
-                        <option value="">— Select Party —</option>
-                        {parties.map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {p.name}
-                          </option>
-                        ))}
-                      </select>
-                    </td>
-                    <td>
-                      {lotTableTab === 'completed' ? (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                          <span
-                            style={{
-                              fontSize: 12,
-                              color: 'green',
-                              fontWeight: '500',
-                              padding: '2px 8px',
-                              borderRadius: 6,
-                              background: 'var(--success-bg, #dcfce7)',
-                              border: '1px solid var(--success-bg, #dcfce7)',
-                              alignSelf: 'flex-start'
-                            }}
-                          >
-                            Completed
-                          </span>
-                          <div style={{ fontSize: 11, color: 'var(--success, #166534)', fontWeight: 600 }}>
-                            Completed Date: {formatDisplayDate(l.completionApprovedAt || l.allotDate)}
-                          </div>
-                        </div>
-                      ) : (
-                        <>
-                          <LotStatusSelect
-                            value={l.status}
-                            options={STATUS_OPTIONS}
-                            disabled={completionPersistingLotId === l.id || inlineSummaryBusy}
-                            onChange={(next) => setLotStatus(l, next)}
-                          />
-                          {l.dispatchDate && l.status !== 'pending' && (
-                            <div
-                              style={{
-                                fontSize: 12,
-                                color: 'var(--danger, #dc2626)',
-                                marginTop: 3,
-                                fontWeight: '500',
-                              }}
-                            >
-                              Dispatch: {formatDisplayDate(l.dispatchDate)}
-                            </div>
-                          )}
-                          {l.receivedBackDate && ['received back', 'pending approval'].includes(l.status) && (
-                            <div
-                              style={{
-                                fontSize: 12,
-                                color: 'green',
-                                marginTop: 1,
-                                fontWeight: '500',
-                              }}
-                            >
-                              Received: {formatDisplayDate(l.receivedBackDate)}
-                            </div>
-                          )}
-                          {l.rejectedDate && l.status === 'rejected' && (
-                            <div
-                              style={{
-                                fontSize: 12,
-                                color: 'var(--danger, #b91c1c)',
-                                marginTop: 1,
-                                fontWeight: '500',
-                              }}
-                            >
-                              Rejected: {formatDisplayDate(l.rejectedDate)}
-                            </div>
-                          )}
-                          {l.pendingReviewSubmittedAt && l.status === 'pending approval' && (
-                            <div
-                              style={{
-                                fontSize: 12,
-                                color: 'var(--warning, #ca8a04)',
-                                marginTop: 1,
-                                fontWeight: '500',
-                              }}
-                            >
-                              Pending: {formatDisplayDate(l.pendingReviewSubmittedAt)}
-                            </div>
-                          )}
-                        </>
-                      )}
-                    </td>
-                    <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--primary, #1e40af)' }}>
-                      {renderOwnerBillableAmount(l)}
-                    </td>
-                    <td>
-                      <div style={{ display: 'flex', gap: 6 }}>
-                        <ActionBtn variant="edit" onClick={() => openEdit(l)} />
-                        <ActionBtn variant="delete" onClick={() => setDeleteTarget(l)} />
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      {/* Desktop Table */}
+      <LotTableDesktop
+        filtered={filtered}
+        paginatedLots={paginatedLots}
+        lotTableTab={lotTableTab}
+        parties={parties}
+        businessOwners={businessOwners}
+        completionPersistingLotId={completionPersistingLotId}
+        inlineSummaryBusy={inlineSummaryBusy}
+        setLotStatus={setLotStatus}
+        handlePartyChange={handlePartyChange}
+        openEdit={openEdit}
+        openLinkedLot={openLinkedLot}
+        setDeleteTarget={setDeleteTarget}
+        renderOwnerBillableAmount={renderOwnerBillableAmount}
+      />
 
-      {/* Mobile Views (< 768px): Ultra-Compact Tiles vs Single-Column Cards List */}
-      {viewMode === 'tile' ? (
-        <div className="tiles-grid mobile-only-tiles">
-          {filtered.length === 0 ? (
-            <EmptyState message="No lots found" />
-          ) : (
-            paginatedLots.map((l) => (
-              <div key={`gh-tile-${l.id}`} className={`lot-tile-card ${l.suitComponent === 'dupatta' ? 'lot-row-dupatta' : l.suitComponent === 'main' && l.suitType === '3-piece' ? 'lot-row-main' : ''}`}>
-                <div className="lot-tile-header">
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
-                      <span className="lot-tile-number">Lot {l.lotNumber ? `#${l.lotNumber}` : <span style={{ fontStyle: 'italic', fontWeight: 500, color: 'var(--text-muted, #94a3b8)' }}>(No Lot)</span>}</span>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
-                      {l.suitComponent === 'dupatta' && <button type="button" onClick={() => openEdit(l)} style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', background: 'var(--primary-bg, #fdf4ff)', color: 'var(--primary, #a21caf)', border: '1px solid var(--border, #f5d0fe)', borderRadius: 4, cursor: 'pointer' }}>Dupatta</button>}
-                      {l.suitComponent === 'main' && l.suitType === '3-piece' && <button type="button" onClick={() => openEdit(l)} style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', background: 'var(--primary-bg, #eff6ff)', color: 'var(--primary, #1d4ed8)', border: '1px solid var(--border, #bfdbfe)', borderRadius: 4, cursor: 'pointer' }}>Main Lot</button>}
-                      {l.linkedLotId && (
-                        <button type="button" onClick={() => openLinkedLot(l.linkedLotId)} style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', background: 'var(--primary-bg, #f8fafc)', color: 'var(--text-secondary, #334155)', border: '1px solid var(--border, #cbd5e1)', borderRadius: 4, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
-                          {l.suitComponent === 'main' ? 'View Dupatta' : 'View Main'}
-                        </button>
-                      )}
-                    </div>
-                    </div>
-                    {l.designNo ? <div className="lot-tile-design">Design #{l.designNo}</div> : null}
-                  </div>
-                  <div style={{ flexBasis: '100%', marginTop: 4 }}>
-                    {lotTableTab === 'completed' ? (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                        <span className="badge-completed" style={{ display: 'block', textAlign: 'center', fontSize: 13, padding: '4px 0', borderRadius: 20 }}>Done</span>
-                        <div style={{ fontSize: 11, color: 'var(--success, #166534)', textAlign: 'center', fontWeight: 600 }}>
-                          Completed Date: {formatDisplayDate(l.completionApprovedAt || l.allotDate)}
-                        </div>
-                      </div>
-                    ) : (
-                      <LotStatusSelect
-                        value={l.status}
-                        options={STATUS_OPTIONS}
-                        disabled={completionPersistingLotId === l.id || inlineSummaryBusy}
-                        onChange={(next) => setLotStatus(l, next)}
-                        wrapStyle={{ display: 'block', width: '100%' }}
-                        style={{ width: '100%', minWidth: 0, maxWidth: 'none', fontSize: 13, fontWeight: 700, padding: '4px 24px 4px 12px', height: 32, backgroundPosition: 'right 10px center', borderRadius: 20 }}
-                      />
-                    )}
-                  </div>
-                </div>
+      {/* Mobile Views */}
+      <LotMobileViews
+        filtered={filtered}
+        paginatedLots={paginatedLots}
+        viewMode={viewMode}
+        lotTableTab={lotTableTab}
+        parties={parties}
+        businessOwners={businessOwners}
+        completionPersistingLotId={completionPersistingLotId}
+        inlineSummaryBusy={inlineSummaryBusy}
+        setLotStatus={setLotStatus}
+        handlePartyChange={handlePartyChange}
+        openEdit={openEdit}
+        openLinkedLot={openLinkedLot}
+        setDeleteTarget={setDeleteTarget}
+        renderOwnerBillableAmount={renderOwnerBillableAmount}
+      />
 
-                <div className="lot-tile-body">
-                  <div className="lot-tile-chips">
-                    <span className="fabric-chip">{l.itemType || l.fabric || 'Lawn'}</span>
-                    <span className="info-chip">{l.colors || 0} col</span>
-                    <span className="info-chip">{l.pieces || 0} pcs</span>
-                  </div>
-
-                  <div style={{ marginTop: 4 }}>
-                    <PartyPickerSelect
-                      value={l.partyId || ''}
-                      onChange={(val) => handlePartyChange(l.id, val)}
-                      parties={parties}
-                    />
-                  </div>
-                </div>
-
-                <div className="lot-tile-footer">
-                  <span className="lot-tile-price">
-                    {renderOwnerBillableAmount(l)}
-                  </span>
-                  <div className="lot-tile-actions">
-                    <button
-                      type="button"
-                      className="btn-tile-action"
-                      onClick={() => openEdit(l)}
-                    >
-                      Edit
-                    </button>
-                    <button
-                      type="button"
-                      className="btn-tile-action delete"
-                      onClick={() => setDeleteTarget(l)}
-                    >
-                      Delete
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      ) : (
-        <div className="mobile-only-ghausia-cards">
-          {filtered.length === 0 ? (
-            <EmptyState message="No lots found" />
-          ) : (
-            paginatedLots.map((l) => (
-              <div key={`gh-mob-${l.id}`} className="ghausia-mobile-card">
-                <div className="gh-mob-header">
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
-                      <span className="gh-mob-lot-no">Lot {l.lotNumber ? `#${l.lotNumber}` : <span style={{ fontStyle: 'italic', fontWeight: 500, color: 'var(--text-muted, #94a3b8)' }}>(No Lot)</span>}</span>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
-                        {l.suitComponent === 'dupatta' && <button type="button" onClick={() => openEdit(l)} style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', background: 'var(--primary-bg, #fdf4ff)', color: 'var(--primary, #a21caf)', border: '1px solid var(--border, #f5d0fe)', borderRadius: 4, cursor: 'pointer' }}>Dupatta</button>}
-                        {l.suitComponent === 'main' && l.suitType === '3-piece' && <button type="button" onClick={() => openEdit(l)} style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', background: 'var(--primary-bg, #eff6ff)', color: 'var(--primary, #1d4ed8)', border: '1px solid var(--border, #bfdbfe)', borderRadius: 4, cursor: 'pointer' }}>Main Lot</button>}
-                        {l.isRework && <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', background: 'var(--primary-bg, #fffbeb)', color: 'var(--primary, #b45309)', border: '1px solid var(--border, #fde68a)', borderRadius: 4 }}>Rework</span>}
-                        {l.linkedLotId && (
-                          <button type="button" onClick={() => openLinkedLot(l.linkedLotId)} style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', background: 'var(--primary-bg, #f8fafc)', color: 'var(--text-secondary, #334155)', border: '1px solid var(--border, #cbd5e1)', borderRadius: 4, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
-                            {l.suitComponent === 'main' ? 'View Dupatta' : 'View Main'}
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                    {l.designNo ? <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary, #475569)' }}>Design #{l.designNo}</span> : null}
-                  </div>
-                  <div>
-                    {lotTableTab === 'completed' ? (
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
-                        <span className="badge-completed">Completed</span>
-                        <div style={{ fontSize: 11, color: 'var(--success, #166534)', fontWeight: 600 }}>
-                          Completed Date: {formatDisplayDate(l.completionApprovedAt || l.allotDate)}
-                        </div>
-                      </div>
-                    ) : (
-                      <LotStatusSelect
-                        value={l.status}
-                        options={STATUS_OPTIONS}
-                        disabled={completionPersistingLotId === l.id || inlineSummaryBusy}
-                        onChange={(next) => setLotStatus(l, next)}
-                        style={{ fontSize: 13, fontWeight: 700, borderRadius: 20 }}
-                      />
-                    )}
-                  </div>
-                </div>
-
-                <div className="gh-mob-body">
-                  <div className="gh-mob-chips">
-                    <span className="fabric-chip">{l.itemType || l.fabric || 'Lawn'}</span>
-                    <span className="info-chip">Col: {l.colors || 0}</span>
-                    <span className="info-chip">Pcs: {l.pieces || 0}</span>
-                  </div>
-
-                  <div style={{ marginTop: 4 }}>
-                    <PartyPickerSelect
-                      value={l.partyId || ''}
-                      onChange={(val) => handlePartyChange(l.id, val)}
-                      parties={parties}
-                    />
-                  </div>
-
-                  <div className="gh-mob-info">
-                    <div>Workspace: {workspaceDisplayTitleForLot(l, businessOwners)}</div>
-                    <div>Allot Date: {formatDisplayDate(l.allotDate)}</div>
-                    {l.description && <div>Note: {l.description}</div>}
-                  </div>
-
-                  <div className="gh-mob-bill-row">
-                    <span style={{ fontSize: 13, color: 'var(--text-muted, #64748b)' }}>Bill Amount:</span>
-                    <strong style={{ fontSize: 15, color: 'var(--primary, #1e40af)' }}>
-                      {renderOwnerBillableAmount(l)}
-                    </strong>
-                  </div>
-                </div>
-
-                <div className="gh-mob-footer">
-                  <ActionBtn variant="edit" onClick={() => openEdit(l)} />
-                  <ActionBtn variant="delete" onClick={() => setDeleteTarget(l)} />
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      )}
+      {/* Pagination */}
       {filtered.length > 0 && (
         <div
           style={{
@@ -3270,325 +1537,33 @@ export default function GhausiaCollection() {
         </Modal>
       )}
 
-      {/* Complete lot — bill amount & owner payment */}
-      {completeBillModal &&
-        (() => {
-          const lot = completeBillModal.lot;
-          const fromBillable = !!completeBillModal.fromBillable;
-          const ov = completeBillModal.billAmountOverride;
-          const effective = getAdminLedgerOrBusinessBill(lot, partyEdits[lot.id] || {});
-          const rawBill =
-            ov !== undefined && ov !== null ? Number(ov) : Number(lot.billAmount || 0);
-          const confirmAmt = Number(completeBillInput);
-          const amountForOwnerCheck =
-            !Number.isNaN(confirmAmt) && confirmAmt > 0 ? confirmAmt : rawBill;
-          const amountBill = rawBill.toLocaleString();
-          const lotNo = String(lot.lotNumber || lot.lotNo || '').trim() || '—';
-          const designNo = String(lot.designNo || '').trim() || '—';
-          const partyLabel =
-            (lot.partyName && String(lot.partyName).trim()) ||
-            (lot.partyId ? getPartyName(lot.partyId) : '') ||
-            '—';
-          return (
-            <Modal
-              title={fromBillable ? 'Confirm payment & complete lot' : 'Bill amount for completion'}
-              onClose={dismissCompleteBillModal}
-              onFormSubmit={() => {
-                confirmCompleteBillModal();
-              }}
-              footer={
-                <>
-                  <button
-                    type="button"
-                    className="btn btn-ghost"
-                    onClick={dismissCompleteBillModal}
-                  >
-                    Cancel
-                  </button>
-                  <button type="submit" className="btn btn-primary">
-                    {fromBillable ? 'Complete & settle' : 'Complete & record payment'}
-                  </button>
-                </>
-              }
-            >
-              {isCombinedDupatta(lot) ? (
-                <p
-                  style={{
-                    textAlign: 'left',
-                    fontSize: 13,
-                    margin: '0 0 12px',
-                    color: 'var(--text-secondary)',
-                  }}
-                >
-                  This lot&apos;s bill is <strong style={{ color: 'var(--warning, #d97706)' }}>combined</strong> with the main lot. You can complete and settle it directly (₨0 bill).
-                </p>
-              ) : completeBillModal.unpaidBalance === 0 ? (
-                <p
-                  style={{
-                    textAlign: 'left',
-                    fontSize: 13,
-                    margin: '0 0 12px',
-                    color: 'var(--text-secondary)',
-                  }}
-                >
-                  <strong style={{ color: 'var(--success, #16a34a)', display: 'block', marginBottom: 6 }}>Is lot ka pura bill clear ho chuka hai!</strong>
-                  Iska total bill <strong>₨{amountBill}</strong> pehle hi clear ho chuka hai. &quot;Complete&quot; par click karein taa k lot mukammal ho jaye (koi nayi payment record nahi hogi).
-                </p>
-              ) : fromBillable ? (
-                <p
-                  style={{
-                    textAlign: 'left',
-                    fontSize: 13,
-                    margin: '0 0 12px',
-                    color: 'var(--text-secondary)',
-                  }}
-                >
-                  Neechay is lot ki baqi (unpaid) amount confirm karein. Lot <strong>Completed</strong> ho jayega, 
-                  aur Payment Management mein is amount ka naya bill (<strong>Bill → Owner</strong>) record ho jayega.
-                  {completeBillModal.totalBill > 0 ? (
-                    <>
-                      {' '}
-                      Total bill: <strong>₨{amountBill}</strong>. Baqi udhaar: <strong>₨{completeBillModal.unpaidBalance.toLocaleString()}</strong>.
-                    </>
-                  ) : (
-                    <> Is lot ka koi bill save nahi hai — neechay amount likhein.</>
-                  )}
-                  {amountForOwnerCheck > 0 && ownerReceivedNet < amountForOwnerCheck && (
-                    <span
-                      style={{ display: 'block', marginTop: 10, color: 'var(--warning, #b45309)', fontWeight: 600 }}
-                    >
-                      Aap k paas Owner ka advance (Received) cash khatam hai — yeh lot complete karne k baad Owner ka khata minus mein (<strong>Pending udhaar</strong>) chala jayega jab tak k aap naya cash receive nahi karte.
-                    </span>
-                  )}
-                </p>
-              ) : completeBillModal.totalBill > 0 ? (
-                <p
-                  style={{
-                    textAlign: 'left',
-                    fontSize: 13,
-                    margin: '0 0 12px',
-                    color: 'var(--text-secondary)',
-                  }}
-                >
-                  Is lot ka total bill <strong>₨{amountBill}</strong> hai, aur baqi <strong>₨{completeBillModal.unpaidBalance.toLocaleString()}</strong> udhaar rehta hai. Isay complete karne par Payment Management mein (<strong>Received</strong>) ki payment record hogi jo amount aap neechay confirm karenge.
-                </p>
-              ) : (
-                <p
-                  style={{
-                    textAlign: 'left',
-                    fontSize: 13,
-                    margin: '0 0 12px',
-                    color: 'var(--text-secondary)',
-                  }}
-                >
-                  Is lot ka koi bill save nahi hai. Owner se jo amount aap ne li hai wo neechay likhein taa k lot mukammal ho aur Payment Management mein (<strong>Received</strong>) ki entry save ho jaye.
-                </p>
-              )}
-              <div
-                style={{
-                  textAlign: 'left',
-                  fontSize: 12,
-                  color: 'var(--text-muted)',
-                  lineHeight: 1.5,
-                  marginBottom: 16,
-                }}
-              >
-                <strong>Lot:</strong> {lotNo} · <strong>Design:</strong> {designNo}
-                <br />
-                <strong>Party:</strong> {partyLabel}
-                <br />
-              </div>
-              {!isCombinedDupatta(lot) && completeBillModal.unpaidBalance > 0 && (
-                <FormGroup
-                  label={rawBill > 0 ? 'Baqi udhaar amount (₨) — zaroorat ho toh change karein' : 'Vasool ki gayi amount (₨) *'}
-                >
-                  <input
-                    className={`form-input${completeBillError ? ' input-error' : ''}`}
-                    type="number"
-                    min={0}
-                    step={1}
-                    value={completeBillInput}
-                    onChange={(e) => {
-                      setCompleteBillInput(e.target.value);
-                      setCompleteBillError('');
-                    }}
-                    placeholder={rawBill > 0 ? `Default ₨${completeBillModal.unpaidBalance.toLocaleString()}` : 'Amount (₨)'}
-                    autoFocus
-                  />
-                  {completeBillError && (
-                    <span style={{ color: 'var(--danger, #dc2626)', fontSize: 11, marginTop: 3, display: 'block' }}>
-                      {completeBillError}
-                    </span>
-                  )}
-                </FormGroup>
-              )}
-              <strong>Owner Received:</strong> ₨{ownerReceivedNet.toLocaleString()}
-            </Modal>
-          );
-        })()}
+      {/* Complete Bill Modal */}
+      <CompleteBillModal
+        completeBillModal={completeBillModal}
+        completeBillInput={completeBillInput}
+        setCompleteBillInput={setCompleteBillInput}
+        completeBillError={completeBillError}
+        setCompleteBillError={setCompleteBillError}
+        dismissCompleteBillModal={dismissCompleteBillModal}
+        confirmCompleteBillModal={confirmCompleteBillModal}
+        ownerReceivedNet={ownerReceivedNet}
+        getPartyName={getPartyName}
+        partyEdits={partyEdits}
+      />
 
       {/* Payment Modal */}
-      {payModal && (
-        <Modal
-          title="Record Payment"
-          onClose={() => {
-            if (!paymentSaving) {
-              setPayModal(false);
-              setPayErrors({});
-            }
-          }}
-          onFormSubmit={() => {
-            void handleAddPayment();
-          }}
-          footer={
-            <>
-              <button
-                type="button"
-                className="btn btn-ghost"
-                onClick={() => {
-                  setPayModal(false);
-                  setPayErrors({});
-                }}
-                disabled={paymentSaving}
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                className="btn btn-success"
-                disabled={paymentSaving}
-                style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
-              >
-                {paymentSaving ? (
-                  <>
-                    <Loader /> Saving…
-                  </>
-                ) : (
-                  'Save Payment'
-                )}
-              </button>
-            </>
-          }
-        >
-          <div className="grid-2">
-            <FormGroup label="Type">
-              <select
-                className="form-select"
-                value={payForm.type}
-                onChange={(e) => {
-                  const newType = e.target.value;
-                  setPayForm((f) => ({
-                    ...f,
-                    type: newType,
-                    party: newType === 'Received' ? 'Owner' : '',
-                  }));
-                  setPayErrors((prev) => ({ ...prev, party: undefined }));
-                }}
-              >
-                <option>Received</option>
-                <option>Paid</option>
-              </select>
-            </FormGroup>
-            <FormGroup label="Amount (₨) *">
-              <input
-                className={`form-input${payErrors.amount ? ' input-error' : ''}`}
-                type="number"
-                value={payForm.amount}
-                onChange={(e) => {
-                  setPayForm((f) => ({ ...f, amount: e.target.value }));
-                  setPayErrors((p) => ({ ...p, amount: undefined }));
-                }}
-                placeholder="50000"
-              />
-              {payErrors.amount && (
-                <span style={{ color: 'var(--danger, #dc2626)', fontSize: 11, marginTop: 3, display: 'block' }}>
-                  {payErrors.amount}
-                </span>
-              )}
-            </FormGroup>
-            <FormGroup label={payForm.type === 'Received' ? 'Received From' : 'Paid To *'}>
-              {payForm.type === 'Received' ? (
-                <select
-                  className="form-select"
-                  value={payForm.party}
-                  onChange={(e) => setPayForm((f) => ({ ...f, party: e.target.value }))}
-                >
-                  <option value="Owner">Owner</option>
-                  {parties.map((p) => (
-                    <option key={p.id} value={p.name}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <>
-                  <select
-                    className={`form-select${payErrors.party ? ' input-error' : ''}`}
-                    value={payForm.party}
-                    onChange={(e) => {
-                      setPayForm((f) => ({ ...f, party: e.target.value }));
-                      setPayErrors((p) => ({ ...p, party: undefined }));
-                    }}
-                  >
-                    <option value="">— Select Party —</option>
-                    {parties.map((p) => (
-                      <option key={p.id} value={p.name}>
-                        {p.name}
-                      </option>
-                    ))}
-                    <option value="Other">Other</option>
-                  </select>
-                  {payErrors.party && (
-                    <span
-                      style={{ color: 'var(--danger, #dc2626)', fontSize: 11, marginTop: 3, display: 'block' }}
-                    >
-                      {payErrors.party}
-                    </span>
-                  )}
-                </>
-              )}
-            </FormGroup>
-            <FormGroup label="Date *">
-              <input
-                className={`form-input${payErrors.date ? ' input-error' : ''}`}
-                type="date"
-                value={payForm.date}
-                onChange={(e) => {
-                  setPayForm((f) => ({ ...f, date: e.target.value }));
-                  setPayErrors((p) => ({ ...p, date: undefined }));
-                }}
-              />
-              {payErrors.date && (
-                <span style={{ color: 'var(--danger, #dc2626)', fontSize: 11, marginTop: 3, display: 'block' }}>
-                  {payErrors.date}
-                </span>
-              )}
-            </FormGroup>
-            <FormGroup label="Linked Lot (optional)">
-              <select
-                className="form-select"
-                value={payForm.linkedLot}
-                onChange={(e) => setPayForm((f) => ({ ...f, linkedLot: e.target.value }))}
-              >
-                <option value="">None</option>
-                {collectionLots.map((l) => (
-                  <option key={l.id} value={l.lotNumber}>
-                    {l.lotNumber || l.lotNo} / {l.designNo}
-                  </option>
-                ))}
-              </select>
-            </FormGroup>
-            <FormGroup label="Note">
-              <input
-                className="form-input"
-                value={payForm.note}
-                onChange={(e) => setPayForm((f) => ({ ...f, note: e.target.value }))}
-                placeholder="Optional note"
-              />
-            </FormGroup>
-          </div>
-        </Modal>
-      )}
+      <PaymentModal
+        payModal={payModal}
+        payForm={payForm}
+        setPayForm={setPayForm}
+        payErrors={payErrors}
+        setPayErrors={setPayErrors}
+        paymentSaving={paymentSaving}
+        setPayModal={setPayModal}
+        handleAddPayment={handleAddPayment}
+        parties={parties}
+        collectionLots={collectionLots}
+      />
 
       {/* Confirm Delete */}
       {deleteTarget && (
