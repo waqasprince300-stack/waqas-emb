@@ -383,17 +383,19 @@ export default function StitchCalculator() {
 
               <div className="calc-cell">
                 <span className="mob-calc-label">Repeat</span>
-                <select
-                  value={normalized.repeat}
-                  onChange={(e) => updateRow(index, { repeat: Number(e.target.value) })}
+                <input
+                  type="number"
+                  list="repeat-options-list"
+                  value={normalized.repeat === 0 ? '' : normalized.repeat}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    updateRow(index, { repeat: val === '' ? 0 : Number(val) });
+                  }}
                   className="input"
-                >
-                  {REPEAT_OPTIONS.map((r) => (
-                    <option key={r} value={r}>
-                      {r}
-                    </option>
-                  ))}
-                </select>
+                  min="0"
+                  step="any"
+                  placeholder="1"
+                />
               </div>
 
               <div className="calc-cell horizontal">
@@ -418,6 +420,12 @@ export default function StitchCalculator() {
         <button type="button" onClick={() => addRow()} className="addBtn">
           + Add stitch row
         </button>
+
+        <datalist id="repeat-options-list">
+          {REPEAT_OPTIONS.map((r) => (
+            <option key={r} value={r} />
+          ))}
+        </datalist>
 
         <div className="grid2">
           <div>

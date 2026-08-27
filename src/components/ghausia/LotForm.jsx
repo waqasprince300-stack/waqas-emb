@@ -1,4 +1,4 @@
-﻿import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import Swal from 'sweetalert2';
 import { FormGroup } from '../UI';
 import Loader from '../Loader';
@@ -106,6 +106,7 @@ function LotForm({
   });
   const [errors, setErrors] = useState({});
   const isNewLot = !initial;
+  const [moveToBusinessOwnerId, setMoveToBusinessOwnerId] = useState('');
   const [bulkMode, setBulkMode] = useState(false);
   const [bulkCount, setBulkCount] = useState(5);
 
@@ -181,7 +182,7 @@ function LotForm({
     if (isNewLot && bulkMode) {
       const count = Number(bulkCount);
       if (!Number.isFinite(count) || count < 2 || count > 100) {
-        newErrors.bulkCount = 'Enter 2â€“100 lots';
+        newErrors.bulkCount = 'Enter 2-100 lots';
       } else if (!bulkLotNumbers) {
         newErrors.lotNumber = 'Use a starting lot ending in digits (e.g. L-10)';
       }
@@ -286,7 +287,8 @@ function LotForm({
             ownerBillingChoice: form.ownerBillingChoice,
           }
         : {}),
-      ...(syncMainLotPieces ? { syncMainLotPieces } : {})
+      ...(syncMainLotPieces ? { syncMainLotPieces } : {}),
+      ...(moveToBusinessOwnerId ? { moveToBusinessOwnerId } : {}),
     };
 
     if (isNewLot && bulkMode && bulkLotNumbers && bulkLotNumbers.length > 1) {
@@ -306,7 +308,7 @@ function LotForm({
   };
 
   const saveButtonLabel = (() => {
-    if (saving) return 'Savingâ€¦';
+    if (saving) return 'Saving...';
     if (isNewLot && bulkMode && bulkLotNumbers && bulkLotNumbers.length > 1) {
       return `Save ${bulkLotNumbers.length} lots`;
     }
@@ -349,7 +351,7 @@ function LotForm({
             }}
           >
             {h}
-            {isDefault ? 'Â·' : ''}
+            {isDefault ? '*' : ''}
           </button>
         );
       })}
@@ -476,10 +478,47 @@ function LotForm({
             <span style={{ color: 'var(--danger, #dc2626)', fontSize: 11 }}>{errors.bulkCount}</span>
           ) : null}
           {bulkMode && !bulkLotNumbers && form.lotNumber.trim() ? (
-            <span style={{ color: 'var(--warning, #b45309)', fontSize: 11 }}>Lot needs digits</span>
+            <span style={{ color: 'var(--success, #166534)', fontSize: 11, marginLeft: 'auto' }}>
+              Hit Save to generate
+            </span>
           ) : null}
         </>
       ) : null}
+      {!isNewLot && workspaceOwnerOptions && workspaceOwnerOptions.length > 1 && (
+        <>
+          <span style={{ color: 'var(--border, #e2e8f0)', userSelect: 'none' }}>|</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginLeft: 'auto' }}>
+            {moveToBusinessOwnerId && (
+              <span style={{ fontSize: 11, color: 'var(--warning, #b45309)', fontWeight: 600 }}>
+                ⚠ Is lot ko nayi workspace mein move kar diya jayega.
+              </span>
+            )}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ fontWeight: 600, color: 'var(--text-secondary, #475569)', fontSize: 11 }}>Move to:</span>
+            <select
+              className="form-select"
+              value={moveToBusinessOwnerId}
+              onChange={(e) => setMoveToBusinessOwnerId(e.target.value)}
+              style={{
+                padding: '2px 24px 2px 8px',
+                fontSize: 11,
+                height: 26,
+                minHeight: 26,
+                fontWeight: 600,
+                ...(moveToBusinessOwnerId ? { borderColor: 'var(--warning, #f59e0b)', background: 'var(--warning-bg, #fffbeb)', color: 'var(--warning, #b45309)' } : {})
+              }}
+            >
+              <option value="">Current</option>
+              {(workspaceOwnerOptions || []).filter((o) => String(o.id || o._id) !== String(initial?.businessOwnerId || '')).map((o) => (
+                <option key={o.id || o._id} value={String(o.id || o._id)}>
+                  {o.name}
+                </option>
+              ))}
+            </select>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 
@@ -501,7 +540,7 @@ function LotForm({
             style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--purple, #4f46e5)', fontWeight: 600, background: 'var(--primary-bg, #eef2ff)' }}
             onClick={() => onJumpToLinkedLot && onJumpToLinkedLot(form.linkedLotId)}
           >
-            {form.suitComponent === 'dupatta' ? 'ðŸ”— View Main Lot' : 'ðŸ”— View Dupatta'}
+            {form.suitComponent === 'dupatta' ? '🔗 View Main Lot' : '🔗 View Dupatta'}
           </button>
         </div>
       )}
@@ -545,28 +584,29 @@ function LotForm({
         </label>
       </div>
 
+      {pickWorkspaceForNewLot && (
+        <FormGroup label="Business collection *" style={{ marginBottom: 16 }}>
+          <select
+            className={`form-select${errors.saveBusinessOwnerId ? ' input-error' : ''}`}
+            value={form.saveBusinessOwnerId}
+            onChange={(e) => set('saveBusinessOwnerId', e.target.value)}
+          >
+            <option value="">— Select collection —</option>
+            {(workspaceOwnerOptions || []).map((o) => (
+              <option key={o.id || o._id} value={String(o.id || o._id)}>
+                {o.name}
+              </option>
+            ))}
+          </select>
+          {errors.saveBusinessOwnerId && (
+            <span style={{ color: 'var(--danger, #dc2626)', fontSize: 11, marginTop: 3, display: 'block' }}>
+              {errors.saveBusinessOwnerId}
+            </span>
+          )}
+        </FormGroup>
+      )}
+
       <div className="grid-2">
-        {pickWorkspaceForNewLot && (
-          <FormGroup label="Business collection *">
-            <select
-              className={`form-select${errors.saveBusinessOwnerId ? ' input-error' : ''}`}
-              value={form.saveBusinessOwnerId}
-              onChange={(e) => set('saveBusinessOwnerId', e.target.value)}
-            >
-              <option value="">â€” Select collection â€”</option>
-              {(workspaceOwnerOptions || []).map((o) => (
-                <option key={o.id || o._id} value={String(o.id || o._id)}>
-                  {o.name}
-                </option>
-              ))}
-            </select>
-            {errors.saveBusinessOwnerId && (
-              <span style={{ color: 'var(--danger, #dc2626)', fontSize: 11, marginTop: 3, display: 'block' }}>
-                {errors.saveBusinessOwnerId}
-              </span>
-            )}
-          </FormGroup>
-        )}
         <FormGroup label={isNewLot && bulkMode ? 'Starting lot number' : 'Lot Number'}>
           <input
             className={`form-input${errors.lotNumber ? ' input-error' : ''}`}
@@ -622,7 +662,7 @@ function LotForm({
                 {f}
               </option>
             ))}
-            <option value="__custom">+ New fabricâ€¦</option>
+            <option value="__custom">+ New fabric...</option>
           </select>
           {form.itemType === '__custom' && (
             <input
@@ -634,7 +674,7 @@ function LotForm({
             />
           )}
         </FormGroup>
-        <FormGroup label="Colors (0â€“12)">
+        <FormGroup label="Colors (0–12)">
           <select
             className="form-select"
             value={form.colors}
@@ -678,7 +718,7 @@ function LotForm({
               set('partyName', selectedParty ? selectedParty.name : '');
             }}
           >
-            <option value="">â€” Select Party â€”</option>
+            <option value="">— Select Party —</option>
             {recentParties.length > 0 && (
               <optgroup label="Recent">
                 {recentParties.map((p) => (
@@ -720,7 +760,7 @@ function LotForm({
             </select>
           </FormGroup>
         )}
-        <FormGroup label="Bill Amount (â‚¨)">
+        <FormGroup label="Bill Amount (Rs)">
           {checkIsCombinedDupatta(initial) ? (
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               <div style={{ flex: 1, padding: '8px 12px', background: 'var(--card-bg)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text-muted)', fontSize: 13 }}>
@@ -811,7 +851,7 @@ function LotForm({
                     });
                   }}
                 >
-                  <option value="">â€” Select Party â€”</option>
+                  <option value="">— Select Party —</option>
                   {recentParties.length > 0 && (
                     <optgroup label="Recent">
                       {recentParties.map((p) => (
@@ -837,13 +877,13 @@ function LotForm({
                 value={form.dupattaDetails.itemType}
                 onChange={(e) => set('dupattaDetails', { ...form.dupattaDetails, itemType: e.target.value })}
               >
-                <option value="">â€” Select Fabric â€”</option>
+                <option value="">— Select Fabric —</option>
                 {itemTypeOptions.map((f) => (
                   <option key={f} value={f}>
                     {f}
                   </option>
                 ))}
-                <option value="__custom">+ New fabricâ€¦</option>
+                <option value="__custom">+ New fabric...</option>
               </select>
               {form.dupattaDetails.itemType === '__custom' && (
                 <input
@@ -868,7 +908,7 @@ function LotForm({
             </FormGroup>
 
             {form.ownerBillingChoice === 'separate' && (
-              <FormGroup label="Dupatta Owner Bill (â‚¨)">
+              <FormGroup label="Dupatta Owner Bill (Rs)">
                 <input
                   className="form-input"
                   type="number"
@@ -943,7 +983,7 @@ function LotForm({
                 }}
               >
                 <div style={{ marginBottom: 4 }}>Combined Bill</div>
-                <div style={{ fontSize: '10px', fontWeight: 400 }}>Main lot will combine both bills. Dupatta lot will show â‚¨0 for owner.</div>
+                <div style={{ fontSize: '10px', fontWeight: 400 }}>Main lot will combine both bills. Dupatta lot will show Rs 0 for owner.</div>
               </button>
             </div>
           </div>
@@ -967,7 +1007,7 @@ function LotForm({
         >
           {saving ? (
             <>
-              <Loader /> Savingâ€¦
+              <Loader /> Saving...
             </>
           ) : (
             saveButtonLabel
