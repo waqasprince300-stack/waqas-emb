@@ -1,4 +1,5 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 import Loader from './Loader';
 
 export function Modal({ title, onClose, children, footer, wide, onFormSubmit, overlayClassName }) {
@@ -9,7 +10,8 @@ export function Modal({ title, onClose, children, footer, wide, onFormSubmit, ov
       {footer ? <div className="modal-footer">{footer}</div> : null}
     </>
   );
-  return (
+
+  const modalContent = (
     <div
       className={overlayClass}
       onClick={(e) => {
@@ -38,6 +40,11 @@ export function Modal({ title, onClose, children, footer, wide, onFormSubmit, ov
       </div>
     </div>
   );
+
+  if (typeof document !== 'undefined') {
+    return createPortal(modalContent, document.body);
+  }
+  return modalContent;
 }
 
 export function FormGroup({ label, children, half }) {
