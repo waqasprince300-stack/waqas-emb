@@ -31,7 +31,7 @@ import {
   isOwnerBillSettlement,
 } from '../utils/paymentDisplay';
 import { partyFacingLotStatusLabel, lotStatusBadgeKey } from '../utils/partyFacingLabels';
-import { getAdminLedgerOrBusinessBill } from '../utils/partyBillPrivacy';
+import { getAdminLedgerOrBusinessBill, getBusinessBillAmount } from '../utils/partyBillPrivacy';
 import { apiService } from '../services/api';
 
 function lotBelongsToPartyUser(lot, partyId, partyName) {
@@ -250,7 +250,7 @@ export default function Dashboard() {
       const d = new Date(dStr);
       const mLabel = d.toLocaleString('default', { month: 'short', year: '2-digit' });
       if (monthsMap[mLabel]) {
-        monthsMap[mLabel].revenue += (Number(getAdminLedgerOrBusinessBill(l, reportingPartyEdits[l.id] || {})) || 0);
+        monthsMap[mLabel].revenue += (Number(getBusinessBillAmount(l)) || 0);
       }
     });
 
@@ -272,7 +272,7 @@ export default function Dashboard() {
   const lotStats = useMemo(() => {
     return scopedLots.reduce((acc, l) => {
       acc.byStatus[l.status] = (acc.byStatus[l.status] || 0) + 1;
-      const bill = (Number(getAdminLedgerOrBusinessBill(l, reportingPartyEdits[l.id] || {})) || 0);
+      const bill = (Number(getBusinessBillAmount(l)) || 0);
       acc.totalLotValue += bill;
       if (l.status === 'received back') {
         acc.billable.push(l);
@@ -299,7 +299,7 @@ export default function Dashboard() {
         id: p.id,
         name: p.name,
         total: lots.length,
-        value: lots.reduce((s, l) => s + (Number(getAdminLedgerOrBusinessBill(l, reportingPartyEdits[l.id] || {})) || 0), 0),
+        value: lots.reduce((s, l) => s + (Number(getBusinessBillAmount(l)) || 0), 0),
         completed: lots.filter((l) => l.status === 'completed').length,
         pending: lots.filter((l) => l.status === 'pending').length,
       };
@@ -324,7 +324,7 @@ export default function Dashboard() {
       const fabric = String(l.itemType || l.fabric || l.customFabric || 'Unknown').trim() || 'Unknown';
       if (!fabricMap[fabric]) fabricMap[fabric] = { name: fabric, count: 0, revenue: 0 };
       fabricMap[fabric].count += 1;
-      fabricMap[fabric].revenue += (Number(getAdminLedgerOrBusinessBill(l, reportingPartyEdits[l.id] || {})) || 0);
+      fabricMap[fabric].revenue += (Number(getBusinessBillAmount(l)) || 0);
     });
     const sorted = Object.values(fabricMap).sort((a, b) => b.count - a.count);
     // Show top 4, group remaining into "Others" so pie chart total always matches Total Lots
@@ -409,7 +409,7 @@ export default function Dashboard() {
   const wipLots = scopedLots.filter(l => ['dispatched', 'pending approval', 'received back'].includes(String(l.status || '').toLowerCase()));
   const wipValue = wipLots.reduce((sum, l) => {
     const edit = reportingPartyEdits[l.id] || {};
-    const bill = getAdminLedgerOrBusinessBill(l, edit) || l.billAmount || 0;
+    const bill = getBusinessBillAmount(l) || 0;
     return sum + Number(bill);
   }, 0);
 
@@ -601,8 +601,10 @@ export default function Dashboard() {
                   className="stat-value"
                   style={{
                     color: 'var(--primary-light, #0ea5e9)',
-                    fontSize: hideAmounts ? 24 : (wipValue >= 1000000 ? 18 : 24),
-                    wordBreak: 'break-word'
+                    fontSize: hideAmounts ? 24 : (wipValue >= 100000 ? 18 : 22),
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis'
                   }}
                 >
                   {hideAmounts ? '***' : formatRupee(wipValue)}
@@ -969,7 +971,7 @@ export default function Dashboard() {
                               {workspaceDisplayTitleForLot(l, businessOwners)}
                             </td>
                             <td style={{ textAlign: 'right', fontWeight: 600, color: 'var(--primary-light, #0369a1)' }}>
-                              {hideAmounts ? '****' : `₨${(Number(getAdminLedgerOrBusinessBill(l, reportingPartyEdits[l.id] || {})) || 0).toLocaleString()}`}
+                              {hideAmounts ? '****' : `₨${(Number(getBusinessBillAmount(l)) || 0).toLocaleString()}`}
                             </td>
                           </tr>
                         ))}

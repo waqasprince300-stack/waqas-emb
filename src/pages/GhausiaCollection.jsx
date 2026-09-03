@@ -1168,7 +1168,7 @@ export default function GhausiaCollection() {
               onClick={() => {
                 const next = !showSummaryCards;
                 setShowSummaryCards(next);
-                localStorage.setItem('hideLotsSummary', !next ? 'true' : 'false');
+                localStorage.setItem('hideLedgerSummary', !next ? 'true' : 'false');
               }}
               style={{
                 display: 'inline-flex',

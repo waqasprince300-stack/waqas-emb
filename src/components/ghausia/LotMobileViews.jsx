@@ -52,7 +52,7 @@ export default function LotMobileViews({
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                       <span className="badge-completed" style={{ display: 'block', textAlign: 'center', fontSize: 13, padding: '4px 0', borderRadius: 20 }}>Done</span>
                       <div style={{ fontSize: 11, color: 'var(--success, #166534)', textAlign: 'center', fontWeight: 600 }}>
-                        Completed Date: {formatDisplayDate(l.completionApprovedAt || l.allotDate)}
+                        Completed Date: {formatDisplayDate(l.completionApprovedAt || l.receivedBackDate || l.allotDate)}
                       </div>
                     </div>
                   ) : (
@@ -143,7 +143,7 @@ export default function LotMobileViews({
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
                     <span className="badge-completed">Completed</span>
                     <div style={{ fontSize: 11, color: 'var(--success, #166534)', fontWeight: 600 }}>
-                      Completed Date: {formatDisplayDate(l.completionApprovedAt || l.allotDate)}
+                      Completed Date: {formatDisplayDate(l.completionApprovedAt || l.receivedBackDate || l.allotDate)}
                     </div>
                   </div>
                 ) : (

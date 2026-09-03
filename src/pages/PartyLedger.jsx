@@ -4,21 +4,14 @@ import { useSearchParams } from 'react-router-dom';
 import Swal from 'sweetalert2';
 import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
-import { Modal, FormGroup, StatusBadge, SearchBar, EmptyState } from '../components/UI';
-import Loader from '../components/Loader';
 import LoaderDashboard from '../components/LoaderDashboard';
-import LazyReceiptThumb from '../components/receipt/LazyReceiptThumb';
-import { receiptPreviewKind } from '../components/receipt/ReceiptThumb';
-import ImageUploader from '../components/ImageUploader';
 import apiService from '../services/api';
 import {
-  DateRangeSelect,
   isWithinDateRange,
   latestDateFrom,
   compareRowsByUpdatedNewestFirst,
-  formatDisplayDate,
 } from '../utils/dateFilters';
-import { getPartyLedgerBillDisplay, getPartyLedgerBillNumeric } from '../utils/partyBillPrivacy';
+import { getPartyLedgerBillNumeric } from '../utils/partyBillPrivacy';
 import { workspaceDisplayTitleForLot, normalizedBusinessOwnerId } from '../utils/businessWorkspace';
 import {
   countPendingBillRevisionRequests,
@@ -27,31 +20,33 @@ import {
 } from '../utils/partyLedgerNotifications';
 import {
   partyFacingLedgerDisplayLabel,
-  partyFacingLotStatusLabel,
 } from '../utils/partyFacingLabels';
+
+// Sub-components
+import PLSummaryCards from '../components/partyLedger/PLSummaryCards';
+import PLToolbar from '../components/partyLedger/PLToolbar';
+import PLDesktopTable from '../components/partyLedger/PLDesktopTable';
+import PLMobileTiles from '../components/partyLedger/PLMobileTiles';
+import PLMobileCards from '../components/partyLedger/PLMobileCards';
+import PLEditModal from '../components/partyLedger/PLEditModal';
+import PLPicturesModal from '../components/partyLedger/PLPicturesModal';
+import PLReceiptPreviewModal from '../components/partyLedger/PLReceiptPreviewModal';
+import PLRevisionRequestModal from '../components/partyLedger/PLRevisionRequestModal';
+import PLRevisionReviewModal from '../components/partyLedger/PLRevisionReviewModal';
 
 // From the party's perspective: dispatched = In Progress, received back = Completed
 // If party name is unknown, status should be Pending
 const toLedgerStatus = (status, partyName) => {
-  if (!partyName || !String(partyName).trim()) return 'Pending';
-  if (!status) return 'Pending';
-  const s = String(status).trim().toLowerCase();
-  if (s === 'pending') return 'Pending';
-  if (s === 'completed' || s === 'received back') return 'Completed';
+  if (
+    !partyName ||
+    String(partyName).toLowerCase().includes('unknown') ||
+    String(status).toLowerCase() === 'pending'
+  ) {
+    return 'Pending';
+  }
+  if (String(status).toLowerCase() === 'received back') return 'Completed';
   return 'In Progress';
 };
-
-const toTitleCase = (s) =>
-  String(s || '')
-    .split(' ')
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(' ');
-
-/** Party UI label for ledger display statuses. */
-function partyFacingStatusLabel(displayStatus, isParty) {
-  if (!isParty) return displayStatus;
-  return partyFacingLedgerDisplayLabel(displayStatus);
-}
 
 function pendingRevisionIsReal(pe) {
   const pr = pe?.pendingRevision;
@@ -161,7 +156,7 @@ async function finalizeLedgerReceiptStoredValue(stored) {
   if (/^data:image\//i.test(String(stored))) return compressPartyLedgerBillImage(stored);
   return stored;
 }
-/** Admin/workspace lot still awaiting dispatch — party must not self-set "In Progress". */
+/** Admin/workspace lot still awaiting dispatch â€” party must not self-set "In Progress". */
 function adminLotNotDispatched(lot) {
   return (
     String(lot?.status || '')
@@ -220,7 +215,7 @@ export default function PartyLedger() {
   );
   const [editingId, setEditingId] = useState(null);
   const [ledgerEditKind, setLedgerEditKind] = useState(null);
-  /** null | 'pendingReview' | 'standard' — pending = awaiting admin, party may still edit */
+  /** null | 'pendingReview' | 'standard' â€” pending = awaiting admin, party may still edit */
   const [editForm, setEditForm] = useState({});
   const [ledgerSaving, setLedgerSaving] = useState(false);
   const [ledgerFormErrors, setLedgerFormErrors] = useState({});
@@ -375,14 +370,14 @@ export default function PartyLedger() {
     const partyNameDisplay = getPartyNameLocal(l.partyId, l.partyName);
     return toLedgerStatus(
       pe.overrideStatus || l.status,
-      partyNameDisplay !== '—' ? partyNameDisplay : ''
+      partyNameDisplay !== 'â€”' ? partyNameDisplay : ''
     );
   };
 
   const getPartyNameLocal = (partyId, fallback) =>
-    parties.find((p) => samePartyId(p.id, partyId))?.name || fallback || '—';
+    parties.find((p) => samePartyId(p.id, partyId))?.name || fallback || 'â€”';
 
-  /** Totals use party ledger amounts only (same figure party and admin see in the table — never lot bill fallback). */
+  /** Totals use party ledger amounts only (same figure party and admin see in the table â€” never lot bill fallback). */
   const getLedgerAmountForTotals = (l) => {
     const pe = ledgerPartyEdits[l.id] || {};
     return getPartyLedgerBillNumeric(pe);
@@ -390,7 +385,7 @@ export default function PartyLedger() {
 
   const filtered = useMemo(() => {
     const list = assignedLots.filter((l) => {
-      const q = search.toLowerCase();
+      const q = debouncedSearch.toLowerCase();
       const lotLabel = (l.lotNo || l.lotNumber || '').toLowerCase();
       const matchQ =
         !q ||
@@ -419,7 +414,7 @@ export default function PartyLedger() {
     });
   }, [assignedLots, debouncedSearch, partyFilter, ledgerLotsTab, statusFilter, ledgerPartyEdits, isAdmin]);
 
-  /** Summary cards ignore Status filter — only party / search / dates / workspace (via assignedLots). */
+  /** Summary cards ignore Status filter â€” only party / search / dates / workspace (via assignedLots). */
   const lotsForSummaryStats = useMemo(() => {
     return assignedLots.filter((lot) => {
       if (partyFilter !== 'All' && !samePartyId(lot.partyId, partyFilter)) return false;
@@ -522,7 +517,7 @@ export default function PartyLedger() {
       setPicsImages(imgs.slice(0, maxPics));
       patchLotImages?.(lot.id, imgs);
     } catch {
-      // No party edit yet (404) or transient error — keep cached / empty.
+      // No party edit yet (404) or transient error â€” keep cached / empty.
     } finally {
       setPicsLoading(false);
     }
@@ -689,7 +684,7 @@ export default function PartyLedger() {
               ...common,
               type: 'Paid',
               amount: delta,
-              note: `Bill revision adjustment (+) — lot ${lotNo}: owner bill ₨${prevOwnerBill.toLocaleString()} → ₨${newOwnerBill.toLocaleString()}`,
+              note: `Bill revision adjustment (+) â€” lot ${lotNo}: owner bill â‚¨${prevOwnerBill.toLocaleString()} â†’ â‚¨${newOwnerBill.toLocaleString()}`,
             },
             lotWorkspaceOpts(lot)
           );
@@ -699,7 +694,7 @@ export default function PartyLedger() {
               ...common,
               type: 'Received',
               amount: Math.abs(delta),
-              note: `Bill revision adjustment (−) — lot ${lotNo}: owner bill ₨${prevOwnerBill.toLocaleString()} → ₨${newOwnerBill.toLocaleString()}`,
+              note: `Bill revision adjustment (âˆ’) â€” lot ${lotNo}: owner bill â‚¨${prevOwnerBill.toLocaleString()} â†’ â‚¨${newOwnerBill.toLocaleString()}`,
             },
             lotWorkspaceOpts(lot)
           );
@@ -808,7 +803,7 @@ export default function PartyLedger() {
     }
   }, [isParty, user?.partyId]);
 
-  /** Deep link: /party-ledger?lotId=… → show that lot (and open bill review if billReview=1). */
+  /** Deep link: /party-ledger?lotId=â€¦ â†’ show that lot (and open bill review if billReview=1). */
   useEffect(() => {
     const lotId = String(searchParams.get('lotId') || '').trim();
     if (!lotId) {
@@ -976,19 +971,19 @@ export default function PartyLedger() {
         if (previousLedgerAmount !== nextLedgerAmount) {
           const diff = nextLedgerAmount - previousLedgerAmount;
           const businessLine = !isParty
-            ? `<div><strong>Business / owner bill on lot:</strong> ₨${ghausiaAmount.toLocaleString()}</div>`
+            ? `<div><strong>Business / owner bill on lot:</strong> â‚¨${ghausiaAmount.toLocaleString()}</div>`
             : '';
           const footnote = isParty
-            ? `<div style="margin-top:10px;color:var(--warning, #92400e)">This lot stays <strong>under business review</strong>. The business reconciles your ledger separately — you do not see the business-side bill.</div>`
+            ? `<div style="margin-top:10px;color:var(--warning, #92400e)">This lot stays <strong>under business review</strong>. The business reconciles your ledger separately â€” you do not see the business-side bill.</div>`
             : `<div style="margin-top:10px;color:var(--warning, #92400e)">This lot stays <strong>under admin review</strong>. If the owner was already billed for this lot, the admin will choose how to update the business bill when approving.</div>`;
           const result = await Swal.fire({
             title: isParty ? 'Ledger amount change' : 'Party bill amount change',
             icon: 'question',
             html: `
             <div style="text-align:left;font-size:14px;line-height:1.6;color:var(--text-primary)">
-              <div><strong>${isParty ? 'Your amount (old)' : 'Party ledger (old)'}:</strong> ₨${previousLedgerAmount.toLocaleString()}</div>
-              <div><strong>${isParty ? 'Your amount (new)' : 'Party ledger (new)'}:</strong> ₨${nextLedgerAmount.toLocaleString()}</div>
-              <div><strong>Difference:</strong> ₨${diff.toLocaleString()}</div>
+              <div><strong>${isParty ? 'Your amount (old)' : 'Party ledger (old)'}:</strong> â‚¨${previousLedgerAmount.toLocaleString()}</div>
+              <div><strong>${isParty ? 'Your amount (new)' : 'Party ledger (new)'}:</strong> â‚¨${nextLedgerAmount.toLocaleString()}</div>
+              <div><strong>Difference:</strong> â‚¨${diff.toLocaleString()}</div>
               ${businessLine}
               ${footnote}
             </div>
@@ -1096,11 +1091,11 @@ export default function PartyLedger() {
           icon: 'warning',
           html: `
             <div style="text-align:left;font-size:14px;line-height:1.6;color:var(--text-primary)">
-              <div><strong>Owner amount:</strong> ₨${ghausiaAmount.toLocaleString()}</div>
-              <div><strong>Current party ledger amount:</strong> ₨${previousLedgerAmount.toLocaleString()}</div>
-              <div><strong>Updated party ledger amount:</strong> ₨${nextLedgerAmount.toLocaleString()}</div>
-              <div><strong>Difference:</strong> ₨${difference.toLocaleString()}</div>
-              <div style="margin-top:10px;color:var(--warning)">Only the party ledger is updated. The business (owner) bill on the lot is <strong>not</strong> changed — edit it in the collection workspace or when reviewing completion so the owner sees the correct amount.</div>
+              <div><strong>Owner amount:</strong> â‚¨${ghausiaAmount.toLocaleString()}</div>
+              <div><strong>Current party ledger amount:</strong> â‚¨${previousLedgerAmount.toLocaleString()}</div>
+              <div><strong>Updated party ledger amount:</strong> â‚¨${nextLedgerAmount.toLocaleString()}</div>
+              <div><strong>Difference:</strong> â‚¨${difference.toLocaleString()}</div>
+              <div style="margin-top:10px;color:var(--warning)">Only the party ledger is updated. The business (owner) bill on the lot is <strong>not</strong> changed â€” edit it in the collection workspace or when reviewing completion so the owner sees the correct amount.</div>
               <div style="margin-top:8px;color:var(--text-muted);font-size:12px">No payment transaction will be created automatically.</div>
             </div>
           `,
@@ -1285,7 +1280,7 @@ export default function PartyLedger() {
         ...new Set(
           lotsForSummaryStats
             .map((l) => getPartyNameLocal(l.partyId, l.partyName).trim())
-            .filter((n) => n && n !== '—')
+            .filter((n) => n && n !== 'â€”')
         ),
       ];
 
@@ -1319,10 +1314,10 @@ export default function PartyLedger() {
           workspaceFilter === 'All'
             ? isParty
               ? 'Overall ledger (Status filter does not change these totals).'
-              : 'Overall totals for filtered workspaces — Status filter only changes the table below.'
+              : 'Overall totals for filtered workspaces â€” Status filter only changes the table below.'
             : isParty
               ? 'Overall for this workspace (Status filter does not change these totals).'
-              : 'Overall for this workspace — Status filter only changes the table below.',
+              : 'Overall for this workspace â€” Status filter only changes the table below.',
       };
     }
 
@@ -1343,9 +1338,9 @@ export default function PartyLedger() {
       completedNet: totals.completedAmount - receivedFromBusiness + paidToBusiness,
       hint: pname
         ? isParty
-          ? `${pname} — overall balance (bill − paid to you + you paid back). Status filter does not change this.`
-          : `${pname}: overall = bill − paid to party + received from party. Status filter only filters the table.`
-        : 'Bill − paid to party + received from party (overall; Status filter ignores summary).',
+          ? `${pname} â€” overall balance (bill âˆ’ paid to you + you paid back). Status filter does not change this.`
+          : `${pname}: overall = bill âˆ’ paid to party + received from party. Status filter only filters the table.`
+        : 'Bill âˆ’ paid to party + received from party (overall; Status filter ignores summary).',
     };
   }, [
     partyFilter,
@@ -1450,7 +1445,7 @@ export default function PartyLedger() {
       <button
         type="button"
         onClick={() => void openLotPictures(l)}
-        title={`Lot pictures (max ${picsMax} — one per color)`}
+        title={`Lot pictures (max ${picsMax} â€” one per color)`}
         style={{
           fontSize: 11,
           fontWeight: 600,
@@ -1481,7 +1476,7 @@ export default function PartyLedger() {
           fontWeight: 700,
           lineHeight: 1.4,
         }}>
-          {picsCount != null ? `${picsCount}/${picsMax}` : `•/${picsMax}`}
+          {picsCount != null ? `${picsCount}/${picsMax}` : `â€¢/${picsMax}`}
         </span>
       </button>
     );
@@ -1532,10 +1527,10 @@ export default function PartyLedger() {
               )}
             </button>
           </div>
-          <div className="page-subtitle desktop-only-table" style={{ margin: 0, marginTop: 4 }}>
+          <div className="page-subtitle desktop-only-action" style={{ margin: 0, marginTop: 4 }}>
             {isAdmin
-              ? 'All workspaces by default — filter by party, workspace, dates, and status'
-              : 'Your assigned lots — update status, amounts, and completion details'}
+              ? 'All workspaces by default \u2014 filter by party, workspace, dates, and status'
+              : 'Your assigned lots \u2014 update status, amounts, and completion details'}
           </div>
         </div>
       </div>
@@ -1569,1057 +1564,123 @@ export default function PartyLedger() {
         </div>
       )}
 
-      {/* Summary — overall (Status filter does not affect these cards) */}
+      {/* Summary Cards */}
       {showSummaryCards && (
-        <div className="pl-grid">
-          {[
-            {
-              key: 'assigned',
-              label: isParty ? 'My lots' : 'Assigned Lots',
-              value: totals.lots,
-              color: 'var(--primary, #1e40af)',
-              sub: 'Overall (not limited by Status filter)',
-            },
-            {
-              key: 'bill',
-              label: isParty ? 'Your ledger total' : 'Total Bill Value',
-              value: `₨${(totals.billTotal ?? 0).toLocaleString()}`,
-              color: 'var(--purple, #7c3aed)',
-              sub: 'All lots in this view',
-            },
-            {
-              key: 'completed',
-              label: (
-                <>
-                  Completed{' '}
-                  <strong style={{ fontSize: 14, color: 'var(--success, #15803d)' }}>({totals.completed ?? 0})</strong>
-                </>
-              ),
-              value: `₨${(totals.completedAmount ?? 0).toLocaleString()}`,
-              color: 'var(--success, #15803d)',
-            },
-            {
-              key: 'pending',
-              label: (
-                <>
-                  {isParty ? 'Not received yet' : 'Pending'}{' '}
-                  <strong style={{ fontSize: 14, color: 'var(--warning, #d97706)' }}>({totals.pending ?? 0})</strong>
-                </>
-              ),
-              value: isParty ? 'Business has not sent this to you yet' : 'Awaiting dispatch',
-              color: 'var(--warning, #d97706)',
-            },
-            {
-              key: 'inprogress',
-              label: (
-                <>
-                  {isParty ? 'With you / in progress' : 'In Progress'}{' '}
-                  <strong style={{ fontSize: 14, color: 'var(--warning, #d97706)' }}>({totals.inProgress ?? 0})</strong>
-                </>
-              ),
-              value: `₨${(totals.inProgressAmount ?? 0).toLocaleString()}`,
-              color: 'var(--warning, #d97706)',
-            },
-            {
-              key: 'other-status',
-              label: (
-                <>
-                  {isParty ? 'Review / rework' : 'Pending review + Rejected'}{' '}
-                  <strong style={{ fontSize: 14, color: '#a16207' }}>({totals.otherCount ?? 0})</strong>
-                </>
-              ),
-              value: totals.otherCount > 0 ? `₨${(totals.otherAmount ?? 0).toLocaleString()}` : 'None',
-              color: '#a16207',
-              sub:
-                totals.otherCount > 0
-                  ? `${totals.pendingReview ?? 0} in review · ${totals.rejected ?? 0} rejected`
-                  : undefined,
-            },
-            {
-              key: 'completed-lots-balance',
-              label: `Completed lots ${(partyBalanceInfo?.completedNet ?? 0) >= 0
-                  ? `balance (${isParty ? 'owed to you' : 'still payable'})`
-                  : '(advance)'
-                }`,
-              value: `₨${(partyBalanceInfo?.completedNet ?? 0).toLocaleString()}`,
-              color: `${(partyBalanceInfo?.completedNet ?? 0) >= 0 ? 'var(--success, #0f766e)' : 'var(--danger, #dc2626)'}`,
-              sub: isParty 
-                ? 'Your ledger (received - completed bill)' 
-                : '(Calculated after deducting total advances from total payable)',
-            },
-            {
-              key: 'overall-balance',
-              label: `Overall balance ${(partyBalanceInfo?.balance ?? 0) >= 0
-                  ? `(${isParty ? 'owed to you' : 'still payable'})`
-                  : '(advance)'
-                }`,
-              value: `₨${(partyBalanceInfo?.balance ?? 0).toLocaleString()}`,
-              color: `${(partyBalanceInfo?.balance ?? 0) >= 0 ? 'var(--success, #0f766e)' : 'var(--danger, #dc2626)'}`,
-              sub: 'Overall ledger (Status filter does not change these totals).',
-            },
-          ].map((c) => (
-            <div key={c.key} className="stat-card">
-              <div className="stat-label">{c.label}</div>
-              <div style={{ fontSize: 20, fontWeight: 700, color: c.color }}>{c.value}</div>
-              {c.sub && (
-                <div
-                  style={{
-                    fontSize: 11,
-                    color: 'var(--text-muted)',
-                    marginTop: 6,
-                    lineHeight: 1.35,
-                  }}
-                >
-                  {c.sub}
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-
-      <div
-        role="tablist"
-        aria-label="Other lots or completed lots"
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 8,
-          flexWrap: 'nowrap',
-          overflowX: 'auto',
-          marginBottom: 16,
-          padding: 4,
-          background: 'var(--primary-bg, #f8fafc)',
-          borderRadius: 10,
-          border: '1px solid var(--border, #e2e8f0)',
-        }}
-      >
-        <div style={{ display: 'flex', gap: 4 }}>
-          {[
-            {
-              id: 'other',
-              label: 'Other lots',
-              count: otherLotsTabCount,
-            },
-            {
-              id: 'completed',
-              label: 'Completed lots',
-              count: completedLotsTabCount,
-            },
-          ].map((t) => {
-            const active = ledgerLotsTab === t.id;
-            return (
-              <button
-                key={t.id}
-                type="button"
-                role="tab"
-                aria-selected={active}
-                onClick={() => setLedgerLotsTab(t.id)}
-                style={{
-                  padding: '10px 16px',
-                  borderRadius: 8,
-                  border: active ? '1px solid var(--success, #15803d)' : '1px solid transparent',
-                  background: active ? 'var(--card-bg, #fff)' : 'transparent',
-                  color: active ? 'var(--success, #15803d)' : 'var(--text-secondary, #64748b)',
-                  fontWeight: active ? 700 : 600,
-                  fontSize: 14,
-                  cursor: 'pointer',
-                  boxShadow: active ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
-                }}
-              >
-                {t.label}
-                {t.count != null && (
-                  <span
-                    style={{
-                      marginLeft: 8,
-                      fontSize: 12,
-                      fontWeight: 700,
-                      opacity: 0.9,
-                    }}
-                  >
-                    ({t.count})
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </div>
-
-        {/* View Switcher: Table View vs Tile View (Mobile Only) */}
-        <div className="mobile-view-switcher" style={{ display: 'flex', alignItems: 'center', gap: 4, paddingRight: 4 }}>
-          <button
-            type="button"
-            className={`btn btn-sm ${viewMode === 'table' ? 'btn-primary' : 'btn-ghost'}`}
-            onClick={() => setViewMode('table')}
-            style={{ padding: '3px 8px', fontSize: 11 }}
-          >
-            List
-          </button>
-          <button
-            type="button"
-            className={`btn btn-sm ${viewMode === 'tile' ? 'btn-primary' : 'btn-ghost'}`}
-            onClick={() => setViewMode('tile')}
-            style={{ padding: '3px 8px', fontSize: 11 }}
-          >
-            Tiles
-          </button>
-        </div>
-      </div>
-
-      {/* Toolbar */}
-      <div className={`toolbar pl-toolbar${isParty ? ' pl-toolbar--party-user' : ''}`}>
-        <SearchBar value={search} onChange={setSearch} placeholder="Search lot no. or design..." />
-        {isAdmin && (
-          <select
-            className="form-select pl-toolbar-filter pl-toolbar-filter--workspace"
-            value={workspaceFilter}
-            onChange={(e) => setWorkspaceFilter(e.target.value)}
-            aria-label="Filter by workspace"
-            title="Business / workspace filter"
-          >
-            <option value="All">All workspaces</option>
-            {businessOwners.map((o) => (
-              <option key={o.id || o._id} value={String(o.id || o._id)}>
-                {o.name}
-              </option>
-            ))}
-          </select>
-        )}
-        {!isParty && (
-          <select
-            className="form-select pl-toolbar-filter pl-toolbar-filter--party"
-            value={partyFilter}
-            onChange={(e) => setPartyFilter(e.target.value)}
-          >
-            <option value="All">All parties</option>
-            {parties.map((p) => (
-              <option key={p.id} value={String(p.id)}>
-                {p.name}
-              </option>
-            ))}
-          </select>
-        )}
-        <DateRangeSelect
-          value={dateRange}
-          onChange={setDateRange}
-          customStart={customStart}
-          customEnd={customEnd}
-          onCustomChange={({ start, end }) => {
-            setCustomStart(start);
-            setCustomEnd(end);
-          }}
-          className="pl-toolbar-filter--date"
-          containerClassName="pl-toolbar-filter"
+        <PLSummaryCards
+          totals={totals}
+          partyBalanceInfo={partyBalanceInfo}
+          isParty={isParty}
         />
-        {ledgerLotsTab === 'other' && (
-          <select
-            className="form-select pl-toolbar-filter pl-toolbar-filter--status"
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-          >
-            <option value="All">All Statuses</option>
-            <option value="Pending">{partyFacingStatusLabel('Pending', isParty)}</option>
-            <option value="In Progress">{partyFacingStatusLabel('In Progress', isParty)}</option>
-            <option value="Pending review">
-              {partyFacingStatusLabel('Pending review', isParty)}
-            </option>
-            <option value="Rejected">{partyFacingStatusLabel('Rejected', isParty)}</option>
-          </select>
-        )}
-      </div>
-
-      {ledgerLotsTab === 'other' && statusFilter !== 'All' && (
-        <div
-          style={{
-            marginBottom: 12,
-            padding: '10px 14px',
-            borderRadius: 10,
-            background: 'var(--primary-bg, #eff6ff)',
-            border: '1px solid var(--border, #bfdbfe)',
-            fontSize: 13,
-            color: 'var(--primary, #1e40af)',
-            lineHeight: 1.4,
-          }}
-        >
-          Table filtered by status: <strong>{partyFacingStatusLabel(statusFilter, isParty)}</strong>
-          . Summary cards above stay overall (Status does not change them).
-        </div>
       )}
 
-      {/* Table for Desktop & Tablet (Always visible on Desktop > 768px) */}
-      <div className="table-wrapper desktop-only-table">
-        <div className="table-scroll">
-          <table className="ledger-table">
-            <thead>
-              <tr>
-                <th>Lot No</th>
-                <th>Design No</th>
-                <th>Description</th>
-                <th>Fabric</th>
-                <th>Colors</th>
-                <th>Pieces</th>
-                <th>Allot Date</th>
-                <th>Complete Date</th>
-                {showPartyNameCol ? <th>Party Name</th> : null}
-                {showWorkspaceCol && (
-                  <th style={{ minWidth: 120 }} title="Business workspace">
-                    {isParty ? 'Business' : 'Workspace'}
-                  </th>
-                )}
-                <th>Status</th>
-                <th style={{ textAlign: 'right' }}>
-                  {isParty ? 'Your ledger (₨)' : 'Bill Amount'}
-                </th>
-                <th>Receipt</th>
-                <th>Notes</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.length === 0 ? (
-                <tr>
-                  <td colSpan={ledgerTableColSpan}>
-                    <EmptyState message={isParty ? 'No lots found' : 'No assigned lots found'} />
-                  </td>
-                </tr>
-              ) : (
-                paginatedLots.map((l) => {
-                  // console.log(l, 'l');
-                  const pe = ledgerPartyEdits[l.id] || {};
-                  const displayStatus = getDisplayStatus(l);
-                  const partyBillOnly = getPartyLedgerBillDisplay(pe);
-                  const displayComplete = getDisplayCompleteDate(l, pe);
-                  return (
-                    <tr
-                      key={l.id}
-                      id={`pl-lot-row-${l.id}`}
-                      style={
-                        String(highlightLotId) === String(l.id)
-                          ? { background: 'var(--warning-bg, #fef3c7)', outline: '2px solid var(--warning, #f59e0b)' }
-                          : undefined
-                      }
-                    >
-                      <td style={{ fontWeight: 700, color: 'var(--primary, #1e40af)', whiteSpace: 'nowrap' }}>
-                        {l.lotNo || l.lotNumber}
-                      </td>
-                      <td style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{l.designNo}</td>
-                      <td className="desc-col">{l.description}</td>
-                      <td>
-                        <span
-                          style={{
-                            background: 'var(--primary-bg, #f0f9ff)',
-                            color: 'var(--primary-light, #0369a1)',
-                            border: '1px solid var(--border, #bae6fd)',
-                            borderRadius: 6,
-                            padding: '2px 8px',
-                            fontSize: 12,
-                          }}
-                        >
-                          {l.fabric || l.itemType}
-                        </span>
-                      </td>
-                      <td>{l.colors}</td>
-                      <td>{l.pieces}</td>
-                      <td>
-                        {getPartyAllotDate(l) ? (
-                          formatDisplayDate(getPartyAllotDate(l))
-                        ) : (
-                          <span style={{ color: 'var(--text-muted)' }}>—</span>
-                        )}
-                      </td>
-                      <td style={{ fontWeight: 500 }}>
-                        {displayComplete ? (
-                          formatDisplayDate(displayComplete)
-                        ) : (
-                          <span style={{ color: 'var(--text-muted)' }}>—</span>
-                        )}
-                      </td>
-                      {showPartyNameCol ? (
-                        <td>{getPartyNameLocal(l.partyId, l.partyName)}</td>
-                      ) : null}
-                      {showWorkspaceColForLot(l) && (
-                        <td
-                          style={{
-                            fontSize: 12,
-                            fontWeight: 600,
-                            color: 'var(--text-secondary)',
-                          }}
-                        >
-                          {workspaceNameForLot(l)}
-                        </td>
-                      )}
-                      <td>
-                        {displayStatus === 'Completed' ? (
-                          <span
-                            style={{
-                              fontSize: 12,
-                              color: 'green',
-                              marginTop: 3,
-                              fontWeight: '500',
-                              padding: '2px 8px',
-                              borderRadius: 6,
-                              background: 'var(--success-bg, #dcfce7)',
-                              border: '1px solid var(--success-bg, #dcfce7)',
-                            }}
-                          >
-                            Completed
-                          </span>
-                        ) : displayStatus === 'Pending review' ? (
-                          <span
-                            style={{
-                              fontSize: 12,
-                              color: 'var(--warning, #92400e)',
-                              marginTop: 3,
-                              fontWeight: 600,
-                              padding: '2px 8px',
-                              borderRadius: 6,
-                              background: 'var(--warning-bg, #fef3c7)',
-                              border: '1px solid var(--warning-bg, #fcd34d)',
-                            }}
-                          >
-                            {partyFacingStatusLabel('Pending review', isParty)}
-                          </span>
-                        ) : displayStatus === 'Pending' && isParty ? (
-                          <span
-                            style={{
-                              fontSize: 12,
-                              color: 'var(--warning, #b45309)',
-                              marginTop: 3,
-                              fontWeight: 600,
-                              padding: '2px 8px',
-                              borderRadius: 6,
-                              background: 'var(--warning-bg, #fef3c7)',
-                              border: '1px solid var(--warning-bg, #fcd34d)',
-                            }}
-                          >
-                            {partyFacingStatusLabel('Pending', isParty)}
-                          </span>
-                        ) : (
-                          <select
-                            className="form-select"
-                            style={{
-                              width: 150,
-                              minWidth: 150,
-                              fontSize: 12,
-                              padding: '5px 8px',
-                            }}
-                            value={displayStatus === 'Rejected' ? 'Rejected' : displayStatus}
-                            onChange={(e) => handleRowStatusChange(l, e.target.value)}
-                          >
-                            {displayStatus === 'Rejected' && (
-                              <option
-                                value="Rejected"
-                                disabled
-                                style={{ fontWeight: 600, color: 'var(--danger, #b91c1c)' }}
-                              >
-                                {partyFacingStatusLabel('Rejected', isParty)}
-                              </option>
-                            )}
-                            {!(isParty && displayStatus === 'In Progress') ? (
-                              <option value="Pending">
-                                {partyFacingStatusLabel('Pending', isParty)}
-                              </option>
-                            ) : null}
-                            {isParty &&
-                              adminLotNotDispatched(l) &&
-                              displayStatus === 'In Progress' ? (
-                              <option value="In Progress">
-                                {partyFacingStatusLabel('In Progress', isParty)}
-                              </option>
-                            ) : null}
-                            {!(isParty && adminLotNotDispatched(l)) ? (
-                              <option value="In Progress">
-                                {partyFacingStatusLabel('In Progress', isParty)}
-                              </option>
-                            ) : null}
-                            <option value="Completed">
-                              {isParty ? 'Submit for review' : 'Completed'}
-                            </option>
-                          </select>
-                        )}
-                      </td>
-                      <td
-                        style={{
-                          textAlign: 'right',
-                          fontWeight: 700,
-                          color: 'var(--primary, #1e40af)',
-                        }}
-                      >
-                        {partyBillOnly == null ? (
-                          <span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>—</span>
-                        ) : (
-                          `₨${partyBillOnly.toLocaleString()}`
-                        )}
-                      </td>
-                      <td>
-                        <div
-                          style={{
-                            display: 'flex',
-                            flexDirection: 'column',
-                            gap: 8,
-                            minWidth: 132,
-                            maxWidth: 200,
-                          }}
-                        >
-                          <div
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: 6,
-                              flexWrap: 'wrap',
-                            }}
-                          >
-                            <LazyReceiptThumb
-                              lotId={l.id}
-                              receipt={pe.receipt}
-                              hasReceipt={pe.hasReceipt}
-                              businessOwnerId={normalizedBusinessOwnerId(l.businessOwnerId)}
-                              lotLabel={l.lotNo || l.lotNumber}
-                              onOpen={setReceiptPreview}
-                              emptyLabel="No bill"
-                            />
-                            {pe.receipt && receiptPreviewKind(pe.receipt) === 'filename' && (
-                              <span
-                                style={{
-                                  fontSize: 11,
-                                  color: 'var(--text-secondary)',
-                                  maxWidth: 120,
-                                  overflow: 'hidden',
-                                  textOverflow: 'ellipsis',
-                                  whiteSpace: 'nowrap',
-                                }}
-                                title={pe.receipt}
-                              >
-                                {pe.receipt}
-                              </span>
-                            )}
-                            {isAdmin || (isParty && displayStatus !== 'Completed' && displayStatus !== 'Pending') ? (
-                              <>
-                                <input
-                                  id={`pl-bill-${l.id}`}
-                                  type="file"
-                                  accept="image/*,.pdf,application/pdf"
-                                  style={{ display: 'none' }}
-                                  disabled={billPicSavingLotId === l.id}
-                                  onChange={(e) => {
-                                    const f = e.target.files?.[0];
-                                    e.target.value = '';
-                                    if (f) void savePartyLotReceiptFromFile(l, f);
-                                  }}
-                                />
-                                <label
-                                  htmlFor={`pl-bill-${l.id}`}
-                                  style={{
-                                    fontSize: 11,
-                                    fontWeight: 700,
-                                    cursor: billPicSavingLotId === l.id ? 'wait' : 'pointer',
-                                    color: 'var(--primary-light, #0369a1)',
-                                    textDecoration: 'underline',
-                                    textUnderlineOffset: 2,
-                                  }}
-                                >
-                                  {billPicSavingLotId === l.id
-                                    ? 'Saving…'
-                                    : pe.receipt
-                                      ? 'Change'
-                                      : 'Add bill'}
-                                </label>
-                                {pe.receipt ? (
-                                  <button
-                                    type="button"
-                                    onClick={() => removePartyLotReceipt(l)}
-                                    disabled={billPicSavingLotId === l.id}
-                                    style={{
-                                      fontSize: 11,
-                                      fontWeight: 700,
-                                      border: 'none',
-                                      background: 'transparent',
-                                      color: 'var(--danger, #b91c1c)',
-                                      cursor: billPicSavingLotId === l.id ? 'wait' : 'pointer',
-                                      padding: '2px 4px',
-                                    }}
-                                  >
-                                    Delete
-                                  </button>
-                                ) : null}
-                              </>
-                            ) : null}
-                          </div>
-                          {renderLotPicturesButton(l, pe, { alignSelf: 'flex-start' })}
-                        </div>
-                      </td>
-                      <td>
-                        {pe.notes}
-                        {displayStatus === 'Rejected' && l.rejectionNote ? (
-                          <div
-                            style={{
-                              fontSize: 12,
-                              color: 'var(--danger, #b91c1c)',
-                              marginTop: 6,
-                              fontWeight: 600,
-                              lineHeight: 1.4,
-                            }}
-                          >
-                            {isParty ? 'Business: ' : 'Admin: '}
-                            {l.rejectionNote}
-                          </div>
-                        ) : null}
-                        {pe.amountChangeNote && (
-                          <div style={{ fontSize: 11, color: 'var(--warning, #92400e)', marginTop: 4 }}>
-                            Amount changed: ₨
-                            {Number(pe.amountChangeNote.previousAmount || 0).toLocaleString()} to ₨
-                            {Number(pe.amountChangeNote.updatedAmount || 0).toLocaleString()}
-                          </div>
-                        )}
-                        {isAdmin && pendingRevisionIsReal(pe) && (
-                          <div
-                            style={{
-                              fontSize: 11,
-                              color: 'var(--primary-light, #0369a1)',
-                              marginTop: 4,
-                              fontWeight: 600,
-                            }}
-                          >
-                            Party revised bill: ₨
-                            {Number(pe.pendingRevision.fromAmount || 0).toLocaleString()} → ₨
-                            {Number(pe.pendingRevision.toAmount || 0).toLocaleString()} (settle on
-                            approval)
-                          </div>
-                        )}
-                        {pe.billRevisionRequest &&
-                          String(pe.billRevisionRequest.status || '').toLowerCase() ===
-                          'pending' && (
-                            <div
-                              style={{
-                                fontSize: 11,
-                                color: 'var(--warning, #92400e)',
-                                marginTop: 4,
-                                fontWeight: 600,
-                              }}
-                            >
-                              Bill change request: ₨
-                              {Number(pe.billRevisionRequest.fromAmount || 0).toLocaleString()} → ₨
-                              {Number(pe.billRevisionRequest.toAmount || 0).toLocaleString()}
-                              {pe.billRevisionRequest.reason
-                                ? ` — ${pe.billRevisionRequest.reason}`
-                                : ''}
-                            </div>
-                          )}
-                        {pe.billRevisionRequest &&
-                          String(pe.billRevisionRequest.status || '').toLowerCase() ===
-                          'rejected' && (
-                            <div style={{ fontSize: 11, color: 'var(--danger, #b91c1c)', marginTop: 4 }}>
-                              Bill change request rejected
-                              {pe.billRevisionRequest.rejectionNote
-                                ? `: ${pe.billRevisionRequest.rejectionNote}`
-                                : ''}
-                            </div>
-                          )}
-                      </td>
-                      <td>
-                        {displayStatus === 'Completed' && isParty ? (
-                          (() => {
-                            const req = pe.billRevisionRequest;
-                            const st = String(req?.status || '').toLowerCase();
-                            if (st === 'pending') {
-                              return (
-                                <span style={{ fontSize: 12, color: 'var(--warning, #92400e)', fontWeight: 600 }}>
-                                  Change requested
-                                </span>
-                              );
-                            }
-                            return (
-                              <button
-                                onClick={() =>
-                                  setRevisionRequest({
-                                    lot: l,
-                                    newAmount: String(getPartyLedgerBillNumeric(pe) ?? ''),
-                                    reason: '',
-                                  })
-                                }
-                                style={{
-                                  padding: '4px 12px',
-                                  fontSize: 12,
-                                  fontWeight: 600,
-                                  borderRadius: 6,
-                                  cursor: 'pointer',
-                                  background: 'var(--primary-bg, #FFF7ED)',
-                                  color: 'var(--warning, #c2410c)',
-                                  border: '1px solid var(--warning-bg, #fed7aa)',
-                                  fontFamily: 'Inter, sans-serif',
-                                }}
-                              >
-                                {st === 'rejected' ? 'Request again' : 'Request bill change'}
-                              </button>
-                            );
-                          })()
-                        ) : displayStatus === 'Pending' && isParty ? (
-                          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>—</span>
-                        ) : (
-                          <div
-                            style={{
-                              display: 'flex',
-                              gap: 8,
-                              flexWrap: 'wrap',
-                              alignItems: 'center',
-                            }}
-                          >
-                            {isAdmin &&
-                              pe.billRevisionRequest &&
-                              String(pe.billRevisionRequest.status || '').toLowerCase() ===
-                              'pending' && (
-                                <button
-                                  onClick={() =>
-                                    setRevisionReview({
-                                      lot: l,
-                                      updateOwnerBill: true,
-                                      useCustomOwner: false,
-                                      customOwnerAmount: '',
-                                      rejectionNote: '',
-                                    })
-                                  }
-                                  style={{
-                                    padding: '4px 12px',
-                                    fontSize: 12,
-                                    fontWeight: 700,
-                                    borderRadius: 6,
-                                    cursor: 'pointer',
-                                    background: 'var(--warning, #f59e0b)',
-                                    color: 'var(--card-bg, #ffffff)',
-                                    border: 'none',
-                                    fontFamily: 'Inter, sans-serif',
-                                  }}
-                                >
-                                  Review request
-                                </button>
-                              )}
-                            <button
-                              onClick={() => openEdit(l)}
-                              style={{
-                                padding: '4px 12px',
-                                fontSize: 12,
-                                fontWeight: 500,
-                                borderRadius: 6,
-                                cursor: 'pointer',
-                                background: 'var(--primary-bg, #eff6ff)',
-                                color: 'var(--primary, #1e40af)',
-                                border: '1px solid var(--border, #bfdbfe)',
-                                fontFamily: 'Inter, sans-serif',
-                              }}
-                            >
-                              Edit
-                            </button>
-                          </div>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      {/* Tabs + Toolbar + Filters */}
+      <PLToolbar
+        ledgerLotsTab={ledgerLotsTab}
+        setLedgerLotsTab={setLedgerLotsTab}
+        otherLotsTabCount={otherLotsTabCount}
+        completedLotsTabCount={completedLotsTabCount}
+        viewMode={viewMode}
+        setViewMode={setViewMode}
+        search={search}
+        setSearch={setSearch}
+        workspaceFilter={workspaceFilter}
+        setWorkspaceFilter={setWorkspaceFilter}
+        businessOwners={businessOwners}
+        partyFilter={partyFilter}
+        setPartyFilter={setPartyFilter}
+        parties={parties}
+        dateRange={dateRange}
+        setDateRange={setDateRange}
+        customStart={customStart}
+        customEnd={customEnd}
+        setCustomStart={setCustomStart}
+        setCustomEnd={setCustomEnd}
+        statusFilter={statusFilter}
+        setStatusFilter={setStatusFilter}
+        isAdmin={isAdmin}
+        isParty={isParty}
+      />
 
-      {/* Mobile Views (< 768px): Ultra-Compact Tiles vs Single-Column Cards List */}
+      {/* Desktop Table */}
+      <PLDesktopTable
+        filtered={filtered}
+        paginatedLots={paginatedLots}
+        ledgerTableColSpan={ledgerTableColSpan}
+        ledgerPartyEdits={ledgerPartyEdits}
+        isParty={isParty}
+        isAdmin={isAdmin}
+        showPartyNameCol={showPartyNameCol}
+        showWorkspaceCol={showWorkspaceCol}
+        highlightLotId={highlightLotId}
+        billPicSavingLotId={billPicSavingLotId}
+        getDisplayStatus={getDisplayStatus}
+        getPartyNameLocal={getPartyNameLocal}
+        getDisplayCompleteDate={getDisplayCompleteDate}
+        getPartyAllotDate={getPartyAllotDate}
+        showWorkspaceColForLot={showWorkspaceColForLot}
+        workspaceNameForLot={workspaceNameForLot}
+        openEdit={openEdit}
+        handleRowStatusChange={handleRowStatusChange}
+        savePartyLotReceiptFromFile={savePartyLotReceiptFromFile}
+        removePartyLotReceipt={removePartyLotReceipt}
+        setReceiptPreview={setReceiptPreview}
+        setRevisionRequest={setRevisionRequest}
+        setRevisionReview={setRevisionReview}
+        renderLotPicturesButton={renderLotPicturesButton}
+        getPartyLedgerBillNumeric={getPartyLedgerBillNumeric}
+        pendingRevisionIsReal={pendingRevisionIsReal}
+      />
+
+      {/* Mobile Views */}
       {viewMode === 'tile' ? (
-        <div className="tiles-grid mobile-only-tiles">
-          {filtered.length === 0 ? (
-            <EmptyState message={isParty ? 'No lots found' : 'No assigned lots found'} />
-          ) : (
-            paginatedLots.map((l) => {
-              const pe = ledgerPartyEdits[l.id] || {};
-              const displayStatus = getDisplayStatus(l);
-              const partyBillOnly = getPartyLedgerBillDisplay(pe);
-              const displayComplete = getDisplayCompleteDate(l, pe);
-
-              return (
-                <div key={`pl-tile-${l.id}`} className="lot-tile-card">
-                  <div className="lot-tile-header">
-                    <div>
-                      <div className="lot-tile-number">Lot #{l.lotNo || l.lotNumber}</div>
-                      {l.designNo ? <div className="lot-tile-design">Design #{l.designNo}</div> : null}
-                    </div>
-                    <div>
-                      {displayStatus === 'Completed' ? (
-                        <span className="badge-completed">Completed</span>
-                      ) : displayStatus === 'Pending review' ? (
-                        <span className="badge-review">{partyFacingStatusLabel('Pending review', isParty)}</span>
-                      ) : (
-                        <span className="badge-status">{partyFacingStatusLabel(displayStatus, isParty)}</span>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="lot-tile-body">
-                    <div className="lot-tile-chips hide-scrollbar" style={{ display: 'flex', flexWrap: 'nowrap', gap: 4, overflow: 'hidden', paddingBottom: 4 }}>
-                      <span className="fabric-chip">{l.fabric || l.itemType || 'Lawn'}</span>
-                      <span className="info-chip">Col: {l.colors || 0}</span>
-                      <span className="info-chip">Pcs: {l.pieces || 0}</span>
-                    </div>
-
-                    <div className="lot-tile-info" style={{ flex: 1, marginTop: 4, marginBottom: 8 }}>
-                      {showPartyNameCol && <div>Party: <strong>{getPartyNameLocal(l.partyId, l.partyName)}</strong></div>}
-                      {showWorkspaceColForLot(l) && <div>Workspace: <strong>{workspaceNameForLot(l)}</strong></div>}
-                      <div>Allot Date: {getPartyAllotDate(l) ? formatDisplayDate(getPartyAllotDate(l)) : '—'}</div>
-                      <div>Complete Date: {displayComplete ? formatDisplayDate(displayComplete) : '—'}</div>
-                      {l.description && <div>Note: {l.description}</div>}
-                    </div>
-
-                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 4 }}>
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, marginBottom: 4 }}>
-                        <LazyReceiptThumb
-                          lotId={l.id}
-                          receipt={pe.receipt}
-                          hasReceipt={pe.hasReceipt}
-                          businessOwnerId={normalizedBusinessOwnerId(l.businessOwnerId)}
-                          lotLabel={l.lotNo || l.lotNumber}
-                          onOpen={setReceiptPreview}
-                          emptyLabel={isParty && displayStatus !== 'Pending' ? 'Add bill' : 'No bill'}
-                          onUpload={isParty && displayStatus !== 'Pending' ? (f) => handleDirectBillUpload(l, f) : undefined}
-                        />
-                        <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                          {displayStatus !== 'Pending' && renderLotPicturesButton(l, pe)}
-                          {displayStatus !== 'Completed' && !(displayStatus === 'Pending' && isParty) && (
-                            <button
-                              type="button"
-                              className="btn-tile-action"
-                              style={{ height: 'auto', minHeight: 24, padding: '2px 12px' }}
-                              onClick={() => openEdit(l, displayStatus)}
-                            >
-                              Edit
-                            </button>
-                          )}
-                          {displayStatus === 'Completed' && isParty && (
-                            (() => {
-                              const req = pe.billRevisionRequest;
-                              const st = String(req?.status || '').toLowerCase();
-                              if (st === 'pending') {
-                                return (
-                                  <span style={{ fontSize: 12, color: 'var(--warning, #92400e)', fontWeight: 600 }}>
-                                    Change requested
-                                  </span>
-                                );
-                              }
-                              return (
-                                <button
-                                  onClick={() =>
-                                    setRevisionRequest({ lot: l, newAmount: String(getPartyLedgerBillNumeric(pe) ?? ''), reason: '' })
-                                  }
-                                  style={{ padding: '4px 12px', fontSize: 12, fontWeight: 600, borderRadius: 6, cursor: 'pointer', background: 'var(--primary-bg, #FFF7ED)', color: 'var(--warning, #c2410c)', border: '1px solid var(--warning-bg, #fed7aa)', fontFamily: 'Inter, sans-serif' }}
-                                >
-                                  {st === 'rejected' ? 'Request again' : 'Request bill change'}
-                                </button>
-                              );
-                            })()
-                          )}
-                          {isAdmin && pe.billRevisionRequest && String(pe.billRevisionRequest.status || '').toLowerCase() === 'pending' && (
-                            <button
-                              onClick={() => setRevisionReview({ lot: l, updateOwnerBill: true, useCustomOwner: false, customOwnerAmount: '', rejectionNote: '' })}
-                              style={{ padding: '4px 12px', fontSize: 12, fontWeight: 700, borderRadius: 6, cursor: 'pointer', background: 'var(--warning, #f59e0b)', color: 'var(--card-bg, #ffffff)', border: 'none', fontFamily: 'Inter, sans-serif' }}
-                            >
-                              Review request
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="lot-tile-bill">
-                      <span style={{ fontSize: 13, color: 'var(--text-muted, #64748b)' }}>{isParty ? 'Your ledger:' : 'Bill Amount:'}</span>
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-                        <strong style={{ fontSize: 16, color: 'var(--primary, #1e40af)' }}>
-                          {partyBillOnly == null ? '—' : `₨${partyBillOnly.toLocaleString()}`}
-                        </strong>
-                        {pe.billRevisionRequest && String(pe.billRevisionRequest.status || '').toLowerCase() === 'pending' && (
-                          <div style={{ fontSize: 11, color: 'var(--warning, #b45309)', marginTop: 2 }}>
-                            Change requested: ₨{pe.billRevisionRequest.fromAmount} → ₨{pe.billRevisionRequest.toAmount}
-                          </div>
-                        )}
-                        {pe.billRevisionRequest && String(pe.billRevisionRequest.status || '').toLowerCase() === 'rejected' && (
-                          <div style={{ fontSize: 11, color: 'var(--danger, #b91c1c)', marginTop: 2 }}>
-                            Change request rejected
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="lot-tile-footer" style={{ justifyContent: 'flex-end' }}>
-                    {displayStatus !== 'Completed' && displayStatus !== 'Pending review' && !(displayStatus === 'Pending' && isParty) && (
-                      <select
-                        className="form-select"
-                        style={{ fontSize: 12, padding: '4px 8px', borderRadius: 6, width: '100%', maxWidth: '100%', textAlign: 'center' }}
-                        value={displayStatus === 'Rejected' ? 'Rejected' : displayStatus}
-                        onChange={(e) => handleRowStatusChange(l, e.target.value)}
-                      >
-                        {displayStatus === 'Rejected' && (
-                          <option value="Rejected" disabled style={{ fontWeight: 600, color: 'var(--danger, #b91c1c)' }}>
-                            {partyFacingStatusLabel('Rejected', isParty)}
-                          </option>
-                        )}
-                        {!(isParty && displayStatus === 'In Progress') && (
-                          <option value="Pending">{partyFacingStatusLabel('Pending', isParty)}</option>
-                        )}
-                        <option value="In Progress">{partyFacingStatusLabel('In Progress', isParty)}</option>
-                        <option value="Completed">{isParty ? 'Submit for review' : 'Completed'}</option>
-                      </select>
-                    )}
-                  </div>
-                </div>
-              );
-            })
-          )}
-        </div>
+        <PLMobileTiles
+          filtered={filtered}
+          paginatedLots={paginatedLots}
+          ledgerPartyEdits={ledgerPartyEdits}
+          isParty={isParty}
+          isAdmin={isAdmin}
+          showPartyNameCol={showPartyNameCol}
+          getDisplayStatus={getDisplayStatus}
+          getPartyNameLocal={getPartyNameLocal}
+          getDisplayCompleteDate={getDisplayCompleteDate}
+          getPartyAllotDate={getPartyAllotDate}
+          showWorkspaceColForLot={showWorkspaceColForLot}
+          workspaceNameForLot={workspaceNameForLot}
+          openEdit={openEdit}
+          handleRowStatusChange={handleRowStatusChange}
+          handleDirectBillUpload={handleDirectBillUpload}
+          setReceiptPreview={setReceiptPreview}
+          setRevisionRequest={setRevisionRequest}
+          setRevisionReview={setRevisionReview}
+          renderLotPicturesButton={renderLotPicturesButton}
+          getPartyLedgerBillNumeric={getPartyLedgerBillNumeric}
+        />
       ) : (
-        <div className="mobile-only-party-ledger-cards">
-          {filtered.length === 0 ? (
-            <EmptyState message={isParty ? 'No lots found' : 'No assigned lots found'} />
-          ) : (
-            paginatedLots.map((l) => {
-              const pe = ledgerPartyEdits[l.id] || {};
-              const displayStatus = getDisplayStatus(l);
-              const partyBillOnly = getPartyLedgerBillDisplay(pe);
-              const displayComplete = getDisplayCompleteDate(l, pe);
-
-              return (
-                <div key={`pl-mob-${l.id}`} className="party-ledger-mobile-card">
-                  <div className="pl-mob-header">
-                    <div>
-                      <span className="pl-mob-lot-no">Lot #{l.lotNo || l.lotNumber}</span>
-                      {l.designNo ? <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary, #475569)' }}> · Design #{l.designNo}</span> : null}
-                    </div>
-                    <div>
-                      {displayStatus === 'Completed' ? (
-                        <span className="badge-completed">Completed</span>
-                      ) : displayStatus === 'Pending review' ? (
-                        <span className="badge-review">{partyFacingStatusLabel('Pending review', isParty)}</span>
-                      ) : (
-                        <span className="badge-status">{partyFacingStatusLabel(displayStatus, isParty)}</span>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="pl-mob-body">
-                    <div className="pl-mob-chips hide-scrollbar" style={{ display: 'flex', flexWrap: 'nowrap', gap: 4, overflow: 'hidden', paddingBottom: 4 }}>
-                      <span className="fabric-chip">{l.fabric || l.itemType || 'Lawn'}</span>
-                      <span className="info-chip">Col: {l.colors || 0}</span>
-                      <span className="info-chip">Pcs: {l.pieces || 0}</span>
-                    </div>
-
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                      <div className="pl-mob-info">
-                        {showPartyNameCol && <div>Party: <strong>{getPartyNameLocal(l.partyId, l.partyName)}</strong></div>}
-                        {showWorkspaceColForLot(l) && <div>Workspace: <strong>{workspaceNameForLot(l)}</strong></div>}
-                        <div>Allot Date: {getPartyAllotDate(l) ? formatDisplayDate(getPartyAllotDate(l)) : '—'}</div>
-                        <div>Complete Date: {displayComplete ? formatDisplayDate(displayComplete) : '—'}</div>
-                        {l.description && <div>Note: {l.description}</div>}
-                      </div>
-                      
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
-                        <LazyReceiptThumb
-                          lotId={l.id}
-                          receipt={pe.receipt}
-                          hasReceipt={pe.hasReceipt}
-                          businessOwnerId={normalizedBusinessOwnerId(l.businessOwnerId)}
-                          lotLabel={l.lotNo || l.lotNumber}
-                          onOpen={setReceiptPreview}
-                          emptyLabel={isParty && displayStatus !== 'Pending' ? 'Add bill' : 'No bill'}
-                          onUpload={isParty && displayStatus !== 'Pending' ? (f) => handleDirectBillUpload(l, f) : undefined}
-                        />
-                        {displayStatus !== 'Pending' && renderLotPicturesButton(l, pe)}
-                        {displayStatus !== 'Completed' && !(displayStatus === 'Pending' && isParty) && (
-                          <button
-                            type="button"
-                            className="btn btn-ghost btn-sm"
-                            style={{ padding: '4px 12px', fontSize: 12, height: 'auto', minHeight: 28, background: 'var(--border, #f1f5f9)' }}
-                            onClick={() => openEdit(l, displayStatus)}
-                          >
-                            Edit
-                          </button>
-                        )}
-                        {displayStatus === 'Completed' && isParty && (
-                          (() => {
-                            const req = pe.billRevisionRequest;
-                            const st = String(req?.status || '').toLowerCase();
-                            if (st === 'pending') {
-                              return (
-                                <span style={{ fontSize: 12, color: 'var(--warning, #92400e)', fontWeight: 600 }}>
-                                  Change requested
-                                </span>
-                              );
-                            }
-                            return (
-                              <button
-                                onClick={() =>
-                                  setRevisionRequest({ lot: l, newAmount: String(getPartyLedgerBillNumeric(pe) ?? ''), reason: '' })
-                                }
-                                style={{ padding: '4px 12px', fontSize: 12, fontWeight: 600, borderRadius: 6, cursor: 'pointer', background: 'var(--primary-bg, #FFF7ED)', color: 'var(--warning, #c2410c)', border: '1px solid var(--warning-bg, #fed7aa)', fontFamily: 'Inter, sans-serif' }}
-                              >
-                                {st === 'rejected' ? 'Request again' : 'Request bill change'}
-                              </button>
-                            );
-                          })()
-                        )}
-                        {isAdmin && pe.billRevisionRequest && String(pe.billRevisionRequest.status || '').toLowerCase() === 'pending' && (
-                          <button
-                            onClick={() => setRevisionReview({ lot: l, updateOwnerBill: true, useCustomOwner: false, customOwnerAmount: '', rejectionNote: '' })}
-                            style={{ padding: '4px 12px', fontSize: 12, fontWeight: 700, borderRadius: 6, cursor: 'pointer', background: 'var(--warning, #f59e0b)', color: 'var(--card-bg, #ffffff)', border: 'none', fontFamily: 'Inter, sans-serif' }}
-                          >
-                            Review request
-                          </button>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="pl-mob-bill-row">
-                      <span style={{ fontSize: 13, color: 'var(--text-muted, #64748b)' }}>{isParty ? 'Your ledger:' : 'Bill Amount:'}</span>
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-                        <strong style={{ fontSize: 15, color: 'var(--primary, #1e40af)' }}>
-                          {partyBillOnly == null ? '—' : `₨${partyBillOnly.toLocaleString()}`}
-                        </strong>
-                        {pe.billRevisionRequest && String(pe.billRevisionRequest.status || '').toLowerCase() === 'pending' && (
-                          <div style={{ fontSize: 11, color: 'var(--warning, #b45309)', marginTop: 2 }}>
-                            Change requested: ₨{pe.billRevisionRequest.fromAmount} → ₨{pe.billRevisionRequest.toAmount}
-                          </div>
-                        )}
-                        {pe.billRevisionRequest && String(pe.billRevisionRequest.status || '').toLowerCase() === 'rejected' && (
-                          <div style={{ fontSize: 11, color: 'var(--danger, #b91c1c)', marginTop: 2 }}>
-                            Change request rejected
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="pl-mob-footer" style={{ justifyContent: 'flex-end' }}>
-                    {displayStatus !== 'Completed' && displayStatus !== 'Pending review' && !(displayStatus === 'Pending' && isParty) && (
-                      <select
-                        className="form-select"
-                        style={{ fontSize: 13, padding: '6px 10px', borderRadius: 6, width: '100%', maxWidth: '100%', textAlign: 'center' }}
-                        value={displayStatus === 'Rejected' ? 'Rejected' : displayStatus}
-                        onChange={(e) => handleRowStatusChange(l, e.target.value)}
-                      >
-                        {displayStatus === 'Rejected' && (
-                          <option value="Rejected" disabled style={{ fontWeight: 600, color: 'var(--danger, #b91c1c)' }}>
-                            {partyFacingStatusLabel('Rejected', isParty)}
-                          </option>
-                        )}
-                        {!(isParty && displayStatus === 'In Progress') && (
-                          <option value="Pending">{partyFacingStatusLabel('Pending', isParty)}</option>
-                        )}
-                        <option value="In Progress">{partyFacingStatusLabel('In Progress', isParty)}</option>
-                        <option value="Completed">{isParty ? 'Submit for review' : 'Completed'}</option>
-                      </select>
-                    )}
-                  </div>
-                </div>
-              );
-            })
-          )}
-        </div>
+        <PLMobileCards
+          filtered={filtered}
+          paginatedLots={paginatedLots}
+          ledgerPartyEdits={ledgerPartyEdits}
+          isParty={isParty}
+          isAdmin={isAdmin}
+          showPartyNameCol={showPartyNameCol}
+          getDisplayStatus={getDisplayStatus}
+          getPartyNameLocal={getPartyNameLocal}
+          getDisplayCompleteDate={getDisplayCompleteDate}
+          getPartyAllotDate={getPartyAllotDate}
+          showWorkspaceColForLot={showWorkspaceColForLot}
+          workspaceNameForLot={workspaceNameForLot}
+          openEdit={openEdit}
+          handleRowStatusChange={handleRowStatusChange}
+          handleDirectBillUpload={handleDirectBillUpload}
+          setReceiptPreview={setReceiptPreview}
+          setRevisionRequest={setRevisionRequest}
+          setRevisionReview={setRevisionReview}
+          renderLotPicturesButton={renderLotPicturesButton}
+          getPartyLedgerBillNumeric={getPartyLedgerBillNumeric}
+        />
       )}
+
+      {/* Pagination */}
       {filtered.length > 0 && (
         <div
           style={{
@@ -2657,893 +1718,75 @@ export default function PartyLedger() {
         </div>
       )}
 
-      {/* Edit Modal */}
-      {editingId && editingLot && (
-        <Modal
-          title={`Edit — ${editingLot.lotNo || editingLot.lotNumber} / ${editingLot.designNo}`}
-          onClose={() => {
-            if (!ledgerSaving) {
-              setEditingId(null);
-              setLedgerEditKind(null);
-              setLedgerFormErrors({});
-            }
-          }}
-          onFormSubmit={() => {
-            void handleSave();
-          }}
-          footer={
-            <>
-              <button
-                type="button"
-                className="btn btn-ghost"
-                onClick={() => {
-                  setEditingId(null);
-                  setLedgerEditKind(null);
-                  setLedgerFormErrors({});
-                }}
-                disabled={ledgerSaving}
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                className="btn btn-primary"
-                disabled={ledgerSaving}
-                style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
-              >
-                {ledgerSaving ? (
-                  <>
-                    <Loader /> Saving…
-                  </>
-                ) : (
-                  'Save Changes'
-                )}
-              </button>
-            </>
+      {/* Modals */}
+      <PLEditModal
+        editingId={editingId}
+        editingLot={editingLot}
+        editForm={editForm}
+        setEditForm={setEditForm}
+        ledgerEditKind={ledgerEditKind}
+        ledgerSaving={ledgerSaving}
+        ledgerFormErrors={ledgerFormErrors}
+        setLedgerFormErrors={setLedgerFormErrors}
+        handleSave={handleSave}
+        onClose={() => {
+          if (!ledgerSaving) {
+            setEditingId(null);
+            setLedgerEditKind(null);
+            setLedgerFormErrors({});
           }
-        >
-          {/* Read-only info */}
-          <div
-            style={{
-              background: 'var(--primary-bg, #f8fafc)',
-              border: '1px solid var(--border)',
-              borderRadius: 10,
-              padding: '14px 16px',
-              marginBottom: 20,
-            }}
-          >
-            <div
-              style={{
-                fontSize: 12,
-                fontWeight: 600,
-                color: 'var(--text-secondary)',
-                marginBottom: 10,
-                textTransform: 'uppercase',
-                letterSpacing: '0.05em',
-              }}
-            >
-              Lot Info (read-only)
-            </div>
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: '1fr 1fr 1fr',
-                gap: '6px 16px',
-                fontSize: 13,
-              }}
-            >
-              <div>
-                <span style={{ color: 'var(--text-muted)' }}>Description: </span>
-                {editingLot.description}
-              </div>
-              <div>
-                <span style={{ color: 'var(--text-muted)' }}>Fabric: </span>
-                {editingLot.fabric || editingLot.itemType}
-              </div>
-              <div>
-                <span style={{ color: 'var(--text-muted)' }}>Colors: </span>
-                {editingLot.colors}
-              </div>
-              <div>
-                <span style={{ color: 'var(--text-muted)' }}>Pieces: </span>
-                {editingLot.pieces}
-              </div>
-              <div>
-                <span style={{ color: 'var(--text-muted)' }}>
-                  {isParty ? 'Business order status: ' : 'Owner Status: '}
-                </span>
-                <StatusBadge
-                  status={toTitleCase(editingLot.status)}
-                  label={isParty ? partyFacingLotStatusLabel(editingLot.status) : undefined}
-                />
-              </div>
-            </div>
-          </div>
+        }}
+        parties={parties}
+        isParty={isParty}
+        isAdmin={isAdmin}
+        setReceiptPreview={setReceiptPreview}
+        getDisplayStatus={getDisplayStatus}
+        samePartyId={samePartyId}
+      />
 
-          <div className="grid-2">
-            {!isParty && (
-              <FormGroup
-                label={
-                  ledgerEditKind === 'pendingReview' || editForm.status === 'Completed'
-                    ? 'Party Name *'
-                    : 'Party Name'
-                }
-              >
-                <select
-                  className="form-select"
-                  value={editForm.partyId}
-                  onChange={(e) => {
-                    const sel = parties.find((p) => samePartyId(p.id, e.target.value));
-                    setEditForm((f) => ({
-                      ...f,
-                      partyId: e.target.value,
-                      partyName: sel?.name || '',
-                    }));
-                    if (ledgerFormErrors.partyId)
-                      setLedgerFormErrors((e2) => ({ ...e2, partyId: '' }));
-                  }}
-                >
-                  <option value="">— Select Party —</option>
-                  {parties.map((p) => (
-                    <option key={p.id} value={String(p.id)}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
-                {ledgerFormErrors.partyId && (
-                  <span style={{ color: 'var(--danger, #dc2626)', fontSize: 11 }}>{ledgerFormErrors.partyId}</span>
-                )}
-              </FormGroup>
-            )}
-            <FormGroup label={isParty ? "Dispatch / Allot Date" : "Allot Date"}>
-              <input
-                className="form-input"
-                type="date"
-                disabled={isParty}
-                value={editForm.allotDate}
-                onChange={(e) => setEditForm((f) => ({ ...f, allotDate: e.target.value }))}
-              />
-            </FormGroup>
-            <FormGroup label="Status">
-              {ledgerEditKind === 'pendingReview' ? (
-                <div
-                  style={{
-                    fontSize: 13,
-                    fontWeight: 600,
-                    color: 'var(--warning, #92400e)',
-                    padding: '8px 10px',
-                    background: 'var(--warning-bg, #fef3c7)',
-                    borderRadius: 8,
-                    border: '1px solid var(--warning-bg, #fcd34d)',
-                  }}
-                >
-                  Pending business review — you can update bill, receipt, and dates; the lot stays
-                  under review until approved.
-                </div>
-              ) : isParty && editingLot && (adminLotNotDispatched(editingLot) || getDisplayStatus(editingLot) === 'Pending') ? (
-                <div
-                  style={{
-                    fontSize: 13,
-                    fontWeight: 600,
-                    color: 'var(--warning, #b45309)',
-                    padding: '8px 12px',
-                    background: 'var(--warning-bg, #fef3c7)',
-                    borderRadius: 8,
-                    border: '1px solid var(--warning-bg, #fcd34d)',
-                  }}
-                >
-                  Not received yet — status cannot be changed until dispatched
-                </div>
-              ) : (
-                <select
-                  className="form-select"
-                  value={editForm.status}
-                  onChange={(e) => {
-                    const next = e.target.value;
-                    setEditForm((f) => ({
-                      ...f,
-                      status: next,
-                      ...(next !== 'Completed' ? { completeDate: '' } : {}),
-                    }));
-                    setLedgerFormErrors({});
-                  }}
-                >
-                  {!(isParty && editingLot && getDisplayStatus(editingLot) === 'In Progress') ? (
-                    <option value="Pending">{partyFacingStatusLabel('Pending', isParty)}</option>
-                  ) : null}
-                  {isParty &&
-                    editingLot &&
-                    adminLotNotDispatched(editingLot) &&
-                    editForm.status === 'In Progress' ? (
-                    <option value="In Progress">
-                      {partyFacingStatusLabel('In Progress', isParty)}
-                    </option>
-                  ) : null}
-                  {!(isParty && editingLot && adminLotNotDispatched(editingLot)) ? (
-                    <option value="In Progress">
-                      {partyFacingStatusLabel('In Progress', isParty)}
-                    </option>
-                  ) : null}
-                  <option value="Completed">{isParty ? 'Submit for review' : 'Completed'}</option>
-                </select>
-              )}
-            </FormGroup>
-            {(editForm.status === 'Completed' || ledgerEditKind === 'pendingReview') && (
-              <FormGroup label="Complete Date *">
-                <input
-                  className="form-input"
-                  type="date"
-                  value={editForm.completeDate}
-                  onChange={(e) => {
-                    setEditForm((f) => ({
-                      ...f,
-                      completeDate: e.target.value,
-                    }));
-                    if (ledgerFormErrors.completeDate)
-                      setLedgerFormErrors((e2) => ({
-                        ...e2,
-                        completeDate: '',
-                      }));
-                  }}
-                />
-                {ledgerFormErrors.completeDate && (
-                  <span style={{ color: 'var(--danger, #dc2626)', fontSize: 11 }}>
-                    {ledgerFormErrors.completeDate}
-                  </span>
-                )}
-              </FormGroup>
-            )}
-            <FormGroup label={isParty ? 'Your ledger amount (₨)' : 'Bill Amount (₨)'}>
-              <input
-                className="form-input"
-                type="number"
-                value={editForm.billAmount}
-                onChange={(e) => setEditForm((f) => ({ ...f, billAmount: e.target.value }))}
-                placeholder="0"
-              />
-            </FormGroup>
-          </div>
-
-          <FormGroup label="Upload Bill Receipt (image or PDF)">
-            <input
-              className="form-input"
-              type="file"
-              accept="image/*,.pdf,application/pdf"
-              onChange={async (e) => {
-                const file = e.target.files?.[0];
-                e.target.value = '';
-                if (!file) {
-                  setEditForm((f) => ({ ...f, receipt: '' }));
-                  return;
-                }
-                try {
-                  const stored = await readReceiptAsStoredValue(file);
-                  const cropped = await finalizeLedgerReceiptStoredValue(stored);
-                  setEditForm((f) => ({ ...f, receipt: cropped }));
-                } catch (err) {
-                  await Swal.fire({
-                    icon: 'error',
-                    title: 'Could not process file',
-                    text: err?.message || 'Try a smaller JPG/PNG. PDFs must be under a few MB.',
-                  });
-                  setEditForm((f) => ({ ...f, receipt: '' }));
-                }
-              }}
-            />
-            {editForm.receipt && (
-              <div
-                style={{
-                  marginTop: 10,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 12,
-                  flexWrap: 'wrap',
-                }}
-              >
-                {receiptPreviewKind(editForm.receipt) === 'image' && (
-                  <div
-                    style={{
-                      position: 'relative',
-                      display: 'inline-block',
-                      lineHeight: 0,
-                    }}
-                  >
-                    <button
-                      type="button"
-                      className="btn btn-ghost btn-sm"
-                      style={{ padding: 0, border: 'none' }}
-                      onClick={() =>
-                        setReceiptPreview({
-                          kind: 'image',
-                          src: editForm.receipt,
-                          title: editingLot?.lotNo || editingLot?.lotNumber,
-                        })
-                      }
-                    >
-                      <img
-                        src={editForm.receipt}
-                        alt=""
-                        style={{
-                          width: 56,
-                          height: 56,
-                          objectFit: 'cover',
-                          borderRadius: 8,
-                          border: '1px solid var(--border)',
-                          display: 'block',
-                        }}
-                      />
-                    </button>
-                    <button
-                      type="button"
-                      className="btn btn-ghost btn-sm"
-                      aria-label="Remove receipt"
-                      title="Remove receipt"
-                      onClick={() => setEditForm((f) => ({ ...f, receipt: '' }))}
-                      style={{
-                        position: 'absolute',
-                        top: -8,
-                        right: -8,
-                        width: 24,
-                        height: 24,
-                        minWidth: 24,
-                        minHeight: 24,
-                        padding: 0,
-                        borderRadius: '50%',
-                        border: '1px solid var(--border, #e2e8f0)',
-                        background: 'var(--card-bg, #fff)',
-                        color: 'var(--text-muted, #64748b)',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontSize: 16,
-                        fontWeight: 700,
-                        lineHeight: 1,
-                        boxShadow: '0 1px 3px rgba(15,23,42,0.12)',
-                      }}
-                    >
-                      ×
-                    </button>
-                  </div>
-                )}
-                {receiptPreviewKind(editForm.receipt) === 'pdf' && (
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 8,
-                    }}
-                  >
-                    <button
-                      type="button"
-                      className="btn btn-ghost btn-sm"
-                      onClick={() =>
-                        setReceiptPreview({
-                          kind: 'pdf',
-                          src: editForm.receipt,
-                          title: editingLot?.lotNo || editingLot?.lotNumber,
-                        })
-                      }
-                    >
-                      Preview PDF
-                    </button>
-                    <button
-                      type="button"
-                      className="btn btn-ghost btn-sm"
-                      aria-label="Remove receipt"
-                      title="Remove receipt"
-                      onClick={() => setEditForm((f) => ({ ...f, receipt: '' }))}
-                      style={{
-                        width: 28,
-                        height: 28,
-                        minWidth: 28,
-                        padding: 0,
-                        borderRadius: '50%',
-                        border: '1px solid var(--border, #e2e8f0)',
-                        color: 'var(--text-muted, #64748b)',
-                        fontSize: 18,
-                        fontWeight: 700,
-                        lineHeight: 1,
-                      }}
-                    >
-                      ×
-                    </button>
-                  </div>
-                )}
-                <span style={{ fontSize: 12, color: 'var(--success, #15803d)' }}>
-                  {receiptPreviewKind(editForm.receipt) === 'filename'
-                    ? `📎 ${editForm.receipt}`
-                    : receiptPreviewKind(editForm.receipt) === 'pdf'
-                      ? 'PDF attached — preview or remove beside'
-                      : 'Receipt attached — click thumbnail to enlarge'}
-                </span>
-                {receiptPreviewKind(editForm.receipt) === 'filename' && (
-                  <button
-                    type="button"
-                    className="btn btn-ghost btn-sm"
-                    aria-label="Remove receipt"
-                    title="Remove receipt"
-                    onClick={() => setEditForm((f) => ({ ...f, receipt: '' }))}
-                    style={{
-                      width: 28,
-                      height: 28,
-                      minWidth: 28,
-                      padding: 0,
-                      borderRadius: '50%',
-                      border: '1px solid var(--border, #e2e8f0)',
-                      color: 'var(--text-muted, #64748b)',
-                      fontSize: 18,
-                      fontWeight: 700,
-                      lineHeight: 1,
-                    }}
-                  >
-                    ×
-                  </button>
-                )}
-              </div>
-            )}
-          </FormGroup>
-          <FormGroup label="Notes">
-            <textarea
-              className="form-textarea"
-              rows={2}
-              value={editForm.notes}
-              onChange={(e) => setEditForm((f) => ({ ...f, notes: e.target.value }))}
-              placeholder="Optional notes..."
-              style={{ resize: 'vertical' }}
-            />
-          </FormGroup>
-
-          {ledgerEditKind === 'pendingReview' && (
-            <div className="alert alert-warning">
-              <strong>Note:</strong>{' '}
-              {isParty
-                ? 'Saving updates your submission while it is still under business review. If you change your ledger amount, the business will see the old and new figures when they reconcile.'
-                : 'Saving updates this submission while it is under review. If you change the bill amount, the admin will see the old and new figures and can choose how the owner business bill should follow when they approve.'}
-            </div>
-          )}
-          {editForm.status === 'Completed' && ledgerEditKind !== 'pendingReview' && (
-            <div className="alert alert-warning">
-              <strong>Note:</strong>{' '}
-              {isParty
-                ? 'Submitting completes your ledger entry and sends this lot for business review. Once approved it shows as Delivered. If rejected, you will see the business feedback on this row.'
-                : "Submitting completes the ledger entry and sends this lot to the admin for approval. Once approved it becomes billable to the owner (Received back). If rejected, you will see the admin's feedback on this row."}
-            </div>
-          )}
-        </Modal>
-      )}
-
-      {picsLot && (
-        <Modal
-          title={`Pictures — ${picsLot.lotNo || picsLot.lotNumber}${picsLot.designNo ? ` / ${picsLot.designNo}` : ''}`}
-          onClose={() => {
-            if (!picsSaving) {
-              setPicsLot(null);
-              setPicsImages([]);
-            }
-          }}
-          footer={
-            <>
-              <button
-                type="button"
-                className="btn btn-ghost"
-                onClick={() => {
-                  setPicsLot(null);
-                  setPicsImages([]);
-                }}
-                disabled={picsSaving}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="btn btn-primary"
-                onClick={() => void saveLotPictures()}
-                disabled={picsSaving || picsLoading}
-                style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
-              >
-                {picsSaving ? (
-                  <>
-                    <Loader /> Saving…
-                  </>
-                ) : (
-                  'Save Pictures'
-                )}
-              </button>
-            </>
+      <PLPicturesModal
+        picsLot={picsLot}
+        picsImages={picsImages}
+        setPicsImages={setPicsImages}
+        picsLoading={picsLoading}
+        picsSaving={picsSaving}
+        saveLotPictures={saveLotPictures}
+        onClose={() => {
+          if (!picsSaving) {
+            setPicsLot(null);
+            setPicsImages([]);
           }
-        >
-          <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 0 }}>
-            This lot has <strong>{lotPicturesMax(picsLot)}</strong> color
-            {lotPicturesMax(picsLot) === 1 ? '' : 's'} — add up to{' '}
-            <strong>{lotPicturesMax(picsLot)}</strong> picture
-            {lotPicturesMax(picsLot) === 1 ? '' : 's'} (one per color). You and the business can add
-            or remove pictures here.
-          </p>
-          {picsLoading ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 0' }}>
-              <Loader /> Loading pictures…
-            </div>
-          ) : (
-            <ImageUploader
-              value={picsImages}
-              onChange={setPicsImages}
-              max={lotPicturesMax(picsLot)}
-              disabled={picsSaving}
-              addLabel="Add picture"
-              thumbSize={80}
-            />
-          )}
-        </Modal>
-      )}
+        }}
+        lotPicturesMax={lotPicturesMax}
+      />
 
-      {receiptPreview && (
-        <Modal
-          title={receiptPreview.title ? `Receipt — ${receiptPreview.title}` : 'Receipt'}
-          wide
-          onClose={() => setReceiptPreview(null)}
-        >
-          {receiptPreview.kind === 'image' && (
-            <img
-              src={receiptPreview.src}
-              alt="Receipt"
-              style={{
-                maxWidth: '100%',
-                maxHeight: '78vh',
-                width: 'auto',
-                height: 'auto',
-                display: 'block',
-                margin: '0 auto',
-                borderRadius: 8,
-              }}
-            />
-          )}
-          {receiptPreview.kind === 'pdf' && (
-            <iframe
-              title="Receipt PDF"
-              src={receiptPreview.src}
-              style={{
-                width: '100%',
-                height: '78vh',
-                border: 'none',
-                borderRadius: 8,
-                background: 'var(--primary-bg, #f9fafb)',
-              }}
-            />
-          )}
-          {receiptPreview.kind === 'url' && (
-            <img
-              src={receiptPreview.src}
-              alt="Receipt"
-              style={{
-                maxWidth: '100%',
-                maxHeight: '78vh',
-                display: 'block',
-                margin: '0 auto',
-                borderRadius: 8,
-              }}
-            />
-          )}
-          {receiptPreview.kind === 'filename' && (
-            <div
-              style={{
-                padding: 16,
-                textAlign: 'center',
-                color: 'var(--text-secondary)',
-                fontSize: 14,
-              }}
-            >
-              <p style={{ margin: '0 0 12px' }}>No image preview for filename-only receipts.</p>
-              <p
-                style={{
-                  margin: 0,
-                  fontWeight: 600,
-                  color: 'var(--text-primary)',
-                }}
-              >
-                {receiptPreview.name}
-              </p>
-              <p style={{ margin: '16px 0 0', fontSize: 13 }}>
-                Edit this lot and upload an image or PDF again to store a preview.
-              </p>
-            </div>
-          )}
-          {isParty && (
-            <div style={{ marginTop: 16, display: 'flex', justifyContent: 'center' }}>
-              <button
-                type="button"
-                className="btn btn-ghost"
-                style={{ color: 'var(--danger, #dc2626)', fontWeight: 600 }}
-                onClick={() => {
-                  const lotToEdit = ledgerLots.find((l) => (l.lotNo || l.lotNumber) === receiptPreview.title || l.id === receiptPreview.lotId);
-                  setReceiptPreview(null);
-                  if (lotToEdit) {
-                    openEdit(lotToEdit, getDisplayStatus(lotToEdit));
-                  }
-                }}
-              >
-                Change or Delete Bill (Open Edit)
-              </button>
-            </div>
-          )}
-        </Modal>
-      )}
+      <PLReceiptPreviewModal
+        receiptPreview={receiptPreview}
+        setReceiptPreview={setReceiptPreview}
+        isParty={isParty}
+        ledgerLots={ledgerLots}
+        openEdit={openEdit}
+        getDisplayStatus={getDisplayStatus}
+      />
 
-      {/* Party: request a bill change on a completed lot */}
-      {revisionRequest && (
-        <Modal
-          title={`Request bill change — ${revisionRequest.lot.lotNo || revisionRequest.lot.lotNumber}`}
-          onClose={() => {
-            if (!revisionSaving) setRevisionRequest(null);
-          }}
-          onFormSubmit={() => {
-            void submitRevisionRequest();
-          }}
-          footer={
-            <>
-              <button
-                type="button"
-                className="btn btn-ghost"
-                disabled={revisionSaving}
-                onClick={() => setRevisionRequest(null)}
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                className="btn btn-primary"
-                disabled={revisionSaving}
-                style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
-              >
-                {revisionSaving ? (
-                  <>
-                    <Loader /> Sending…
-                  </>
-                ) : (
-                  'Send request'
-                )}
-              </button>
-            </>
-          }
-        >
-          <div className="alert alert-warning" style={{ marginBottom: 16 }}>
-            This lot is complete. You are requesting a new bill amount from the business — the
-            amount updates <strong>only when approved</strong>.
-          </div>
-          <FormGroup label="Current ledger amount (₨)">
-            <input
-              className="form-input"
-              value={`₨${Number(
-                getPartyLedgerBillNumeric(ledgerPartyEdits[revisionRequest.lot.id] || {}) || 0
-              ).toLocaleString()}`}
-              disabled
-            />
-          </FormGroup>
-          <FormGroup label="New amount (₨) *">
-            <input
-              className="form-input"
-              type="number"
-              value={revisionRequest.newAmount}
-              onChange={(e) => setRevisionRequest((r) => ({ ...r, newAmount: e.target.value }))}
-              placeholder="0"
-            />
-          </FormGroup>
-          <FormGroup label="Reason *">
-            <textarea
-              className="form-textarea"
-              rows={3}
-              value={revisionRequest.reason}
-              onChange={(e) => setRevisionRequest((r) => ({ ...r, reason: e.target.value }))}
-              placeholder="Reason for bill change..."
-              style={{ resize: 'vertical' }}
-            />
-          </FormGroup>
-        </Modal>
-      )}
+      <PLRevisionRequestModal
+        revisionRequest={revisionRequest}
+        setRevisionRequest={setRevisionRequest}
+        revisionSaving={revisionSaving}
+        submitRevisionRequest={submitRevisionRequest}
+        ledgerPartyEdits={ledgerPartyEdits}
+      />
 
-      {/* Admin: review + approve/reject a party's bill change request */}
-      {revisionReview &&
-        (() => {
-          const lot = revisionReview.lot;
-          const pe = ledgerPartyEdits[lot.id] || {};
-          const req = pe.billRevisionRequest || {};
-          const fromA = Number(req.fromAmount) || 0;
-          const toA = Number(req.toAmount) || 0;
-          const ownerBill = Number(lot.billAmount) || 0;
-          const settled = ownerSettlementForLot(lot).length > 0;
-          const newOwner = revisionReview.updateOwnerBill
-            ? revisionReview.useCustomOwner && revisionReview.customOwnerAmount !== ''
-              ? Number(revisionReview.customOwnerAmount) || 0
-              : toA
-            : ownerBill;
-          const delta = newOwner - ownerBill;
-          return (
-            <Modal
-              title={`Bill change request — ${lot.lotNo || lot.lotNumber}`}
-              onClose={() => {
-                if (!revisionReviewSaving) setRevisionReview(null);
-              }}
-              footer={
-                <>
-                  <button
-                    type="button"
-                    className="btn btn-ghost"
-                    style={{ color: 'var(--danger, #b91c1c)', borderColor: 'var(--danger-bg, #fecaca)' }}
-                    disabled={revisionReviewSaving}
-                    onClick={() => void rejectRevision()}
-                  >
-                    Reject
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-primary"
-                    disabled={revisionReviewSaving}
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
-                    onClick={() => void approveRevision()}
-                  >
-                    {revisionReviewSaving ? (
-                      <>
-                        <Loader /> Saving…
-                      </>
-                    ) : (
-                      'Approve & apply'
-                    )}
-                  </button>
-                </>
-              }
-            >
-              <div
-                style={{
-                  background: 'var(--primary-bg, #f8fafc)',
-                  border: '1px solid var(--border)',
-                  borderRadius: 10,
-                  padding: '14px 16px',
-                  marginBottom: 16,
-                  fontSize: 13,
-                  lineHeight: 1.7,
-                }}
-              >
-                <div>
-                  <span style={{ color: 'var(--text-muted)' }}>Party: </span>
-                  {getPartyNameLocal(lot.partyId, lot.partyName)}
-                </div>
-                <div>
-                  <span style={{ color: 'var(--text-muted)' }}>Party ledger change: </span>
-                  <strong>
-                    ₨{fromA.toLocaleString()} → ₨{toA.toLocaleString()}
-                  </strong>{' '}
-                  <span
-                    style={{
-                      color: delta === 0 ? 'var(--text-muted, #64748b)' : toA - fromA >= 0 ? 'var(--success, #0f766e)' : 'var(--danger, #dc2626)',
-                    }}
-                  >
-                    ({toA - fromA >= 0 ? '+' : '−'}₨{Math.abs(toA - fromA).toLocaleString()})
-                  </span>
-                </div>
-                {req.reason ? (
-                  <div>
-                    <span style={{ color: 'var(--text-muted)' }}>Reason: </span>
-                    {req.reason}
-                  </div>
-                ) : null}
-                <div>
-                  <span style={{ color: 'var(--text-muted)' }}>Current owner bill: </span>
-                  ₨{ownerBill.toLocaleString()}
-                </div>
-                <div>
-                  <span style={{ color: 'var(--text-muted)' }}>Settlement: </span>
-                  {settled ? (
-                    <span style={{ color: 'var(--warning, #92400e)', fontWeight: 600 }}>
-                      Payment settled for this lot
-                    </span>
-                  ) : (
-                    <span style={{ color: 'var(--text-muted, #64748b)' }}>No settlement payment</span>
-                  )}
-                </div>
-              </div>
-
-              <FormGroup label="Owner bill handling">
-                <label
-                  style={{
-                    display: 'flex',
-                    gap: 8,
-                    alignItems: 'center',
-                    fontSize: 13,
-                    marginBottom: 8,
-                  }}
-                >
-                  <input
-                    type="checkbox"
-                    checked={revisionReview.updateOwnerBill}
-                    onChange={(e) =>
-                      setRevisionReview((r) => ({ ...r, updateOwnerBill: e.target.checked }))
-                    }
-                  />
-                  Also update owner bill
-                </label>
-                {revisionReview.updateOwnerBill && (
-                  <>
-                    <label
-                      style={{
-                        display: 'flex',
-                        gap: 8,
-                        alignItems: 'center',
-                        fontSize: 13,
-                        marginBottom: 8,
-                      }}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={revisionReview.useCustomOwner}
-                        onChange={(e) =>
-                          setRevisionReview((r) => ({ ...r, useCustomOwner: e.target.checked }))
-                        }
-                      />
-                      Use custom owner amount (otherwise party amount applies)
-                    </label>
-                    {revisionReview.useCustomOwner && (
-                      <input
-                        className="form-input"
-                        type="number"
-                        value={revisionReview.customOwnerAmount}
-                        onChange={(e) =>
-                          setRevisionReview((r) => ({ ...r, customOwnerAmount: e.target.value }))
-                        }
-                        placeholder="Custom owner bill (₨)"
-                      />
-                    )}
-                  </>
-                )}
-              </FormGroup>
-
-              <div
-                style={{
-                  background: revisionReview.updateOwnerBill ? 'var(--primary-bg, #eff6ff)' : 'var(--primary-bg, #f8fafc)',
-                  border: '1px solid var(--border)',
-                  borderRadius: 10,
-                  padding: '12px 14px',
-                  fontSize: 12.5,
-                  color: 'var(--text-secondary, #334155)',
-                  lineHeight: 1.6,
-                }}
-              >
-                <div>
-                  New owner bill: <strong>₨{Number(newOwner).toLocaleString()}</strong>
-                  {revisionReview.updateOwnerBill ? (
-                    <span
-                      style={{ color: delta === 0 ? 'var(--text-muted, #64748b)' : delta > 0 ? 'var(--success, #0f766e)' : 'var(--danger, #dc2626)' }}
-                    >
-                      {' '}
-                      ({delta >= 0 ? '+' : '−'}₨{Math.abs(delta).toLocaleString()})
-                    </span>
-                  ) : (
-                    <span style={{ color: 'var(--text-muted, #64748b)' }}> (unchanged)</span>
-                  )}
-                </div>
-                {revisionReview.updateOwnerBill && settled && delta !== 0 && (
-                  <div style={{ marginTop: 6, color: 'var(--warning, #92400e)', fontWeight: 600 }}>
-                    {delta > 0
-                      ? `Adjustment: extra Paid → Owner payment of ₨${delta.toLocaleString()} will be recorded.`
-                      : `Adjustment: reversing Received ← Owner payment of ₨${Math.abs(delta).toLocaleString()} will be recorded.`}
-                  </div>
-                )}
-              </div>
-
-              <FormGroup label="Rejection reason (Reject only)">
-                <textarea
-                  className="form-textarea"
-                  rows={2}
-                  value={revisionReview.rejectionNote}
-                  onChange={(e) =>
-                    setRevisionReview((r) => ({ ...r, rejectionNote: e.target.value }))
-                  }
-                  placeholder="Enter reason if rejecting..."
-                  style={{ resize: 'vertical' }}
-                />
-              </FormGroup>
-            </Modal>
-          );
-        })()}
+      <PLRevisionReviewModal
+        revisionReview={revisionReview}
+        setRevisionReview={setRevisionReview}
+        revisionReviewSaving={revisionReviewSaving}
+        approveRevision={approveRevision}
+        rejectRevision={rejectRevision}
+        ledgerPartyEdits={ledgerPartyEdits}
+        getPartyNameLocal={getPartyNameLocal}
+        ownerSettlementForLot={ownerSettlementForLot}
+      />
     </div>
   );
 }

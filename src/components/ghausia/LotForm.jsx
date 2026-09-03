@@ -88,7 +88,7 @@ function LotForm({
       lotNo: initial.lotNo || initial.lotNumber || '',
       ...typeFields,
       fabric: typeFields.itemType === '__custom' ? typeFields.customFabric : typeFields.itemType,
-      pieces: initial.pieces ?? '',
+      pieces: initial.pieces ?? initial.quantity ?? '',
       partyId:
         initial.partyId ||
         parties.find((p) => p.name === (initial.partyName || initial.party))?.id ||
@@ -225,8 +225,8 @@ function LotForm({
         itemType: dFinalType,
       };
     }
-
-    const quantityValue = Number(form.quantity || form.pieces || 0);
+    
+    const quantityValue = Number(form.pieces || 0);
     const selectedParty = parties.find((p) => p.id === form.partyId);
     const partyName = selectedParty?.name || form.partyName || '';
     const partyId = form.partyId || '';

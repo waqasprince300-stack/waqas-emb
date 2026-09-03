@@ -138,7 +138,7 @@ export default function LotTableDesktop({
                           Completed
                         </span>
                         <div style={{ fontSize: 11, color: 'var(--success, #166534)', fontWeight: 600 }}>
-                          Completed Date: {formatDisplayDate(l.completionApprovedAt || l.allotDate)}
+                          Completed Date: {formatDisplayDate(l.completionApprovedAt || l.receivedBackDate || l.allotDate)}
                         </div>
                       </div>
                     ) : (

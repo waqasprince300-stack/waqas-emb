@@ -867,7 +867,7 @@ tbody tr:last-child td {
   align-items: center;
   justify-content: center;
   padding: 16px;
-  animation: fadeIn 0.15s ease;
+  animation: fadeIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 .modal-overlay.modal-overlay-global {
@@ -883,7 +883,7 @@ tbody tr:last-child td {
   width: 100%;
   max-height: 90vh;
   overflow-y: auto;
-  animation: slideUp 0.2s ease;
+  animation: modalPopIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 .modal-header {
@@ -2173,7 +2173,7 @@ tbody tr:last-child td {
     display: grid !important;
     flex-direction: unset;
     flex-wrap: unset;
-    grid-template-columns: 1fr;
+    grid-template-columns: 1fr 1fr;
     gap: 10px;
     align-items: stretch;
   }
@@ -2500,8 +2500,8 @@ tbody tr:last-child td {
   .badge-completed {
     font-size: 12px;
     color: var(--success, #166534);
-    background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%);
-    border: 1px solid #86efac;
+    background: var(--success-bg, #f0fdf4);
+    border: 1px solid var(--success-border, #bbf7d0);
     padding: 3px 10px;
     border-radius: 20px;
     font-weight: 700;
@@ -2510,9 +2510,9 @@ tbody tr:last-child td {
 
   .badge-review {
     font-size: 12px;
-    color: #92400e;
-    background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
-    border: 1px solid #fcd34d;
+    color: var(--warning, #92400e);
+    background: var(--warning-bg, #fffbeb);
+    border: 1px solid var(--warning-border, #fcd34d);
     padding: 3px 10px;
     border-radius: 20px;
     font-weight: 700;
@@ -2522,8 +2522,8 @@ tbody tr:last-child td {
   .badge-status {
     font-size: 12px;
     color: var(--primary, #1e40af);
-    background: var(--primary-bg, linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%));
-    border: 1px solid #93c5fd;
+    background: var(--primary-bg, #eff6ff);
+    border: 1px solid var(--primary-border, #93c5fd);
     padding: 3px 10px;
     border-radius: 20px;
     font-weight: 700;
@@ -3759,4 +3759,35 @@ tbody tr:last-child td {
   .admin-perf-grid {
     grid-template-columns: 1fr;
   }
+}
+
+@keyframes modalPopIn {
+  from {
+    transform: scale(0.92) translateY(12px);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1) translateY(0);
+    opacity: 1;
+  }
+}
+
+button,
+select,
+.btn,
+.form-select,
+.form-input,
+.party-picker-trigger {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 0.15s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.15s ease, border-color 0.15s ease, background-color 0.15s ease;
+}
+
+button:active,
+select:active,
+.btn:active,
+.form-select:active,
+.form-input:active,
+.party-picker-trigger:active {
+  transform: scale(0.96);
 }
