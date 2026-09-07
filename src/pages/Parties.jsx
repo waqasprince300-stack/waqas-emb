@@ -1,6 +1,7 @@
 import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
 import { Modal, FormGroup, SearchBar, EmptyState, ConfirmDialog } from '../components/UI';
+import { apiService } from '../services/api';
 import Loader from '../components/Loader';
 import LoaderDashboard from '../components/LoaderDashboard';
 import {
@@ -255,6 +256,60 @@ function PartyStatTile({ label, count, amountStr, accent, bgTint, hideAmount }) 
   );
 }
 
+function TrashView({ trashedParties, trashedOwners, loading, onRestoreParty, onPermanentDeleteParty, onRestoreOwner, onPermanentDeleteOwner }) {
+  if (loading) {
+    return <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}><LoaderDashboard height={30} width={30} /></div>;
+  }
+  
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
+      <div>
+        <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 12, color: 'var(--text-primary)' }}>Deleted Parties</h3>
+        {trashedParties.length === 0 ? (
+          <EmptyState message="No parties in the recycle bin" />
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 16 }}>
+            {trashedParties.map((party) => (
+              <div key={party._id} style={{ background: 'var(--card-bg, #fff)', border: '1px solid var(--border)', borderRadius: 12, padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: 16 }}>{party.name}</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Deleted: {formatDisplayDateTime(party.deletedAt)}</div>
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button className="btn btn-ghost" onClick={() => onRestoreParty(party._id)} style={{ color: 'var(--primary)', padding: '6px 12px' }}>Restore</button>
+                  <button className="btn btn-ghost" onClick={() => onPermanentDeleteParty(party)} style={{ color: 'var(--danger)', padding: '6px 12px' }}>Delete</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div>
+        <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 12, color: 'var(--text-primary)' }}>Deleted Workspaces (Business Owners)</h3>
+        {trashedOwners.length === 0 ? (
+          <EmptyState message="No workspaces in the recycle bin" />
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 16 }}>
+            {trashedOwners.map((owner) => (
+              <div key={owner._id} style={{ background: 'var(--card-bg, #fff)', border: '1px solid var(--border)', borderRadius: 12, padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: 16 }}>{owner.name}</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Deleted: {formatDisplayDateTime(owner.deletedAt)}</div>
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button className="btn btn-ghost" onClick={() => onRestoreOwner(owner._id)} style={{ color: 'var(--primary)', padding: '6px 12px' }}>Restore</button>
+                  <button className="btn btn-ghost" onClick={() => onPermanentDeleteOwner(owner)} style={{ color: 'var(--danger)', padding: '6px 12px' }}>Delete</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function Parties() {
   const {
     parties,
@@ -284,6 +339,31 @@ export default function Parties() {
   const [transactionParty, setTransactionParty] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [hideAmounts, setHideAmounts] = useState(false);
+  const [activeTab, setActiveTab] = useState('active'); // 'active' | 'trash'
+  const [trashedParties, setTrashedParties] = useState([]);
+  const [trashedOwners, setTrashedOwners] = useState([]);
+  const [trashLoading, setTrashLoading] = useState(false);
+
+  useEffect(() => {
+    if (activeTab === 'trash') {
+      const loadTrash = async () => {
+        setTrashLoading(true);
+        try {
+          const [tp, to] = await Promise.all([
+            apiService.getTrashedParties(),
+            apiService.getTrashedBusinessOwners(),
+          ]);
+          setTrashedParties(tp || []);
+          setTrashedOwners(to || []);
+        } catch (err) {
+          console.error("Failed to load trash", err);
+        } finally {
+          setTrashLoading(false);
+        }
+      };
+      loadTrash();
+    }
+  }, [activeTab]);
 
   const rangedLots = useMemo(
     () =>
@@ -544,7 +624,90 @@ export default function Parties() {
         </button>
       </div>
 
-      {/* Summary */}
+      <div style={{ display: 'flex', gap: 20, borderBottom: '1px solid var(--border)', marginBottom: 24 }}>
+        <button
+          style={{
+            background: 'none',
+            border: 'none',
+            padding: '0 0 12px',
+            fontSize: 14,
+            fontWeight: 700,
+            color: activeTab === 'active' ? 'var(--primary)' : 'var(--text-muted)',
+            borderBottom: activeTab === 'active' ? '2px solid var(--primary)' : '2px solid transparent',
+            cursor: 'pointer',
+          }}
+          onClick={() => setActiveTab('active')}
+        >
+          Active Parties
+        </button>
+        <button
+          style={{
+            background: 'none',
+            border: 'none',
+            padding: '0 0 12px',
+            fontSize: 14,
+            fontWeight: 700,
+            color: activeTab === 'trash' ? 'var(--primary)' : 'var(--text-muted)',
+            borderBottom: activeTab === 'trash' ? '2px solid var(--primary)' : '2px solid transparent',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+          }}
+          onClick={() => setActiveTab('trash')}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="3 6 5 6 21 6"></polyline>
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+          </svg>
+          Recycle Bin
+        </button>
+      </div>
+
+      {activeTab === 'trash' ? (
+        <TrashView
+          trashedParties={trashedParties}
+          trashedOwners={trashedOwners}
+          loading={trashLoading}
+          onRestoreParty={async (id) => {
+            try {
+              await apiService.restoreParty(id);
+              setActiveTab('active');
+              window.location.reload();
+            } catch (err) {
+              window.alert(err.message || 'Failed to restore party');
+            }
+          }}
+          onPermanentDeleteParty={async (party) => {
+            if (!window.confirm(`Permanently delete party "${party.name.replace(/ \(Deleted \d+\)$/, '')}"? This action cannot be undone.`)) return;
+            try {
+              await apiService.deletePermanentParty(party._id);
+              setTrashedParties(prev => prev.filter(p => String(p._id) !== String(party._id)));
+            } catch (err) {
+              window.alert(err.message || 'Failed to delete party');
+            }
+          }}
+          onRestoreOwner={async (id) => {
+            try {
+              await apiService.restoreBusinessOwner(id);
+              window.location.reload();
+            } catch (err) {
+              window.alert(err.message || 'Failed to restore workspace');
+            }
+          }}
+          onPermanentDeleteOwner={async (owner) => {
+            if (!window.confirm(`Permanently delete workspace "${owner.name.replace(/ \(Deleted \d+\)$/, '')}" and ALL its data? This action cannot be undone.`)) return;
+            try {
+              await apiService.deletePermanentBusinessOwner(owner._id, { force: true });
+              setTrashedOwners(prev => prev.filter(o => String(o._id) !== String(owner._id)));
+            } catch (err) {
+              window.alert(err.message || 'Failed to delete workspace');
+            }
+          }}
+        />
+      ) : (
+        <>
+          {/* Summary */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 12, paddingRight: 4 }}>
         <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Market Overview</div>
         <button 
@@ -1185,10 +1348,12 @@ export default function Parties() {
           </div>
         </Modal>
       )}
+      </>
+      )}
 
       {deleteTarget && (
         <ConfirmDialog
-          message={`Delete party "${deleteTarget.name}"? This will not remove assigned lots.`}
+          message={`Move party "${deleteTarget.name}" to the Recycle Bin?`}
           onConfirm={handleDelete}
           onCancel={() => setDeleteTarget(null)}
           confirming={deleteLoading}

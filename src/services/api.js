@@ -390,8 +390,22 @@ class ApiService {
 
   async deleteBusinessOwner(id, opts = {}) {
     const safe = encodeURIComponent(String(id ?? '').trim());
+    return this.request(`/businessOwners/${safe}`, { method: 'DELETE' });
+  }
+
+  async getTrashedBusinessOwners() {
+    return this.request('/businessOwners/trash');
+  }
+
+  async restoreBusinessOwner(id) {
+    const safe = encodeURIComponent(String(id ?? '').trim());
+    return this.request(`/businessOwners/${safe}/restore`, { method: 'POST' });
+  }
+
+  async deletePermanentBusinessOwner(id, opts = {}) {
+    const safe = encodeURIComponent(String(id ?? '').trim());
     const q = opts.force ? '?force=true' : '';
-    return this.request(`/businessOwners/${safe}${q}`, { method: 'DELETE' });
+    return this.request(`/businessOwners/${safe}/permanent${q}`, { method: 'DELETE' });
   }
 
   // Dashboard
@@ -453,6 +467,22 @@ class ApiService {
 
   async deleteParty(id) {
     return this.request(`/parties/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async getTrashedParties() {
+    return this.request('/parties/trash');
+  }
+
+  async restoreParty(id) {
+    return this.request(`/parties/${id}/restore`, {
+      method: 'POST',
+    });
+  }
+
+  async deletePermanentParty(id) {
+    return this.request(`/parties/${id}/permanent`, {
       method: 'DELETE',
     });
   }

@@ -128,7 +128,7 @@ async function compressImageDataUrl(dataUrl, maxBytes = PK_IMAGE_TARGET_BYTES) {
     canvas.width = tw;
     canvas.height = th;
     const ctx = canvas.getContext('2d');
-    ctx.fillStyle = 'var(--card-bg, #ffffff)';
+    ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, tw, th);
     ctx.drawImage(img, 0, 0, tw, th);
     return canvas.toDataURL(mime, q);

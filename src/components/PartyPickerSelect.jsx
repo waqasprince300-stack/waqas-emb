@@ -11,6 +11,7 @@ export default function PartyPickerSelect({
   onChange,
   parties = [],
   placeholder = '— Select Party —',
+  fallbackName = '',
   style = {},
 }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -35,7 +36,8 @@ export default function PartyPickerSelect({
   }, [isOpen]);
 
   const selectedParty = parties.find((p) => String(p.id) === String(value));
-  const displayText = selectedParty ? selectedParty.name : placeholder;
+  const isDeletedParty = !selectedParty && value;
+  const displayText = selectedParty ? selectedParty.name : (isDeletedParty ? (fallbackName || 'Unknown (Deleted)') : placeholder);
 
   const handleClose = useCallback(() => {
     setClosing(true);
@@ -76,6 +78,9 @@ export default function PartyPickerSelect({
           onChange={(e) => onChange(e.target.value)}
         >
           <option value="">{placeholder}</option>
+          {isDeletedParty && (
+            <option value={value}>{fallbackName || 'Unknown (Deleted)'}</option>
+          )}
           {parties.map((p) => (
             <option key={p.id} value={p.id}>
               {p.name}

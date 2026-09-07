@@ -78,6 +78,7 @@ export default function LotMobileViews({
                 <div style={{ marginTop: 4 }}>
                   <PartyPickerSelect
                     value={l.partyId || ''}
+                    fallbackName={l.partyName}
                     onChange={(val) => handlePartyChange(l.id, val)}
                     parties={parties}
                   />

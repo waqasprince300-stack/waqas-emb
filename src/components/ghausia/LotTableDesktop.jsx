@@ -113,6 +113,9 @@ export default function LotTableDesktop({
                       onChange={(e) => handlePartyChange(l.id, e.target.value)}
                     >
                       <option value="">— Select Party —</option>
+                      {l.partyId && !parties.some(p => String(p.id) === String(l.partyId)) && (
+                        <option value={l.partyId}>{l.partyName || 'Unknown (Deleted)'}</option>
+                      )}
                       {parties.map((p) => (
                         <option key={p.id} value={p.id}>
                           {p.name}

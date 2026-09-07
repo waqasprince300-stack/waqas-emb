@@ -40,7 +40,7 @@ export function usePartiesData() {
     [partiesById]
   );
 
-  const getPartyName = useCallback((id) => getPartyById(id)?.name || 'Unknown', [getPartyById]);
+  const getPartyName = useCallback((id) => getPartyById(id)?.name || '', [getPartyById]);
 
   return {
     parties,
