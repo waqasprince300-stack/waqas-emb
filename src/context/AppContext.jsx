@@ -617,6 +617,13 @@ export function AppProvider({ children }) {
       if (lotId) pendingLotIds.add(lotId);
 
       const action = payload && payload.action != null ? String(payload.action) : '';
+      if (action === 'notification_read' || action === 'notification_read_all') {
+        if (!payload.targetUserId || payload.targetUserId === String(user?._id)) {
+          void refreshNotifications();
+        }
+        return;
+      }
+
       if (
         action === 'lot_rejected' ||
         action === 'lot_pending_review' ||

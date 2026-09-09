@@ -107,7 +107,8 @@ function LotForm({
   const [errors, setErrors] = useState({});
   const isNewLot = !initial;
   const [moveToBusinessOwnerId, setMoveToBusinessOwnerId] = useState('');
-  const [bulkMode, setBulkMode] = useState(false);
+  const [lotCreationMode, setLotCreationMode] = useState('single');
+  const [manualLotNumbersRaw, setManualLotNumbersRaw] = useState('');
   const [bulkCount, setBulkCount] = useState(5);
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
@@ -157,9 +158,24 @@ function LotForm({
   };
 
   const bulkLotNumbers = useMemo(() => {
-    if (!isNewLot || !bulkMode) return null;
-    return generateSerialLotNumbers(form.lotNumber, bulkCount);
-  }, [isNewLot, bulkMode, form.lotNumber, bulkCount]);
+    if (!isNewLot || lotCreationMode === 'single') return null;
+    if (lotCreationMode === 'bulk_serial') {
+      return generateSerialLotNumbers(form.lotNumber, bulkCount);
+    }
+    if (lotCreationMode === 'bulk_manual') {
+      const parts = manualLotNumbersRaw.split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
+      // Deduplicate while preserving order
+      const unique = [...new Set(parts)];
+      return unique.length > 0 ? unique : null;
+    }
+    return null;
+  }, [isNewLot, lotCreationMode, form.lotNumber, bulkCount, manualLotNumbersRaw]);
+
+  const manualDuplicateCount = useMemo(() => {
+    if (lotCreationMode !== 'bulk_manual') return 0;
+    const parts = manualLotNumbersRaw.split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
+    return parts.length - new Set(parts).size;
+  }, [lotCreationMode, manualLotNumbersRaw]);
 
   const { recentParties, otherParties } = useMemo(() => {
     const recentIds = getRecentPartyIds();
@@ -179,12 +195,18 @@ function LotForm({
     if (pickWorkspaceForNewLot && !String(form.saveBusinessOwnerId || '').trim()) {
       newErrors.saveBusinessOwnerId = 'Select a business collection for this lot';
     }
-    if (isNewLot && bulkMode) {
+    if (isNewLot && lotCreationMode === 'bulk_serial') {
       const count = Number(bulkCount);
       if (!Number.isFinite(count) || count < 2 || count > 100) {
         newErrors.bulkCount = 'Enter 2-100 lots';
+      } else if (!form.lotNumber.trim()) {
+        newErrors.lotNumber = 'Enter a starting lot number (e.g. L-10)';
       } else if (!bulkLotNumbers) {
-        newErrors.lotNumber = 'Use a starting lot ending in digits (e.g. L-10)';
+        newErrors.lotNumber = 'Lot number must end in digits for serial generation (e.g. L-10)';
+      }
+    } else if (isNewLot && lotCreationMode === 'bulk_manual') {
+      if (!bulkLotNumbers || bulkLotNumbers.length < 1) {
+        newErrors.manualLotNumbersRaw = 'Enter at least one lot number';
       }
     }
     setErrors(newErrors);
@@ -201,7 +223,9 @@ function LotForm({
     if (!validate()) return;
     
     const lotNumber = (form.lotNumber || form.lotNo || '').trim();
-    if (!lotNumber) {
+    // Only prompt "Save without lot number?" for single mode.
+    // In serial/manual mode, the lot numbers come from bulkLotNumbers, not form.lotNumber.
+    if (lotCreationMode === 'single' && !lotNumber) {
       const confirm = await Swal.fire({
         title: 'Save without Lot Number?',
         text: 'You have not entered a lot number. Are you sure you want to save this work as unnumbered?',
@@ -266,8 +290,10 @@ function LotForm({
       }
     }
 
+    // Strip form-only fields that should not leak to the API payload
+    const { manualLotNumbersRaw: _stripManual, lotCreationMode: _stripMode, ...cleanForm } = form;
     const basePayload = {
-      ...form,
+      ...cleanForm,
       saveBusinessOwnerId: saveOwnerForPayload,
       fabric: finalType,
       itemType: finalType,
@@ -291,7 +317,15 @@ function LotForm({
       ...(moveToBusinessOwnerId ? { moveToBusinessOwnerId } : {}),
     };
 
-    if (isNewLot && bulkMode && bulkLotNumbers && bulkLotNumbers.length > 1) {
+    if (isNewLot && lotCreationMode !== 'single' && bulkLotNumbers && bulkLotNumbers.length > 0) {
+      if (bulkLotNumbers.length === 1) {
+        await onSave({
+          ...basePayload,
+          lotNumber: bulkLotNumbers[0],
+          lotNo: bulkLotNumbers[0],
+        });
+        return;
+      }
       await onSave({
         ...basePayload,
         status: 'pending',
@@ -309,8 +343,8 @@ function LotForm({
 
   const saveButtonLabel = (() => {
     if (saving) return 'Saving...';
-    if (isNewLot && bulkMode && bulkLotNumbers && bulkLotNumbers.length > 1) {
-      return `Save ${bulkLotNumbers.length} lots`;
+    if (isNewLot && lotCreationMode !== 'single' && bulkLotNumbers && bulkLotNumbers.length >= 1) {
+      return `Save ${bulkLotNumbers.length} lot${bulkLotNumbers.length > 1 ? 's' : ''}`;
     }
     return 'Save Lot';
   })();
@@ -424,24 +458,28 @@ function LotForm({
       {isNewLot ? (
         <>
           <span style={{ color: 'var(--border, #e2e8f0)', userSelect: 'none' }}>|</span>
+          {/* Serial lots toggle — primary bulk action */}
           <label
             style={{
               display: 'inline-flex',
               alignItems: 'center',
               gap: 5,
               cursor: 'pointer',
-              color: 'var(--text-secondary, #475569)',
+              color: lotCreationMode === 'bulk_serial' ? 'var(--purple, #4f46e5)' : 'var(--text-secondary, #475569)',
               fontWeight: 600,
+              fontSize: 12,
+              transition: 'color 0.15s',
             }}
           >
             <input
               type="checkbox"
-              checked={bulkMode}
-              onChange={(e) => setBulkMode(e.target.checked)}
+              checked={lotCreationMode === 'bulk_serial'}
+              onChange={(e) => setLotCreationMode(e.target.checked ? 'bulk_serial' : 'single')}
+              style={{ width: 14, height: 14, accentColor: 'var(--purple, #4f46e5)' }}
             />
             Serial lots
           </label>
-          {bulkMode ? (
+          {lotCreationMode === 'bulk_serial' ? (
             <>
               <input
                 type="number"
@@ -451,11 +489,12 @@ function LotForm({
                 onChange={(e) => setBulkCount(e.target.value)}
                 title="How many lots"
                 style={{
-                  width: 52,
-                  padding: '3px 6px',
+                  width: 48,
+                  padding: '2px 5px',
                   fontSize: 12,
                   borderRadius: 6,
                   border: errors.bulkCount ? '1px solid var(--danger, #dc2626)' : '1px solid var(--border, #e2e8f0)',
+                  textAlign: 'center',
                 }}
               />
               {bulkLotNumbers && bulkLotNumbers.length > 1 ? (
@@ -463,7 +502,7 @@ function LotForm({
                   style={{
                     color: 'var(--text-muted, #94a3b8)',
                     fontSize: 11,
-                    maxWidth: 200,
+                    maxWidth: 180,
                     overflow: 'hidden',
                     textOverflow: 'ellipsis',
                     whiteSpace: 'nowrap',
@@ -472,16 +511,64 @@ function LotForm({
                   {previewSerialLotNumbers(bulkLotNumbers, 3)}
                 </span>
               ) : null}
+              {errors.bulkCount ? (
+                <span style={{ color: 'var(--danger, #dc2626)', fontSize: 11 }}>{errors.bulkCount}</span>
+              ) : null}
             </>
           ) : null}
-          {errors.bulkCount ? (
-            <span style={{ color: 'var(--danger, #dc2626)', fontSize: 11 }}>{errors.bulkCount}</span>
-          ) : null}
-          {bulkMode && !bulkLotNumbers && form.lotNumber.trim() ? (
-            <span style={{ color: 'var(--success, #166534)', fontSize: 11, marginLeft: 'auto' }}>
-              Hit Save to generate
-            </span>
-          ) : null}
+          {/* Manual list — subtle secondary link */}
+          {lotCreationMode !== 'bulk_manual' ? (
+            <button
+              type="button"
+              onClick={() => setLotCreationMode('bulk_manual')}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: 'var(--text-muted, #94a3b8)',
+                fontSize: 11,
+                cursor: 'pointer',
+                textDecoration: 'underline',
+                textUnderlineOffset: 2,
+                padding: 0,
+                marginLeft: 'auto',
+                transition: 'color 0.15s',
+              }}
+              onMouseEnter={(e) => { e.target.style.color = 'var(--purple, #4f46e5)'; }}
+              onMouseLeave={(e) => { e.target.style.color = 'var(--text-muted, #94a3b8)'; }}
+              title="Enter lot numbers manually (comma separated)"
+            >
+              ✎ Manual list
+            </button>
+          ) : (
+            <>
+              <span style={{
+                display: 'inline-flex', alignItems: 'center', gap: 4,
+                background: 'var(--purple-bg, #eef2ff)', color: 'var(--purple, #4f46e5)',
+                fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 10,
+              }}>
+                ✎ Manual list
+                <button
+                  type="button"
+                  onClick={() => { setLotCreationMode('single'); setManualLotNumbersRaw(''); }}
+                  style={{
+                    background: 'none', border: 'none', cursor: 'pointer',
+                    color: 'var(--text-muted, #94a3b8)', fontSize: 13, padding: '0 0 0 2px', lineHeight: 1,
+                  }}
+                  title="Exit manual mode"
+                >×</button>
+              </span>
+              {bulkLotNumbers && bulkLotNumbers.length > 0 ? (
+                <span style={{ color: 'var(--text-muted, #94a3b8)', fontSize: 11 }}>
+                  {bulkLotNumbers.length} lot{bulkLotNumbers.length > 1 ? 's' : ''}
+                  {manualDuplicateCount > 0 ? (
+                    <span style={{ color: 'var(--warning, #b45309)', marginLeft: 4 }}>
+                      ({manualDuplicateCount} duplicate{manualDuplicateCount > 1 ? 's' : ''} removed)
+                    </span>
+                  ) : null}
+                </span>
+              ) : null}
+            </>
+          )}
         </>
       ) : null}
       {!isNewLot && workspaceOwnerOptions && workspaceOwnerOptions.length > 1 && (
@@ -607,23 +694,49 @@ function LotForm({
       )}
 
       <div className="grid-2">
-        <FormGroup label={isNewLot && bulkMode ? 'Starting lot number' : 'Lot Number'}>
-          <input
-            className={`form-input${errors.lotNumber ? ' input-error' : ''}`}
-            value={form.lotNumber}
-            onChange={(e) => {
-              const v = e.target.value;
-              set('lotNumber', v);
-              set('lotNo', v);
-            }}
-            placeholder={isNewLot && bulkMode ? 'e.g. L-10 (serials from here)' : 'e.g. L-10 (Leave blank if unnumbered)'}
-            autoComplete="off"
-            disabled={!isNewLot && initial?.suitComponent === 'dupatta' && initial?.linkedLotId}
-          />
-          {!isNewLot && initial?.suitComponent === 'dupatta' && initial?.linkedLotId && (
-            <span style={{ fontSize: 11, color: 'var(--text-muted, #64748b)', display: 'block', marginTop: 4 }}>
-              Edit from the Main Lot to change the suit&apos;s Lot Number.
-            </span>
+        <FormGroup label={
+          isNewLot && lotCreationMode === 'bulk_serial'
+            ? 'Starting lot number'
+            : isNewLot && lotCreationMode === 'bulk_manual'
+              ? 'Lot Numbers'
+              : 'Lot Number'
+        }>
+          {isNewLot && lotCreationMode === 'bulk_manual' ? (
+            <>
+              <textarea
+                className={`form-input${errors.manualLotNumbersRaw ? ' input-error' : ''}`}
+                value={manualLotNumbersRaw}
+                onChange={(e) => setManualLotNumbersRaw(e.target.value)}
+                placeholder={'Enter lot numbers separated by commas or new lines:\nL-10, L-12, F-40\nor one per line'}
+                rows={3}
+                style={{ resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.5 }}
+              />
+              {errors.manualLotNumbersRaw && (
+                <span style={{ color: 'var(--danger, #dc2626)', fontSize: 11, marginTop: 3, display: 'block' }}>
+                  {errors.manualLotNumbersRaw}
+                </span>
+              )}
+            </>
+          ) : (
+            <>
+              <input
+                className={`form-input${errors.lotNumber ? ' input-error' : ''}`}
+                value={form.lotNumber}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  set('lotNumber', v);
+                  set('lotNo', v);
+                }}
+                placeholder={isNewLot && lotCreationMode === 'bulk_serial' ? 'e.g. L-10 (serials from here)' : 'e.g. L-10 (Leave blank if unnumbered)'}
+                autoComplete="off"
+                disabled={!isNewLot && initial?.suitComponent === 'dupatta' && initial?.linkedLotId}
+              />
+              {!isNewLot && initial?.suitComponent === 'dupatta' && initial?.linkedLotId && (
+                <span style={{ fontSize: 11, color: 'var(--text-muted, #64748b)', display: 'block', marginTop: 4 }}>
+                  Edit from the Main Lot to change the suit&apos;s Lot Number.
+                </span>
+              )}
+            </>
           )}
         </FormGroup>
         <FormGroup label="Design Number *">
@@ -737,7 +850,7 @@ function LotForm({
             </optgroup>
           </select>
         </FormGroup>
-        {!(isNewLot && bulkMode) && (
+        {!(isNewLot && lotCreationMode !== 'single') && (
           <FormGroup label="Status">
             <select
               className="form-select"

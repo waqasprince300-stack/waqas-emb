@@ -33,6 +33,7 @@ import PLPicturesModal from '../components/partyLedger/PLPicturesModal';
 import PLReceiptPreviewModal from '../components/partyLedger/PLReceiptPreviewModal';
 import PLRevisionRequestModal from '../components/partyLedger/PLRevisionRequestModal';
 import PLRevisionReviewModal from '../components/partyLedger/PLRevisionReviewModal';
+import { adminLotNotDispatched } from '../utils/ledgerStatusHelpers';
 
 // From the party's perspective: dispatched = In Progress, received back = Completed
 // If party name is unknown, status should be Pending
@@ -155,14 +156,6 @@ async function finalizeLedgerReceiptStoredValue(stored) {
   if (!stored) return '';
   if (/^data:image\//i.test(String(stored))) return compressPartyLedgerBillImage(stored);
   return stored;
-}
-/** Admin/workspace lot still awaiting dispatch â€” party must not self-set "In Progress". */
-function adminLotNotDispatched(lot) {
-  return (
-    String(lot?.status || '')
-      .toLowerCase()
-      .trim() === 'pending'
-  );
 }
 
 export default function PartyLedger() {

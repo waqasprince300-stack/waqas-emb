@@ -10,20 +10,7 @@ import {
 } from '../../utils/partyFacingLabels';
 // removed unused import
 
-/** Party UI label for ledger display statuses. */
-function partyFacingStatusLabel(displayStatus, isParty) {
-  if (!isParty) return displayStatus;
-  return partyFacingLedgerDisplayLabel(displayStatus);
-}
-
-/** Admin/workspace lot still awaiting dispatch — party must not self-set "In Progress". */
-function adminLotNotDispatched(lot) {
-  return (
-    String(lot?.status || '')
-      .toLowerCase()
-      .trim() === 'pending'
-  );
-}
+import { partyFacingStatusLabel, adminLotNotDispatched } from '../../utils/ledgerStatusHelpers';
 
 /**
  * PLDesktopTable — Renders the desktop lot table for Party Ledger.

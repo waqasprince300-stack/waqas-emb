@@ -7,11 +7,7 @@ import {
   partyFacingLedgerDisplayLabel,
 } from '../../utils/partyFacingLabels';
 
-/** Party UI label for ledger display statuses. */
-function partyFacingStatusLabel(displayStatus, isParty) {
-  if (!isParty) return displayStatus;
-  return partyFacingLedgerDisplayLabel(displayStatus);
-}
+import { partyFacingStatusLabel } from '../../utils/ledgerStatusHelpers';
 
 /**
  * PLToolbar — Renders tabs (Other/Completed), view mode toggle,

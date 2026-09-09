@@ -8,26 +8,13 @@ import {
   partyFacingLotStatusLabel,
 } from '../../utils/partyFacingLabels';
 
-/** Party UI label for ledger display statuses. */
-function partyFacingStatusLabel(displayStatus, isParty) {
-  if (!isParty) return displayStatus;
-  return partyFacingLedgerDisplayLabel(displayStatus);
-}
+import { partyFacingStatusLabel, adminLotNotDispatched } from '../../utils/ledgerStatusHelpers';
 
 const toTitleCase = (s) =>
   String(s || '')
     .split(' ')
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
     .join(' ');
-
-/** Admin/workspace lot still awaiting dispatch. */
-function adminLotNotDispatched(lot) {
-  return (
-    String(lot?.status || '')
-      .toLowerCase()
-      .trim() === 'pending'
-  );
-}
 
 async function readReceiptAsStoredValue(file) {
   return new Promise((resolve, reject) => {

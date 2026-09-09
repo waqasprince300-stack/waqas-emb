@@ -8,20 +8,7 @@ import {
   partyFacingLedgerDisplayLabel,
 } from '../../utils/partyFacingLabels';
 
-/** Party UI label for ledger display statuses. */
-function partyFacingStatusLabel(displayStatus, isParty) {
-  if (!isParty) return displayStatus;
-  return partyFacingLedgerDisplayLabel(displayStatus);
-}
-
-/** Admin/workspace lot still awaiting dispatch. */
-function adminLotNotDispatched(lot) {
-  return (
-    String(lot?.status || '')
-      .toLowerCase()
-      .trim() === 'pending'
-  );
-}
+import { partyFacingStatusLabel, adminLotNotDispatched } from '../../utils/ledgerStatusHelpers';
 
 /**
  * PLMobileCards — Renders the card-list view for mobile Party Ledger.

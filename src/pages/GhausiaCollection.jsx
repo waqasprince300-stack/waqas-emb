@@ -699,9 +699,15 @@ export default function GhausiaCollection() {
         bulkLotNumbers: _bulk,
         ...basePayload
       } = saveForm;
+      const isReworkBulk = Boolean(basePayload.isRework);
+      const suitCompBulk = basePayload.suitComponent || 'main';
       const existingKeys = new Set(
         collectionLots
-          .filter((l) => String(l.businessOwnerId ?? '') === targetBiz)
+          .filter((l) =>
+            String(l.businessOwnerId ?? '') === targetBiz &&
+            Boolean(l.isRework) === isReworkBulk &&
+            (l.suitComponent || 'main') === suitCompBulk
+          )
           .map((l) => normalizeLotNumberKey(l.lotNumber ?? l.lotNo))
       );
 
