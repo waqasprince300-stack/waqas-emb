@@ -272,7 +272,7 @@ function TrashView({ trashedParties, trashedOwners, loading, onRestoreParty, onP
             {trashedParties.map((party) => (
               <div key={party._id} style={{ background: 'var(--card-bg, #fff)', border: '1px solid var(--border)', borderRadius: 12, padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
-                  <div style={{ fontWeight: 700, fontSize: 16 }}>{party.name}</div>
+                  <div style={{ fontWeight: 700, fontSize: 16 }}>{party.name.replace(/ \(Deleted \d+\)$/, '')}</div>
                   <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Deleted: {formatDisplayDateTime(party.deletedAt)}</div>
                 </div>
                 <div style={{ display: 'flex', gap: 8 }}>
@@ -294,7 +294,7 @@ function TrashView({ trashedParties, trashedOwners, loading, onRestoreParty, onP
             {trashedOwners.map((owner) => (
               <div key={owner._id} style={{ background: 'var(--card-bg, #fff)', border: '1px solid var(--border)', borderRadius: 12, padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
-                  <div style={{ fontWeight: 700, fontSize: 16 }}>{owner.name}</div>
+                  <div style={{ fontWeight: 700, fontSize: 16 }}>{owner.name.replace(/ \(Deleted \d+\)$/, '')}</div>
                   <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Deleted: {formatDisplayDateTime(owner.deletedAt)}</div>
                 </div>
                 <div style={{ display: 'flex', gap: 8 }}>
@@ -321,6 +321,7 @@ export default function Parties() {
     reportingPartyEdits,
     getPartyName,
     initialDataLoading,
+    refreshData,
   } = useApp();
   const PAGE_SIZE = 8;
   const [modal, setModal] = useState(null);
@@ -672,8 +673,9 @@ export default function Parties() {
           onRestoreParty={async (id) => {
             try {
               await apiService.restoreParty(id);
+              setTrashedParties(prev => prev.filter(p => String(p._id) !== String(id)));
+              refreshData();
               setActiveTab('active');
-              window.location.reload();
             } catch (err) {
               window.alert(err.message || 'Failed to restore party');
             }
@@ -690,7 +692,9 @@ export default function Parties() {
           onRestoreOwner={async (id) => {
             try {
               await apiService.restoreBusinessOwner(id);
-              window.location.reload();
+              setTrashedOwners(prev => prev.filter(o => String(o._id) !== String(id)));
+              refreshData();
+              setActiveTab('active');
             } catch (err) {
               window.alert(err.message || 'Failed to restore workspace');
             }
