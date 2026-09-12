@@ -1155,13 +1155,15 @@ export default function Payments() {
 
                   const amt = Number(p.amount ?? 0);
                   const showPlus = isParty ? pt === 'Received' || pt === 'Bill' : p.type !== 'Paid';
-                  const amtColor = partyWorkBill
-                    ? 'var(--danger, #dc2626)'
-                    : partyReceived
-                      ? 'var(--success, #15803d)'
-                      : showPlus
+                  const amtColor = ownerBill
+                    ? 'var(--warning, #d97706)'
+                    : partyWorkBill
+                      ? 'var(--danger, #dc2626)'
+                      : partyReceived
                         ? 'var(--success, #15803d)'
-                        : 'var(--danger, #dc2626)';
+                        : showPlus
+                          ? 'var(--success, #15803d)'
+                          : 'var(--danger, #dc2626)';
 
                   const { lotLabel, designLabel, isCombinedDupatta } = resolveLinkedLotDesignDisplay(
                     p,
@@ -1321,13 +1323,15 @@ export default function Payments() {
 
             const amt = Number(p.amount ?? 0);
             const showPlus = isParty ? pt === 'Received' || pt === 'Bill' : p.type !== 'Paid';
-            const amtColor = partyWorkBill
-              ? 'var(--danger, #dc2626)'
-              : partyReceived
-                ? 'var(--success, #15803d)'
-                : showPlus
+            const amtColor = ownerBill
+              ? 'var(--warning, #d97706)'
+              : partyWorkBill
+                ? 'var(--danger, #dc2626)'
+                : partyReceived
                   ? 'var(--success, #15803d)'
-                  : 'var(--danger, #dc2626)';
+                  : showPlus
+                    ? 'var(--success, #15803d)'
+                    : 'var(--danger, #dc2626)';
 
             const { lotLabel, designLabel, isCombinedDupatta } = resolveLinkedLotDesignDisplay(
               p,
