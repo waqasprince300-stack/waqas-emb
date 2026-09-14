@@ -5,6 +5,8 @@ import { DateRangeSelect } from '../../utils/dateFilters';
 export default function LedgerFilterBar({
   search,
   setSearch,
+  searchField,
+  setSearchField,
   workspaceFilter,
   setWorkspaceFilter,
   partyFilter,
@@ -35,7 +37,19 @@ export default function LedgerFilterBar({
         }}
       >
         <div style={{ flex: '1 1 240px', minWidth: 200 }}>
-          <SearchBar value={search} onChange={setSearch} placeholder="Search lot, design, party..." />
+          <SearchBar 
+            value={search} 
+            onChange={setSearch} 
+            placeholder="Search..." 
+            searchField={searchField}
+            onSearchFieldChange={setSearchField}
+            searchOptions={[
+              { label: 'All', value: 'all' },
+              { label: 'Lot No', value: 'lotNo' },
+              { label: 'Design No', value: 'designNo' },
+              { label: 'Party', value: 'party' },
+            ]}
+          />
         </div>
 
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>

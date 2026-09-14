@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   LineChart,
   Line,
@@ -65,7 +65,12 @@ export default function Dashboard() {
     reportingPartyEdits,
   } = useApp();
   const { isParty, isAdmin, user } = useAuth();
+  const navigate = useNavigate();
   const [dateRange, setDateRange] = useState('all');
+
+
+
+
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
   const [hideAmounts, setHideAmounts] = useState(false);
@@ -488,13 +493,13 @@ export default function Dashboard() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
           {!isParty && (
             <div className="dash-quick-actions" style={{ marginRight: 'auto' }}>
-              <Link to="/ghausia?action=new" className="dash-btn-primary">
+              <Link to="/ghausia?action=new" className="dash-btn-primary" title="Alt+A">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                 Add Lot
               </Link>
-              <Link to="/payments?action=new" className="dash-btn-secondary">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
-                Add Payment
+              <Link to="/payments?action=new" className="dash-btn-secondary" title="Alt+P / Alt+R">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 1v22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                Record Payment
               </Link>
             </div>
           )}

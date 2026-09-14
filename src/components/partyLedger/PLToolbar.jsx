@@ -23,6 +23,9 @@ export default function PLToolbar({
   setViewMode,
   search,
   setSearch,
+  searchField,
+  setSearchField,
+  resultCount,
   workspaceFilter,
   setWorkspaceFilter,
   businessOwners,
@@ -133,7 +136,35 @@ export default function PLToolbar({
 
       {/* Toolbar */}
       <div className={`toolbar pl-toolbar${isParty ? ' pl-toolbar--party-user' : ''}`}>
-        <SearchBar value={search} onChange={setSearch} placeholder="Search lot no. or design..." />
+        <SearchBar 
+          value={search} 
+          onChange={setSearch} 
+          placeholder="Search..." 
+          searchField={searchField}
+          onSearchFieldChange={setSearchField}
+          resultCount={resultCount}
+          searchOptions={[
+            { label: 'All', value: 'all' },
+            { label: 'Lot', value: 'lotNo' },
+            { label: 'Design', value: 'designNo' },
+            { label: 'Fabric', value: 'fabric' },
+            { label: 'Desc', value: 'description' },
+          ]}
+        />
+        {!isParty && (
+          <select
+            className="form-select pl-toolbar-filter pl-toolbar-filter--party"
+            value={partyFilter}
+            onChange={(e) => setPartyFilter(e.target.value)}
+          >
+            <option value="All">All parties</option>
+            {parties.map((p) => (
+              <option key={p.id} value={String(p.id)}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        )}
         {isAdmin && (
           <select
             className="form-select pl-toolbar-filter pl-toolbar-filter--workspace"
@@ -146,20 +177,6 @@ export default function PLToolbar({
             {businessOwners.map((o) => (
               <option key={o.id || o._id} value={String(o.id || o._id)}>
                 {o.name}
-              </option>
-            ))}
-          </select>
-        )}
-        {!isParty && (
-          <select
-            className="form-select pl-toolbar-filter pl-toolbar-filter--party"
-            value={partyFilter}
-            onChange={(e) => setPartyFilter(e.target.value)}
-          >
-            <option value="All">All parties</option>
-            {parties.map((p) => (
-              <option key={p.id} value={String(p.id)}>
-                {p.name}
               </option>
             ))}
           </select>

@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
-import { Modal, FormGroup, SearchBar, EmptyState, ConfirmDialog } from '../components/UI';
+import { Modal, FormGroup, SearchBar, EmptyState, ConfirmDialog, HighlightText } from '../components/UI';
 import { apiService } from '../services/api';
 import Loader from '../components/Loader';
 import LoaderDashboard from '../components/LoaderDashboard';
@@ -330,6 +330,7 @@ export default function Parties() {
   const [partySaving, setPartySaving] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [search, setSearch] = useState('');
+  const [searchField, setSearchField] = useState('all');
   const [dateRange, setDateRange] = useState('all');
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
@@ -395,12 +396,23 @@ export default function Parties() {
 
   const filtered = parties.filter((p) => {
     const q = search.toLowerCase();
-    return (
-      !q ||
-      p.name.toLowerCase().includes(q) ||
-      p.phone?.toLowerCase().includes(q) ||
-      p.address?.toLowerCase().includes(q)
-    );
+    if (!q) return true;
+
+    const name = (p.name || '').toLowerCase();
+    const phone = (p.phone || '').toLowerCase();
+    const address = (p.address || '').toLowerCase();
+
+    let matchQ = true;
+    if (searchField === 'all') {
+      matchQ = name.includes(q) || phone.includes(q) || address.includes(q);
+    } else if (searchField === 'name') {
+      matchQ = name.includes(q);
+    } else if (searchField === 'phone') {
+      matchQ = phone.includes(q);
+    } else if (searchField === 'address') {
+      matchQ = address.includes(q);
+    }
+    return matchQ;
   });
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safeCurrentPage = Math.min(currentPage, totalPages);
@@ -409,7 +421,7 @@ export default function Parties() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [search, dateRange]);
+  }, [search, searchField, dateRange]);
 
   useEffect(() => {
     if (currentPage > totalPages) {
@@ -775,7 +787,16 @@ export default function Parties() {
         <SearchBar
           value={search}
           onChange={setSearch}
-          placeholder="Search party name, phone, address..."
+          placeholder="Search..."
+          searchField={searchField}
+          onSearchFieldChange={setSearchField}
+          resultCount={filtered.length}
+          searchOptions={[
+            { label: 'All', value: 'all' },
+            { label: 'Name', value: 'name' },
+            { label: 'Phone', value: 'phone' },
+            { label: 'Address', value: 'address' },
+          ]}
         />
         <DateRangeSelect
           value={dateRange}
@@ -857,7 +878,7 @@ export default function Parties() {
                             letterSpacing: '-0.01em',
                           }}
                         >
-                          {party.name}
+                          <HighlightText text={party.name} query={search} />
                         </div>
                         <span
                           style={{
@@ -895,7 +916,7 @@ export default function Parties() {
                           >
                             <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 13a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z" />
                           </svg>
-                          {party.phone}
+                          <HighlightText text={party.phone} query={search} />
                         </div>
                       )}
                       {party.address && (
@@ -921,7 +942,7 @@ export default function Parties() {
                             <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
                             <circle cx="12" cy="10" r="3" />
                           </svg>
-                          <span style={{ lineHeight: 1.4 }}>{party.address}</span>
+                          <span style={{ lineHeight: 1.4 }}><HighlightText text={party.address} query={search} /></span>
                         </div>
                       )}
                     </div>

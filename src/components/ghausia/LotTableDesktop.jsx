@@ -1,4 +1,5 @@
 import React from 'react';
+import { HighlightText } from '../UI';
 import LotStatusSelect from '../LotStatusSelect';
 import PartyPickerSelect from '../PartyPickerSelect';
 import { ActionBtn, EmptyState } from '../UI';
@@ -9,6 +10,7 @@ import { STATUS_OPTIONS } from '../../utils/ghausiaHelpers';
 export default function LotTableDesktop({
   filtered,
   paginatedLots,
+  search,
   lotTableTab,
   parties,
   businessOwners,
@@ -53,7 +55,7 @@ export default function LotTableDesktop({
                 <tr key={l.id} className={l.suitComponent === 'dupatta' ? 'lot-row-dupatta' : l.suitComponent === 'main' && l.suitType === '3-piece' ? 'lot-row-main' : ''}>
                   <td style={{ fontWeight: 700, color: 'var(--primary, #1e40af)', whiteSpace: 'nowrap' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      {l.lotNumber || <span style={{ color: 'var(--text-muted, #94a3b8)', fontStyle: 'italic', fontWeight: 500 }}>(No Lot)</span>}
+                      {l.lotNumber ? <HighlightText text={l.lotNumber} query={search} /> : <span style={{ color: 'var(--text-muted, #94a3b8)', fontStyle: 'italic', fontWeight: 500 }}>(No Lot)</span>}
                       {l.suitComponent === 'dupatta' && (
                         <button type="button" onClick={() => openEdit(l)} style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', background: 'var(--primary-bg, #fdf4ff)', color: 'var(--primary, #a21caf)', border: '1px solid var(--border, #f5d0fe)', borderRadius: 4, cursor: 'pointer' }}>Dupatta</button>
                       )}
@@ -77,8 +79,8 @@ export default function LotTableDesktop({
                       )}
                     </div>
                   </td>
-                  <td style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{l.designNo}</td>
-                  <td className="desc-col">{l.description}</td>
+                  <td style={{ fontWeight: 600, whiteSpace: 'nowrap' }}><HighlightText text={l.designNo} query={search} /></td>
+                  <td className="desc-col"><HighlightText text={l.description} query={search} /></td>
                   <td>
                     <span
                       style={{

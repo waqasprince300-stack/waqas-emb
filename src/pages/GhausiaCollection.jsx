@@ -102,6 +102,7 @@ export default function GhausiaCollection() {
   const [paymentSaving, setPaymentSaving] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [search, setSearch] = useState('');
+  const [searchField, setSearchField] = useState('all');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search), 300);
@@ -421,12 +422,27 @@ export default function GhausiaCollection() {
       if (highlightedBillableLotId && String(l.id) !== String(highlightedBillableLotId)) return false;
       const q = debouncedSearch.toLowerCase();
       const lotLabel = (l.lotNumber || l.lotNo || '').toLowerCase();
-      const matchQ =
-        !q ||
-        lotLabel.includes(q) ||
-        String(l.designNo || '')
-          .toLowerCase()
-          .includes(q);
+      const designNo = String(l.designNo || '').toLowerCase();
+      const fabric = String(l.fabric || '').toLowerCase();
+      const description = String(l.description || '').toLowerCase();
+      const partyName = String(parties.find(p => String(p.id) === String(l.partyId))?.name || '').toLowerCase();
+
+      let matchQ = true;
+      if (q) {
+        if (searchField === 'all') {
+          matchQ = lotLabel.includes(q) || designNo.includes(q) || fabric.includes(q) || description.includes(q) || partyName.includes(q);
+        } else if (searchField === 'lotNo') {
+          matchQ = lotLabel.includes(q);
+        } else if (searchField === 'designNo') {
+          matchQ = designNo.includes(q);
+        } else if (searchField === 'fabric') {
+          matchQ = fabric.includes(q);
+        } else if (searchField === 'description') {
+          matchQ = description.includes(q);
+        } else if (searchField === 'partyName') {
+          matchQ = partyName.includes(q);
+        }
+      }
       if (!matchQ) return false;
       if (partyFilter !== 'All' && String(l.partyId || '') !== String(partyFilter)) return false;
       if (stuckLotIdsFilter.length > 0 && !stuckLotIdsFilter.includes(String(l.id))) return false;
@@ -455,6 +471,8 @@ export default function GhausiaCollection() {
   }, [
     effectiveCollectionLots,
     debouncedSearch,
+    searchField,
+    parties,
     partyFilter,
     dateRange,
     customRange,
@@ -470,7 +488,7 @@ export default function GhausiaCollection() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [debouncedSearch, partyFilter, dateRange, customRange, statusFilter, stuckLotIdsFilter, lotTableTab, viewAllWorkspaces]);
+  }, [debouncedSearch, searchField, partyFilter, dateRange, customRange, statusFilter, stuckLotIdsFilter, lotTableTab, viewAllWorkspaces]);
 
   useEffect(() => {
     if (currentPage > totalPages) {
@@ -672,6 +690,16 @@ export default function GhausiaCollection() {
     setEditing(null);
     setModal('form');
   };
+
+  useEffect(() => {
+    const handleOpenLot = () => {
+      openAdd();
+    };
+    window.addEventListener('open-new-lot', handleOpenLot);
+    return () => window.removeEventListener('open-new-lot', handleOpenLot);
+  }, []);
+
+
 
   const handleSave = async (form) => {
     if (form.status === 'dispatched' && !form.partyId) {
@@ -1307,7 +1335,29 @@ export default function GhausiaCollection() {
         <SearchBar
           value={search}
           onChange={setSearch}
-          placeholder="Search lot no. or design..."
+          placeholder="Search..."
+          searchField={searchField}
+          onSearchFieldChange={setSearchField}
+          resultCount={filtered.length}
+          searchOptions={[
+            { label: 'All', value: 'all' },
+            { label: 'Lot', value: 'lotNo' },
+            { label: 'Design', value: 'designNo' },
+            { label: 'Fabric', value: 'fabric' },
+            { label: 'Desc', value: 'description' },
+            { label: 'Party', value: 'partyName' },
+          ]}
+        />
+        <DateRangeSelect
+          value={dateRange}
+          onChange={setDateRange}
+          customStart={customStart}
+          customEnd={customEnd}
+          onCustomChange={({ start, end }) => {
+            setCustomStart(start);
+            setCustomEnd(end);
+          }}
+          className="pl-toolbar-filter pl-toolbar-filter--date"
         />
         <select
           className="form-select pl-toolbar-filter pl-toolbar-filter--party"
@@ -1321,17 +1371,7 @@ export default function GhausiaCollection() {
             </option>
           ))}
         </select>
-        <DateRangeSelect
-          value={dateRange}
-          onChange={setDateRange}
-          customStart={customStart}
-          customEnd={customEnd}
-          onCustomChange={({ start, end }) => {
-            setCustomStart(start);
-            setCustomEnd(end);
-          }}
-          className="pl-toolbar-filter pl-toolbar-filter--date"
-        />
+        
         {lotTableTab === 'others' ? (
           <select
             className="form-select pl-toolbar-filter pl-toolbar-filter--status"
@@ -1349,7 +1389,7 @@ export default function GhausiaCollection() {
             ))}
           </select>
         ) : (
-          <span style={{ fontSize: 13, color: 'var(--text-secondary)', alignSelf: 'center' }}>
+          <span style={{ fontSize: 13, color: 'var(--text-secondary)', alignSelf: 'center', minWidth: 140 }}>
             Completed lots only
           </span>
         )}
@@ -1442,6 +1482,7 @@ export default function GhausiaCollection() {
       <LotTableDesktop
         filtered={filtered}
         paginatedLots={paginatedLots}
+        search={search}
         lotTableTab={lotTableTab}
         parties={parties}
         businessOwners={businessOwners}

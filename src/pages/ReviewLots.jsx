@@ -76,6 +76,7 @@ export default function ReviewLots() {
   } = useApp();
 
   const [search, setSearch] = useState('');
+  const [searchField, setSearchField] = useState('all');
   const [busyId, setBusyId] = useState(null);
   const [rejectModal, setRejectModal] = useState(null);
   const [rejectReason, setRejectReason] = useState('');
@@ -98,12 +99,25 @@ export default function ReviewLots() {
       )
         return false;
       if (!q) return true;
-      const label =
-        `${l.lotNo || ''} ${l.lotNumber || ''} ${l.designNo || ''} ${l.partyName || ''}`.toLowerCase();
-      return label.includes(q);
+      const lotNo = String(l.lotNo || l.lotNumber || '').toLowerCase();
+      const designNo = String(l.designNo || '').toLowerCase();
+      const party = String(l.partyName || parties.find(p => String(p.id) === String(l.partyId || ''))?.name || '').toLowerCase();
+
+      let matchQ = true;
+      if (searchField === 'all') {
+        const label = `${lotNo} ${designNo} ${party}`.toLowerCase();
+        matchQ = label.includes(q);
+      } else if (searchField === 'lotNo') {
+        matchQ = lotNo.includes(q);
+      } else if (searchField === 'designNo') {
+        matchQ = designNo.includes(q);
+      } else if (searchField === 'party') {
+        matchQ = party.includes(q);
+      }
+      return matchQ;
     });
     return [...list].sort((a, b) => compareRowsByUpdatedNewestFirst(a, b, 'lot'));
-  }, [reportingLots, search]);
+  }, [reportingLots, search, searchField, parties]);
 
   /** Deep link: /review-lots?lotId=… → focus that pending lot. */
   useEffect(() => {
@@ -333,10 +347,20 @@ export default function ReviewLots() {
       </div>
 
       <div className="toolbar pl-toolbar">
-        <SearchBar value={search} onChange={setSearch} placeholder="Search lot, design, party…" />
-        <span className="pl-toolbar-meta" style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-          {pendingLots.length} awaiting review
-        </span>
+        <SearchBar 
+          value={search} 
+          onChange={setSearch} 
+          placeholder="Search..." 
+          searchField={searchField}
+          onSearchFieldChange={setSearchField}
+          resultCount={pendingLots.length}
+          searchOptions={[
+            { label: 'All', value: 'all' },
+            { label: 'Lot', value: 'lotNo' },
+            { label: 'Design', value: 'designNo' },
+            { label: 'Party', value: 'party' },
+          ]}
+        />
       </div>
 
       <div className="table-wrapper desktop-only-table">

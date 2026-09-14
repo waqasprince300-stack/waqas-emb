@@ -187,6 +187,7 @@ export default function PartyLedger() {
   const ledgerPartyEdits = isParty ? partyCrossPartyEdits : reportingPartyEdits;
   const PAGE_SIZE = 10;
   const [search, setSearch] = useState('');
+  const [searchField, setSearchField] = useState('all');
   const [debouncedSearch, setDebouncedSearch] = useState('');
 
   useEffect(() => {
@@ -380,12 +381,24 @@ export default function PartyLedger() {
     const list = assignedLots.filter((l) => {
       const q = debouncedSearch.toLowerCase();
       const lotLabel = (l.lotNo || l.lotNumber || '').toLowerCase();
-      const matchQ =
-        !q ||
-        lotLabel.includes(q) ||
-        String(l.designNo || '')
-          .toLowerCase()
-          .includes(q);
+      const designNo = String(l.designNo || '').toLowerCase();
+      const fabric = String(l.fabric || '').toLowerCase();
+      const description = String(l.description || '').toLowerCase();
+      
+      let matchQ = true;
+      if (q) {
+        if (searchField === 'all') {
+          matchQ = lotLabel.includes(q) || designNo.includes(q) || fabric.includes(q) || description.includes(q);
+        } else if (searchField === 'lotNo') {
+          matchQ = lotLabel.includes(q);
+        } else if (searchField === 'designNo') {
+          matchQ = designNo.includes(q);
+        } else if (searchField === 'fabric') {
+          matchQ = fabric.includes(q);
+        } else if (searchField === 'description') {
+          matchQ = description.includes(q);
+        }
+      }
       const matchP = partyFilter === 'All' || samePartyId(l.partyId, partyFilter);
       const displayStatus = getDisplayStatus(l);
       const matchTab =
@@ -405,7 +418,7 @@ export default function PartyLedger() {
       }
       return compareRowsByUpdatedNewestFirst(a, b, 'lot');
     });
-  }, [assignedLots, debouncedSearch, partyFilter, ledgerLotsTab, statusFilter, ledgerPartyEdits, isAdmin]);
+  }, [assignedLots, debouncedSearch, searchField, partyFilter, ledgerLotsTab, statusFilter, ledgerPartyEdits, isAdmin]);
 
   /** Summary cards ignore Status filter â€” only party / search / dates / workspace (via assignedLots). */
   const lotsForSummaryStats = useMemo(() => {
@@ -414,15 +427,28 @@ export default function PartyLedger() {
 
       const q = debouncedSearch.toLowerCase();
       if (q) {
-        let match = false;
-        if (lot.lotNo && String(lot.lotNo).toLowerCase().includes(q)) match = true;
-        if (lot.lotNumber && String(lot.lotNumber).toLowerCase().includes(q)) match = true;
-        if (lot.designNo && String(lot.designNo).toLowerCase().includes(q)) match = true;
-        if (!match) return false;
+        const lotLabel = (lot.lotNo || lot.lotNumber || '').toLowerCase();
+        const designNo = String(lot.designNo || '').toLowerCase();
+        const fabric = String(lot.fabric || '').toLowerCase();
+        const description = String(lot.description || '').toLowerCase();
+
+        let matchQ = true;
+        if (searchField === 'all') {
+          matchQ = lotLabel.includes(q) || designNo.includes(q) || fabric.includes(q) || description.includes(q);
+        } else if (searchField === 'lotNo') {
+          matchQ = lotLabel.includes(q);
+        } else if (searchField === 'designNo') {
+          matchQ = designNo.includes(q);
+        } else if (searchField === 'fabric') {
+          matchQ = fabric.includes(q);
+        } else if (searchField === 'description') {
+          matchQ = description.includes(q);
+        }
+        if (!matchQ) return false;
       }
       return true;
     });
-  }, [assignedLots, debouncedSearch, partyFilter, ledgerPartyEdits]);
+  }, [assignedLots, debouncedSearch, searchField, partyFilter, ledgerPartyEdits]);
 
   const otherLotsTabCount = useMemo(
     () => assignedLots.reduce((n, l) => n + (getDisplayStatus(l) !== 'Completed' ? 1 : 0), 0),
@@ -833,6 +859,7 @@ export default function PartyLedger() {
     setCustomStart('');
     setCustomEnd('');
     setSearch(String(lot.lotNo || lot.lotNumber || '').trim());
+    setSearchField('lotNo');
     setHighlightLotId(lotId);
     setCurrentPage(1);
 
@@ -1576,6 +1603,9 @@ export default function PartyLedger() {
         setViewMode={setViewMode}
         search={search}
         setSearch={setSearch}
+        searchField={searchField}
+        setSearchField={setSearchField}
+        resultCount={filtered.length}
         workspaceFilter={workspaceFilter}
         setWorkspaceFilter={setWorkspaceFilter}
         businessOwners={businessOwners}

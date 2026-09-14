@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import Loader from './Loader';
 
@@ -102,23 +102,114 @@ export function ActionBtn({ variant = 'edit', onClick }) {
   );
 }
 
-export function SearchBar({ value, onChange, placeholder = 'Search...' }) {
+export function SearchBar({
+  value,
+  onChange,
+  placeholder = 'Search...',
+  searchOptions,
+  searchField,
+  onSearchFieldChange,
+  resultCount,
+}) {
+  const inputRef = useRef(null);
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        inputRef.current?.focus();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   return (
-    <div className="search-input">
-      <svg
-        className="search-icon"
-        width="15"
-        height="15"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-      >
-        <circle cx="11" cy="11" r="8" />
-        <path d="m21 21-4.35-4.35" />
-      </svg>
-      <input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} />
+    <div className="search-input-container">
+      <div className="search-input">
+        {searchOptions && searchOptions.length > 0 && (
+          <div className="search-pills">
+            {searchOptions.map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                className={`search-pill ${searchField === opt.value ? 'active' : ''}`}
+                onClick={() => onSearchFieldChange?.(opt.value)}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        <div className="search-input-wrapper">
+          <svg
+            className="search-icon"
+            width="15"
+            height="15"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+          >
+            <circle cx="11" cy="11" r="8" />
+            <path d="m21 21-4.35-4.35" />
+          </svg>
+          <input
+            ref={inputRef}
+            value={value}
+            onChange={(e) => {
+              const val = e.target.value;
+              onChange(val);
+              if (!val && searchField !== 'all') {
+                onSearchFieldChange?.('all');
+              }
+            }}
+            placeholder={placeholder}
+          />
+          {!value && (
+            <div className="search-shortcut-hint">
+              <span>Ctrl K</span>
+            </div>
+          )}
+          {value && (
+            <button
+              className="search-clear-btn"
+              onClick={() => {
+                onChange('');
+                onSearchFieldChange?.('all');
+                inputRef.current?.focus();
+              }}
+              title="Clear search"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </button>
+          )}
+        </div>
+      </div>
+      {typeof resultCount === 'number' && value && (
+        <div className="search-result-count">{resultCount} found</div>
+      )}
     </div>
+  );
+}
+
+export function HighlightText({ text, query }) {
+  if (!query || !text) return <>{text}</>;
+  const lowerText = String(text).toLowerCase();
+  const lowerQuery = String(query).toLowerCase();
+  const idx = lowerText.indexOf(lowerQuery);
+  if (idx === -1) return <>{text}</>;
+
+  return (
+    <>
+      {text.substring(0, idx)}
+      <mark className="search-highlight">{text.substring(idx, idx + query.length)}</mark>
+      {text.substring(idx + query.length)}
+    </>
   );
 }
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
-import { BrowserRouter, Navigate, Routes, Route, useLocation } from 'react-router-dom';
+import { BrowserRouter, Navigate, Routes, Route, useLocation, useNavigate } from 'react-router-dom';
 import { AppProvider, useApp } from './context/AppContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Sidebar from './components/Sidebar';
@@ -46,8 +46,42 @@ function PersonalKhataAccessibleRoute({ sidebarOpen, setSidebarOpen }) {
 
 function Layout({ children, sidebarOpen, setSidebarOpen }) {
   const location = useLocation();
+  const navigate = useNavigate();
   const { user, isAdmin } = useAuth();
   const [broadcastModalOpen, setBroadcastModalOpen] = useState(false);
+
+  useEffect(() => {
+    const handleGlobalKeyDown = (e) => {
+      const activeElement = document.activeElement;
+      if (activeElement && (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA')) {
+        return;
+      }
+      
+      if (isAdmin && e.altKey) {
+        if (e.code === 'KeyA') {
+          e.preventDefault();
+          if (location.pathname === '/ghausia') {
+            window.dispatchEvent(new Event('open-new-lot'));
+          } else {
+            navigate(`/ghausia?action=new&t=${Date.now()}`);
+          }
+        } else if (e.code === 'KeyP' || e.code === 'KeyR') {
+          e.preventDefault();
+          if (location.pathname === '/payments') {
+            window.dispatchEvent(new Event('open-new-payment'));
+          } else {
+            navigate(`/payments?action=new&t=${Date.now()}`);
+          }
+        }
+      }
+    };
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, [isAdmin, location.pathname, navigate]);
+
+
+
+
 
   useEffect(() => {
     if (window.matchMedia('(max-width: 768px)').matches) {

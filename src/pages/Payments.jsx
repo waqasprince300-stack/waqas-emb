@@ -237,6 +237,7 @@ export default function Payments() {
   const [customDateRange, setCustomDateRange] = useState({ start: '', end: '' });
   const [ownerNameFilter, setOwnerNameFilter] = useState('All');
   const [search, setSearch] = useState('');
+  const [searchField, setSearchField] = useState('all');
   const [form, setForm] = useState({
     type: 'Received',
     amount: '',
@@ -410,24 +411,35 @@ export default function Payments() {
 
         if (searchTerm) {
           const { lotLabel, designLabel } = resolveLinkedLotDesignDisplay(p, lotsLookupForLinks);
-          const haystack = [
-            p.party,
-            p.note,
-            lotLabel,
-            designLabel,
-            pt,
-            p.type,
-            String(p.amount ?? ''),
-            p.date,
-            formatDisplayDate(p.date, ''),
-          ]
-            .map((v) => String(v || '').toLowerCase())
-            .join(' ');
-          if (!haystack.includes(searchTerm)) return false;
+          const party = String(p.party || '').toLowerCase();
+          const note = String(p.note || '').toLowerCase();
+          const lot = String(lotLabel || '').toLowerCase();
+          const design = String(designLabel || '').toLowerCase();
+          const amount = String(p.amount ?? '').toLowerCase();
+          const date = String(formatDisplayDate(p.date, '') || '').toLowerCase();
+
+          let matchQ = true;
+          if (searchField === 'all') {
+            const haystack = [party, note, lot, design, pt, String(p.type || ''), amount, date].map(v => v.toLowerCase()).join(' ');
+            matchQ = haystack.includes(searchTerm);
+          } else if (searchField === 'party') {
+            matchQ = party.includes(searchTerm);
+          } else if (searchField === 'note') {
+            matchQ = note.includes(searchTerm);
+          } else if (searchField === 'lotNo') {
+            matchQ = lot.includes(searchTerm);
+          } else if (searchField === 'designNo') {
+            matchQ = design.includes(searchTerm);
+          } else if (searchField === 'amount') {
+            matchQ = amount.includes(searchTerm);
+          } else if (searchField === 'date') {
+            matchQ = date.includes(searchTerm);
+          }
+          if (!matchQ) return false;
         }
         return true;
       }),
-    [combinedRowsWithBalance, typeFilter, ownerNameFilter, isAdmin, isParty, searchTerm, lotsLookupForLinks, dateRange, customDateRange]
+    [combinedRowsWithBalance, typeFilter, ownerNameFilter, isAdmin, isParty, searchTerm, searchField, lotsLookupForLinks, dateRange, customDateRange]
   );
   const sortedFiltered = useMemo(
     () => [...filtered].sort((a, b) => compareRowsByUpdatedNewestFirst(a, b, 'payment')),
@@ -439,8 +451,29 @@ export default function Payments() {
   const paginatedPayments = sortedFiltered.slice(pageStart, pageStart + PAGE_SIZE);
 
   useEffect(() => {
+    const handleOpenPayment = () => {
+      setErrors({});
+      setForm({
+        type: 'Received',
+        amount: '',
+        party: 'Owner',
+        date: '',
+        note: '',
+        linkedLot: '',
+        ownerWorkspaceId: activeBusinessOwnerId || '',
+        receipt: '',
+      });
+      setModal(true);
+    };
+    window.addEventListener('open-new-payment', handleOpenPayment);
+    return () => window.removeEventListener('open-new-payment', handleOpenPayment);
+  }, [activeBusinessOwnerId]);
+
+
+
+  useEffect(() => {
     setCurrentPage(1);
-  }, [typeFilter, ownerNameFilter, searchTerm, dateRange, customDateRange]);
+  }, [typeFilter, ownerNameFilter, searchTerm, searchField, dateRange, customDateRange]);
 
   useEffect(() => {
     if (currentPage > totalPages) {
@@ -1045,44 +1078,28 @@ export default function Payments() {
         <SearchBar
           value={search}
           onChange={setSearch}
-          placeholder={isParty ? 'Search lot, design, note…' : 'Search party, lot, design, note…'}
+          placeholder="Search..."
+          searchField={searchField}
+          onSearchFieldChange={setSearchField}
+          resultCount={filtered.length}
+          searchOptions={[
+            { label: 'All', value: 'all' },
+            { label: 'Party', value: 'party' },
+            { label: 'Lot No', value: 'lotNo' },
+            { label: 'Design', value: 'designNo' },
+            { label: 'Note', value: 'note' },
+            { label: 'Amount', value: 'amount' },
+            { label: 'Date', value: 'date' },
+          ]}
         />
-        <select
-          className="form-select pl-toolbar-filter pl-toolbar-filter--type"
-          value={typeFilter}
-          onChange={(e) => setTypeFilter(e.target.value)}
-        >
-          <option value="All">All Types</option>
-          <option>Received</option>
-          <option>Paid</option>
-          <option value="Bill">{isParty ? 'Work bill' : 'Bill'}</option>
-        </select>
-        <DateRangeSelect
-          value={dateRange}
-          onChange={setDateRange}
-          customStart={customDateRange.start}
-          customEnd={customDateRange.end}
-          onCustomChange={setCustomDateRange}
-          className="pl-toolbar-filter hide-print"
-        />
-        {isParty && (
-          <>
-            <button
-              className="btn btn-view-mode hide-print"
-              onClick={() => window.print()}
-              style={{ fontSize: 13, padding: '4px 10px', whiteSpace: 'nowrap' }}
-            >
-              Download PDF
-            </button>
-          </>
-        )}
         {isAdmin && businessOwners.length > 0 && (
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }} className="pl-toolbar-filter">
             <select
-              className="form-select pl-toolbar-filter pl-toolbar-filter--owner"
+              className="form-select pl-toolbar-filter--owner"
               value={ownerNameFilter}
               onChange={(e) => setOwnerNameFilter(e.target.value)}
               aria-label="Filter by owner name"
+              style={{ flex: 1, width: '100%' }}
             >
               <option value="All">All owners</option>
               {businessOwnersSorted.map((o) => {
@@ -1104,6 +1121,33 @@ export default function Payments() {
               </button>
             )}
           </div>
+        )}
+        <DateRangeSelect
+          value={dateRange}
+          onChange={setDateRange}
+          customStart={customDateRange.start}
+          customEnd={customDateRange.end}
+          onCustomChange={setCustomDateRange}
+          className="pl-toolbar-filter hide-print"
+        />
+        <select
+          className="form-select pl-toolbar-filter pl-toolbar-filter--type"
+          value={typeFilter}
+          onChange={(e) => setTypeFilter(e.target.value)}
+        >
+          <option value="All">All Types</option>
+          <option>Received</option>
+          <option>Paid</option>
+          <option value="Bill">{isParty ? 'Work bill' : 'Bill'}</option>
+        </select>
+        {isParty && (
+          <button
+            className="btn btn-view-mode hide-print pl-toolbar-filter"
+            onClick={() => window.print()}
+            style={{ fontSize: 13, padding: '4px 10px', whiteSpace: 'nowrap' }}
+          >
+            Download PDF
+          </button>
         )}
         <span className="pl-toolbar-meta" style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
           {filtered.length} records
