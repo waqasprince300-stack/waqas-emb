@@ -25,6 +25,7 @@ import {
 } from '../utils/paymentDisplay';
 
 import { normalizeLotKey, lotDisplayRef } from '../utils/lotKeyHelpers';
+import useDebounce from '../hooks/useDebounce';
 
 /** Admin-approved / billable lot for party statement (mirrors Party Ledger “completed” side). */
 function isLotPartyBillableStatus(status) {
@@ -361,7 +362,8 @@ export default function Payments() {
     return reportingLots;
   }, [isParty, partyCrossLots, ghausiaLots, reportingLots]);
 
-  const searchTerm = search.trim().toLowerCase();
+  const debouncedSearch = useDebounce(search, 300);
+  const searchTerm = debouncedSearch.trim().toLowerCase();
 
   const combinedRowsWithBalance = useMemo(() => {
     // Calculate running balance for party perspective

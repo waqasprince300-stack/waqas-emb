@@ -7,6 +7,7 @@ export default function LedgerFilterBar({
   setSearch,
   searchField,
   setSearchField,
+  resultCount,
   workspaceFilter,
   setWorkspaceFilter,
   partyFilter,
@@ -43,6 +44,7 @@ export default function LedgerFilterBar({
             placeholder="Search..." 
             searchField={searchField}
             onSearchFieldChange={setSearchField}
+            resultCount={resultCount}
             searchOptions={[
               { label: 'All', value: 'all' },
               { label: 'Lot No', value: 'lotNo' },

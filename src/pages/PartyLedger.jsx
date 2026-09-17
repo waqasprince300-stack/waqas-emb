@@ -34,6 +34,7 @@ import PLReceiptPreviewModal from '../components/partyLedger/PLReceiptPreviewMod
 import PLRevisionRequestModal from '../components/partyLedger/PLRevisionRequestModal';
 import PLRevisionReviewModal from '../components/partyLedger/PLRevisionReviewModal';
 import { adminLotNotDispatched } from '../utils/ledgerStatusHelpers';
+import useDebounce from '../hooks/useDebounce';
 
 // From the party's perspective: dispatched = In Progress, received back = Completed
 // If party name is unknown, status should be Pending
@@ -188,14 +189,7 @@ export default function PartyLedger() {
   const PAGE_SIZE = 10;
   const [search, setSearch] = useState('');
   const [searchField, setSearchField] = useState('all');
-  const [debouncedSearch, setDebouncedSearch] = useState('');
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedSearch(search);
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [search]);
+  const debouncedSearch = useDebounce(search, 300);
 
   const [workspaceFilter, setWorkspaceFilter] = useState('All');
   const [partyFilter, setPartyFilter] = useState('All');

@@ -54,6 +54,7 @@ import LotTableDesktop from '../components/ghausia/LotTableDesktop';
 import LotMobileViews from '../components/ghausia/LotMobileViews';
 import PaymentModal from '../components/ghausia/PaymentModal';
 import CompleteBillModal from '../components/ghausia/CompleteBillModal';
+import useDebounce from '../hooks/useDebounce';
 
 export default function GhausiaCollection() {
   const location = useLocation();
@@ -103,11 +104,7 @@ export default function GhausiaCollection() {
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [search, setSearch] = useState('');
   const [searchField, setSearchField] = useState('all');
-  const [debouncedSearch, setDebouncedSearch] = useState('');
-  useEffect(() => {
-    const timer = setTimeout(() => setDebouncedSearch(search), 300);
-    return () => clearTimeout(timer);
-  }, [search]);
+  const debouncedSearch = useDebounce(search, 300);
   const [statusFilter, setStatusFilter] = useState('All');
   const [stuckLotIdsFilter, setStuckLotIdsFilter] = useState([]);
   const [partyFilter, setPartyFilter] = useState('All');
@@ -145,11 +142,7 @@ export default function GhausiaCollection() {
   const [billableCollapsed, setBillableCollapsed] = useState(false);
   const [billableSearch, setBillableSearch] = useState('');
   const [highlightedBillableLotId, setHighlightedBillableLotId] = useState(null);
-  const [debouncedBillableSearch, setDebouncedBillableSearch] = useState('');
-  useEffect(() => {
-    const timer = setTimeout(() => setDebouncedBillableSearch(billableSearch), 300);
-    return () => clearTimeout(timer);
-  }, [billableSearch]);
+  const debouncedBillableSearch = useDebounce(billableSearch, 300);
   const [billablePage, setBillablePage] = useState(1);
   const BILLABLE_PAGE_SIZE = 5;
   /** Instant UI while complete/settle API calls finish (removed when server state catches up). */

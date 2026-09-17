@@ -165,7 +165,15 @@ export function SearchBar({
                 onSearchFieldChange?.('all');
               }
             }}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') {
+                onChange('');
+                onSearchFieldChange?.('all');
+                inputRef.current?.blur();
+              }
+            }}
             placeholder={placeholder}
+            aria-label="Search"
           />
           {!value && (
             <div className="search-shortcut-hint">
@@ -199,16 +207,17 @@ export function SearchBar({
 
 export function HighlightText({ text, query }) {
   if (!query || !text) return <>{text}</>;
-  const lowerText = String(text).toLowerCase();
-  const lowerQuery = String(query).toLowerCase();
-  const idx = lowerText.indexOf(lowerQuery);
-  if (idx === -1) return <>{text}</>;
-
+  const escaped = String(query).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const regex = new RegExp(`(${escaped})`, 'gi');
+  const parts = String(text).split(regex);
+  if (parts.length === 1) return <>{text}</>;
   return (
     <>
-      {text.substring(0, idx)}
-      <mark className="search-highlight">{text.substring(idx, idx + query.length)}</mark>
-      {text.substring(idx + query.length)}
+      {parts.map((part, i) =>
+        part.toLowerCase() === String(query).toLowerCase()
+          ? <mark key={i} className="search-highlight">{part}</mark>
+          : part
+      )}
     </>
   );
 }

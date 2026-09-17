@@ -12,6 +12,7 @@ import {
   formatDisplayDateTime,
 } from '../utils/dateFilters';
 import { getAdminLedgerOrBusinessBill } from '../utils/partyBillPrivacy';
+import useDebounce from '../hooks/useDebounce';
 
 function toPartyFormFields(initial, businessOwners = []) {
   if (!initial) {
@@ -394,8 +395,10 @@ export default function Parties() {
     [reportingPayments, dateRange, customRange]
   );
 
-  const filtered = parties.filter((p) => {
-    const q = search.toLowerCase();
+  const debouncedSearch = useDebounce(search, 300);
+
+  const filtered = useMemo(() => parties.filter((p) => {
+    const q = debouncedSearch.toLowerCase();
     if (!q) return true;
 
     const name = (p.name || '').toLowerCase();
@@ -413,7 +416,7 @@ export default function Parties() {
       matchQ = address.includes(q);
     }
     return matchQ;
-  });
+  }), [parties, debouncedSearch, searchField]);
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safeCurrentPage = Math.min(currentPage, totalPages);
   const pageStart = (safeCurrentPage - 1) * PAGE_SIZE;
@@ -421,7 +424,7 @@ export default function Parties() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [search, searchField, dateRange]);
+  }, [debouncedSearch, searchField, dateRange]);
 
   useEffect(() => {
     if (currentPage > totalPages) {

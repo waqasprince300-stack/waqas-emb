@@ -1330,7 +1330,7 @@ tbody tr:last-child td {
   align-items: center;
   flex: 1;
   min-width: 250px;
-  max-width: 460px;
+  max-width: 550px; /* Increased from 460px to give more room for search pills + results */
   border: 1.5px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--card-bg);
@@ -1342,7 +1342,7 @@ tbody tr:last-child td {
   display: flex;
   align-items: center;
   flex: 1;
-  width: 100%;
+  min-width: 0; /* Let flexbox handle it instead of forcing 100% */
 }
 
 .search-input input {
@@ -1471,6 +1471,9 @@ tbody tr:last-child td {
   font-weight: 500;
   color: var(--text-muted);
   white-space: nowrap;
+  padding-left: 8px;
+  padding-right: 12px;
+  flex-shrink: 0;
 }
 
 .search-highlight {

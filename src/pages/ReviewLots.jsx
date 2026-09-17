@@ -10,6 +10,7 @@ import { compareRowsByUpdatedNewestFirst, formatDisplayDateTime } from '../utils
 import { getAdminLedgerOrBusinessBill } from '../utils/partyBillPrivacy';
 
 import { normalizeLotKey, lotKeyFromLot } from '../utils/lotKeyHelpers';
+import useDebounce from '../hooks/useDebounce';
 
 function hasOwnerReceivedForLot(lot, payments) {
   const k = normalizeLotKey(lotKeyFromLot(lot));
@@ -89,8 +90,10 @@ export default function ReviewLots() {
   const partyName = (pid, fallback) =>
     parties.find((p) => String(p.id) === String(pid || ''))?.name || fallback || '—';
 
+  const debouncedSearch = useDebounce(search, 300);
+
   const pendingLots = useMemo(() => {
-    const q = search.trim().toLowerCase();
+    const q = debouncedSearch.trim().toLowerCase();
     const list = reportingLots.filter((l) => {
       if (
         String(l.status || '')
@@ -117,7 +120,7 @@ export default function ReviewLots() {
       return matchQ;
     });
     return [...list].sort((a, b) => compareRowsByUpdatedNewestFirst(a, b, 'lot'));
-  }, [reportingLots, search, searchField, parties]);
+  }, [reportingLots, debouncedSearch, searchField, parties]);
 
   /** Deep link: /review-lots?lotId=… → focus that pending lot. */
   useEffect(() => {
