@@ -510,7 +510,7 @@ export function AppProvider({ children }) {
           return;
         }
 
-        if (!isWorkspaceSwitch) {
+        if (isFirst) {
           const reqStart = Date.now();
           const minimal = await queryClient.fetchQuery({
             queryKey: ['bootstrap', user?._id, user?.role, 'minimal'],
