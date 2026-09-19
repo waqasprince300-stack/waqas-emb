@@ -52,7 +52,7 @@ export default function LotTableDesktop({
               </tr>
             ) : (
               paginatedLots.map((l) => (
-                <tr key={l.id} className={l.suitComponent === 'dupatta' ? 'lot-row-dupatta' : l.suitComponent === 'main' && l.suitType === '3-piece' ? 'lot-row-main' : ''}>
+                <tr key={l.id} className={`animate-fade-in ${l.suitComponent === 'dupatta' ? 'lot-row-dupatta' : l.suitComponent === 'main' && l.suitType === '3-piece' ? 'lot-row-main' : ''}`}>
                   <td style={{ fontWeight: 700, color: 'var(--primary, #1e40af)', whiteSpace: 'nowrap' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                       {l.lotNumber ? <HighlightText text={l.lotNumber} query={search} /> : <span style={{ color: 'var(--text-muted, #94a3b8)', fontStyle: 'italic', fontWeight: 500 }}>(No Lot)</span>}

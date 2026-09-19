@@ -53,16 +53,10 @@ export default function PLToolbar({
           alignItems: 'center',
           justifyContent: 'space-between',
           gap: 8,
-          flexWrap: 'nowrap',
-          overflowX: 'auto',
           marginBottom: 16,
-          padding: 4,
-          background: 'var(--primary-bg, #f8fafc)',
-          borderRadius: 10,
-          border: '1px solid var(--border, #e2e8f0)',
         }}
       >
-        <div style={{ display: 'flex', gap: 4 }}>
+        <div className="segmented-tabs">
           {[
             {
               id: 'other',
@@ -83,29 +77,26 @@ export default function PLToolbar({
                 role="tab"
                 aria-selected={active}
                 onClick={() => setLedgerLotsTab(t.id)}
+                className={`segmented-tab ${active ? 'active' : ''}`}
                 style={{
-                  padding: '10px 16px',
-                  borderRadius: 8,
-                  border: active ? '1px solid var(--success, #15803d)' : '1px solid transparent',
-                  background: active ? 'var(--card-bg, #fff)' : 'transparent',
-                  color: active ? 'var(--success, #15803d)' : 'var(--text-secondary, #64748b)',
-                  fontWeight: active ? 700 : 600,
-                  fontSize: 14,
-                  cursor: 'pointer',
-                  boxShadow: active ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
                 }}
               >
                 {t.label}
                 {t.count != null && (
                   <span
+                    className="glass-badge"
                     style={{
-                      marginLeft: 8,
-                      fontSize: 12,
-                      fontWeight: 700,
-                      opacity: 0.9,
+                      padding: '2px 6px',
+                      fontSize: 11,
+                      background: active ? 'var(--primary-bg, #eff6ff)' : 'rgba(0,0,0,0.06)',
+                      color: active ? 'var(--primary, #1e40af)' : 'inherit',
+                      border: 'none',
                     }}
                   >
-                    ({t.count})
+                    {t.count}
                   </span>
                 )}
               </button>
@@ -114,20 +105,20 @@ export default function PLToolbar({
         </div>
 
         {/* View Switcher: Table View vs Tile View (Mobile Only) */}
-        <div className="mobile-view-switcher" style={{ display: 'flex', alignItems: 'center', gap: 4, paddingRight: 4 }}>
+        <div className="segmented-tabs mobile-view-switcher">
           <button
             type="button"
-            className={`btn btn-sm ${viewMode === 'table' ? 'btn-primary' : 'btn-ghost'}`}
+            className={`segmented-tab ${viewMode === 'table' ? 'active' : ''}`}
             onClick={() => setViewMode('table')}
-            style={{ padding: '3px 8px', fontSize: 11 }}
+            style={{ padding: '6px 10px', fontSize: 12 }}
           >
             List
           </button>
           <button
             type="button"
-            className={`btn btn-sm ${viewMode === 'tile' ? 'btn-primary' : 'btn-ghost'}`}
+            className={`segmented-tab ${viewMode === 'tile' ? 'active' : ''}`}
             onClick={() => setViewMode('tile')}
-            style={{ padding: '3px 8px', fontSize: 11 }}
+            style={{ padding: '6px 10px', fontSize: 12 }}
           >
             Tiles
           </button>

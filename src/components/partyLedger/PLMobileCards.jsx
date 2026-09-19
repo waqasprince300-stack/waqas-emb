@@ -51,7 +51,7 @@ export default function PLMobileCards({
           const displayComplete = getDisplayCompleteDate(l, pe);
 
           return (
-            <div key={`pl-mob-${l.id}`} className="party-ledger-mobile-card">
+            <div key={`pl-mob-${l.id}`} className="party-ledger-mobile-card modern-lot-card animate-fade-in">
               <div className="pl-mob-header">
                 <div>
                   <span className="pl-mob-lot-no">Lot #{l.lotNo || l.lotNumber}</span>

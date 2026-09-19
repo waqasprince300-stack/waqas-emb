@@ -189,10 +189,11 @@ class ApiService {
 
   // Bootstrap — consolidated initial-load payload (one round-trip instead of 7+ calls)
   async getBootstrap(opts = {}) {
-    const { minimal = false, includeReceipts = false } = opts;
+    const { minimal = false, includeReceipts = false, scopeOnly = '' } = opts;
     const qs = new URLSearchParams();
     if (minimal) qs.set('minimal', '1');
     if (includeReceipts) qs.set('includeReceipts', '1');
+    if (scopeOnly) qs.set('scopeOnly', scopeOnly);
     const q = qs.toString();
     const meta = { ...metaPartySkipTenant(opts) };
     // The minimal payload is workspace-independent (reporting = scope=all, parties by user).

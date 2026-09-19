@@ -44,8 +44,8 @@ export const connectRealtime = () => {
     auth: { token },
     transports: ['websocket', 'polling'],
     reconnection: true,
-    reconnectionDelay: 1500,
-    reconnectionDelayMax: 10000,
+    reconnectionDelay: 800,
+    reconnectionDelayMax: 8000,
     timeout: 10000,
     autoConnect: true,
   };

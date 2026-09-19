@@ -344,14 +344,16 @@ export default function Sidebar({ sidebarOpen: _sidebarOpen, setSidebarOpen }) {
                 gap: 11,
                 padding: '10px 12px',
                 borderRadius: 9,
-                marginBottom: 3,
+                marginBottom: 4,
                 textDecoration: 'none',
                 fontSize: 13.5,
-                fontWeight: isActive ? 600 : 400,
+                fontWeight: isActive ? 600 : 500,
                 color: isActive ? 'var(--sidebar-active, #ffffff)' : 'var(--text-muted, #94a3b8)',
                 background: isActive ? 'var(--sidebar-active-bg, rgba(59,130,246,0.18))' : 'transparent',
-                transition: 'all 0.15s',
+                backdropFilter: isActive ? 'blur(8px)' : 'none',
+                transition: 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
                 borderLeft: isActive ? '3px solid var(--sidebar-active, #3b82f6)' : '3px solid transparent',
+                transform: 'translateZ(0)',
               })}
             >
               <span style={{ opacity: 0.85 }}>{item.icon}</span>

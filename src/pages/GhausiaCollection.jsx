@@ -411,6 +411,7 @@ export default function GhausiaCollection() {
 
   // ─── Filtered & Paginated Lots ───
   const filtered = useMemo(() => {
+    const partyMap = new Map(parties.map(p => [String(p.id), (p.name || '').toLowerCase()]));
     const list = effectiveCollectionLots.filter((l) => {
       if (highlightedBillableLotId && String(l.id) !== String(highlightedBillableLotId)) return false;
       const q = debouncedSearch.toLowerCase();
@@ -418,7 +419,7 @@ export default function GhausiaCollection() {
       const designNo = String(l.designNo || '').toLowerCase();
       const fabric = String(l.fabric || '').toLowerCase();
       const description = String(l.description || '').toLowerCase();
-      const partyName = String(parties.find(p => String(p.id) === String(l.partyId))?.name || '').toLowerCase();
+      const partyName = partyMap.get(String(l.partyId)) || '';
 
       let matchQ = true;
       if (q) {
@@ -1397,11 +1398,10 @@ export default function GhausiaCollection() {
           alignItems: 'center',
           justifyContent: 'space-between',
           gap: 6,
-          marginBottom: 10,
-          borderBottom: '1px solid var(--border)',
+          marginBottom: 16,
         }}
       >
-        <div style={{ display: 'flex', gap: 2 }}>
+        <div className="segmented-tabs">
           {[
             { id: 'others', label: othersTabStatusLabel, count: othersTabCount, hint: othersTabHint },
             {
@@ -1417,31 +1417,23 @@ export default function GhausiaCollection() {
               role="tab"
               aria-selected={lotTableTab === tab.id}
               title={tab.hint}
+              className={`segmented-tab ${lotTableTab === tab.id ? 'active' : ''}`}
               onClick={() => { setLotTableTab(tab.id); setStuckLotIdsFilter([]); }}
               style={{
-                padding: '8px 10px',
-                fontSize: 13,
-                fontWeight: 600,
-                border: 'none',
-                borderBottom: lotTableTab === tab.id ? '2px solid var(--primary, #1e40af)' : '2px solid transparent',
-                marginBottom: -1,
-                background: 'transparent',
-                color: lotTableTab === tab.id ? 'var(--primary, #1e40af)' : 'var(--text-secondary)',
-                cursor: 'pointer',
                 display: 'inline-flex',
                 alignItems: 'center',
-                gap: 5,
+                gap: 6,
               }}
             >
               {tab.label}
               <span
+                className="glass-badge"
                 style={{
+                  padding: '2px 6px',
                   fontSize: 11,
-                  fontWeight: 700,
-                  background: lotTableTab === tab.id ? 'var(--primary-bg, #eff6ff)' : 'var(--primary-bg, #f3f4f6)',
-                  color: lotTableTab === tab.id ? 'var(--primary, #1e40af)' : 'var(--text-muted)',
-                  padding: '1px 6px',
-                  borderRadius: 999,
+                  background: lotTableTab === tab.id ? 'var(--primary-bg, #eff6ff)' : 'rgba(0,0,0,0.06)',
+                  color: lotTableTab === tab.id ? 'var(--primary, #1e40af)' : 'inherit',
+                  border: 'none'
                 }}
               >
                 {tab.count}
@@ -1451,20 +1443,20 @@ export default function GhausiaCollection() {
         </div>
 
         {/* View Switcher */}
-        <div className="mobile-view-switcher" style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
+        <div className="segmented-tabs mobile-view-switcher">
           <button
             type="button"
-            className={`btn btn-sm ${viewMode === 'table' ? 'btn-primary' : 'btn-ghost'}`}
+            className={`segmented-tab ${viewMode === 'table' ? 'active' : ''}`}
             onClick={() => setViewMode('table')}
-            style={{ padding: '3px 8px', fontSize: 11 }}
+            style={{ padding: '6px 10px', fontSize: 12 }}
           >
             List
           </button>
           <button
             type="button"
-            className={`btn btn-sm ${viewMode === 'tile' ? 'btn-primary' : 'btn-ghost'}`}
+            className={`segmented-tab ${viewMode === 'tile' ? 'active' : ''}`}
             onClick={() => setViewMode('tile')}
-            style={{ padding: '3px 8px', fontSize: 11 }}
+            style={{ padding: '6px 10px', fontSize: 12 }}
           >
             Tiles
           </button>

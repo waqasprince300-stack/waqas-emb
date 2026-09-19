@@ -29,7 +29,7 @@ export default function LotMobileViews({
           <EmptyState message="No lots found" />
         ) : (
           paginatedLots.map((l) => (
-            <div key={`gh-tile-${l.id}`} className={`lot-tile-card ${l.suitComponent === 'dupatta' ? 'lot-row-dupatta' : l.suitComponent === 'main' && l.suitType === '3-piece' ? 'lot-row-main' : ''}`}>
+            <div key={`gh-tile-${l.id}`} className={`lot-tile-card modern-lot-card animate-fade-in ${l.suitComponent === 'dupatta' ? 'lot-row-dupatta' : l.suitComponent === 'main' && l.suitType === '3-piece' ? 'lot-row-main' : ''}`}>
               <div className="lot-tile-header">
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
@@ -120,7 +120,7 @@ export default function LotMobileViews({
         <EmptyState message="No lots found" />
       ) : (
         paginatedLots.map((l) => (
-          <div key={`gh-mob-${l.id}`} className="ghausia-mobile-card">
+          <div key={`gh-mob-${l.id}`} className="ghausia-mobile-card modern-lot-card animate-fade-in">
             <div className="gh-mob-header">
               <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>

@@ -373,6 +373,8 @@ export default function ReviewLots() {
               <tr>
                 <th>Lot</th>
                 <th>Design</th>
+                <th>Color</th>
+                <th>Pieces</th>
                 <th>Party</th>
                 <th>Collection</th>
                 <th>Submitted</th>
@@ -405,6 +407,8 @@ export default function ReviewLots() {
                     >
                       <td style={{ fontWeight: 700, whiteSpace: 'nowrap' }}>{l.lotNo || l.lotNumber}</td>
                       <td style={{ whiteSpace: 'nowrap' }}>{l.designNo}</td>
+                      <td style={{ whiteSpace: 'nowrap' }}>{l.colors || '—'}</td>
+                      <td style={{ whiteSpace: 'nowrap' }}>{l.pieces || l.quantity || '—'}</td>
                       <td>{partyName(l.partyId, l.partyName)}</td>
                       <td style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
                         {businessName(l.businessOwnerId)}
@@ -500,7 +504,7 @@ export default function ReviewLots() {
             const pe = reportingPartyEdits[l.id] || {};
             const submittedLabel = formatReviewSubmittedAt(l, pe);
             return (
-              <div key={l.id} className="review-mobile-card" style={String(highlightLotId) === String(l.id) ? { outline: '2px solid var(--warning, #f59e0b)' } : undefined}>
+              <div key={l.id} className="review-mobile-card modern-lot-card animate-fade-in" style={String(highlightLotId) === String(l.id) ? { outline: '2px solid var(--warning, #f59e0b)' } : undefined}>
                 <div className="rl-mob-header">
                   <div className="rl-mob-lot-no">{l.lotNo || l.lotNumber}</div>
                   <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--danger, #dc2626)' }}>
@@ -511,6 +515,14 @@ export default function ReviewLots() {
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13.5 }}>
                     <span style={{ color: 'var(--text-secondary)' }}>Design:</span>
                     <span style={{ fontWeight: 600 }}>{l.designNo}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13.5 }}>
+                    <span style={{ color: 'var(--text-secondary)' }}>Color:</span>
+                    <span style={{ fontWeight: 600 }}>{l.colors || '—'}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13.5 }}>
+                    <span style={{ color: 'var(--text-secondary)' }}>Pieces:</span>
+                    <span style={{ fontWeight: 600 }}>{l.pieces || l.quantity || '—'}</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13.5 }}>
                     <span style={{ color: 'var(--text-secondary)' }}>Party:</span>

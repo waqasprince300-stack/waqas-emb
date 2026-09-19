@@ -34,9 +34,9 @@ const WORKSPACE_VIEW_ALL_KEY = 'waqas_emb_workspace_view_all';
 export const ADMIN_ALL_WORKSPACES_ID = '__all_workspaces__';
 
 const FULL_REFRESH_INTERVAL_MS = 45_000;
-const NAV_REFRESH_MIN_INTERVAL_MS = 10_000;
+const NAV_REFRESH_MIN_INTERVAL_MS = 30_000;
 const REALTIME_MIN_INTERVAL_MS = 2_500;
-const WRITE_SETTLE_MS = 3_200;
+const WRITE_SETTLE_MS = 2_500;
 
 export function AppProvider({ children }) {
   const { isAuthenticated, user } = useAuth();
@@ -308,17 +308,18 @@ export function AppProvider({ children }) {
     setBackgroundRefreshing(true);
     try {
       const reqStart = Date.now();
-      const full = await queryClient.fetchQuery({
-        queryKey: [
-          'bootstrap',
-          user?._id,
-          user?.role,
-          isAdminUser ? String(activeBusinessOwnerId || '') : 'party',
-          'full',
-        ],
-        queryFn: () => apiService.getBootstrap({ ...partyOpts }),
-        staleTime: 0,
-      });
+      const fullBootstrapKey = [
+        'bootstrap',
+        user?._id,
+        user?.role,
+        isAdminUser ? String(activeBusinessOwnerId || '') : 'party',
+        'full',
+      ];
+      // Directly call apiService to ensure reqStart accurately reflects the start of the network request.
+      // This prevents React Query from deduplicating an already in-flight (and thus stale) request
+      // and assigning it this newer reqStart timestamp.
+      const full = await apiService.getBootstrap({ ...partyOpts });
+      queryClient.setQueryData(fullBootstrapKey, full);
       if (gen !== loadGenerationRef.current) return;
       if (pendingWritesRef.current > 0 || lastWriteAtRef.current > reqStart) return;
 
@@ -482,6 +483,33 @@ export function AppProvider({ children }) {
       }
 
       try {
+        // Workspace switch: skip minimal call (owners/parties already loaded),
+        // use scopeOnly=workspace to skip 3 expensive reporting queries on backend.
+        if (isWorkspaceSwitch && isAdminUser) {
+          const reqStart = Date.now();
+          const scoped = await apiService.getBootstrap({ ...partyOpts, scopeOnly: 'workspace' });
+          if (gen !== loadGenerationRef.current) return;
+          if (pendingWritesRef.current > 0 || lastWriteAtRef.current > reqStart) return;
+
+          queryClient.setQueryData(fullBootstrapKey, scoped);
+
+          if (Array.isArray(scoped?.parties)) setParties(scoped.parties.map(normalizeParty));
+          applyScoped(scoped || {});
+          // Reporting data is preserved from the previous load — no reset.
+          // Schedule a background full refresh to eventually update reporting data.
+          setBootstrapLoadError(null);
+          markLoaded(true);
+
+          // Background: fetch full payload (with reporting) to keep reporting data fresh.
+          setTimeout(() => {
+            if (loadGenerationRef.current === gen) {
+              lastAnyRefreshRef.current = Date.now();
+              void runLightBootstrapRefresh();
+            }
+          }, 1500);
+          return;
+        }
+
         if (!isWorkspaceSwitch) {
           const reqStart = Date.now();
           const minimal = await queryClient.fetchQuery({
@@ -531,12 +559,15 @@ export function AppProvider({ children }) {
         }
 
         const reqStart = Date.now();
-        const full = await queryClient.fetchQuery({
-          queryKey: fullBootstrapKey,
-          queryFn: () => apiService.getBootstrap({ ...partyOpts }),
-        });
+        // Directly call apiService to ensure reqStart accurately reflects the start of the network request.
+        // This prevents React Query from deduplicating an already in-flight (and thus stale) request
+        // and assigning it this newer reqStart timestamp.
+        const full = await apiService.getBootstrap({ ...partyOpts });
         if (gen !== loadGenerationRef.current) return;
         if (pendingWritesRef.current > 0 || lastWriteAtRef.current > reqStart) return;
+
+        // Update the React Query cache manually so other components can still access it if needed
+        queryClient.setQueryData(fullBootstrapKey, full);
 
         if (Array.isArray(full?.parties)) setParties(full.parties.map(normalizeParty));
         applyScoped(full || {});
@@ -568,6 +599,7 @@ export function AppProvider({ children }) {
     isAuthenticated,
     queryClient,
     refreshTick,
+    runLightBootstrapRefresh,
     setActiveBusinessOwnerId,
     setBusinessOwners,
     setParties,
@@ -592,7 +624,7 @@ export function AppProvider({ children }) {
         timer = setTimeout(() => {
           lastAnyRefreshRef.current = Date.now();
           void runLightBootstrapRefresh();
-        }, 300);
+        }, 150);
       }
     };
 
@@ -665,7 +697,7 @@ export function AppProvider({ children }) {
       timer = setTimeout(() => {
         if (isRefreshSuppressed()) {
           if (timer) clearTimeout(timer);
-          timer = setTimeout(() => handleChange(null), WRITE_SETTLE_MS);
+          timer = setTimeout(() => handleChange(payload), WRITE_SETTLE_MS + 50);
           return;
         }
         lastAnyRefreshRef.current = Date.now();
@@ -673,7 +705,7 @@ export function AppProvider({ children }) {
         pendingLotIds.clear();
         setLedgerReceiptsVersion((v) => v + 1);
         void runLightBootstrapRefresh();
-      }, 400);
+      }, 200);
     };
 
     const unsubscribe = onDataChanged(handleChange);
@@ -684,6 +716,7 @@ export function AppProvider({ children }) {
   }, [
     isAuthenticated,
     user?.role,
+    user?._id,
     runLightBootstrapRefresh,
     invalidateLotReceipt,
     isRefreshSuppressed,
