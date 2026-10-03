@@ -145,7 +145,7 @@ export default function PLEditModal({
           >
             {ledgerSaving ? (
               <>
-                <Loader /> Saving\u2026
+                <Loader /> Saving...
               </>
             ) : (
               'Save Changes'

@@ -43,7 +43,7 @@ export default function PLRevisionRequestModal({
           >
             {revisionSaving ? (
               <>
-                <Loader /> Sending{'\u2026'}
+                <Loader /> Sending…
               </>
             ) : (
               'Send request'
@@ -56,16 +56,16 @@ export default function PLRevisionRequestModal({
         This lot is complete. You are requesting a new bill amount from the business &mdash; the
         amount updates <strong>only when approved</strong>.
       </div>
-      <FormGroup label="Current ledger amount (\u20A8)">
+      <FormGroup label="Current ledger amount (₨)">
         <input
           className="form-input"
-          value={`\u20A8${Number(
+          value={`₨${Number(
             getPartyLedgerBillNumeric(ledgerPartyEdits[revisionRequest.lot.id] || {}) || 0
           ).toLocaleString()}`}
           disabled
         />
       </FormGroup>
-      <FormGroup label="New amount (\u20A8) *">
+      <FormGroup label="New amount (₨) *">
         <input
           className="form-input"
           type="number"

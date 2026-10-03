@@ -320,7 +320,7 @@ export default function PLDesktopTable({
                                 }}
                               >
                                 {billPicSavingLotId === l.id
-                                  ? 'Saving\u2026'
+                                  ? 'Saving...'
                                   : pe.receipt
                                     ? 'Change'
                                     : 'Add bill'}

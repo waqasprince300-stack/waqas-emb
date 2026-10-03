@@ -2,7 +2,7 @@
  * Business / owner-facing amount on the lot (sensitive — do not show to party login).
  */
 export function getBusinessBillAmount(lot) {
-  return Number(lot?.billAmount || 0);
+  return Math.round(Number(lot?.billAmount || 0));
 }
 
 /**
@@ -12,7 +12,7 @@ export function getBusinessBillAmount(lot) {
 export function getAdminLedgerOrBusinessBill(lot, partyEdit) {
   const pe = partyEdit || {};
   if (pe.partyBillAmount != null && pe.partyBillAmount !== '') {
-    const n = Number(pe.partyBillAmount);
+    const n = Math.round(Number(pe.partyBillAmount));
     if (Number.isFinite(n)) return n;
   }
   return getBusinessBillAmount(lot);
@@ -24,7 +24,7 @@ export function getAdminLedgerOrBusinessBill(lot, partyEdit) {
 export function getPartyLedgerBillDisplay(partyEdit) {
   const pe = partyEdit || {};
   if (pe.partyBillAmount == null || pe.partyBillAmount === '') return null;
-  const n = Number(pe.partyBillAmount);
+  const n = Math.round(Number(pe.partyBillAmount));
   if (!Number.isFinite(n)) return null;
   return n;
 }

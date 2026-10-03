@@ -26,6 +26,7 @@ import {
 
 import { normalizeLotKey, lotDisplayRef } from '../utils/lotKeyHelpers';
 import useDebounce from '../hooks/useDebounce';
+import { numberToWords } from '../utils/numberToWords';
 
 /** Admin-approved / billable lot for party statement (mirrors Party Ledger “completed” side). */
 function isLotPartyBillableStatus(status) {
@@ -1881,6 +1882,21 @@ export default function Payments() {
                   }}
                 >
                   {errors.amount}
+                </span>
+              )}
+              {form.amount && numberToWords(form.amount) && (
+                <span
+                  style={{
+                    color: 'var(--success, #047857)',
+                    fontSize: 12,
+                    fontWeight: 600,
+                    marginTop: 5,
+                    display: 'block',
+                    letterSpacing: '0.01em',
+                    lineHeight: 1.4,
+                  }}
+                >
+                  💰 {numberToWords(form.amount)}
                 </span>
               )}
             </FormGroup>

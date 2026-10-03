@@ -59,7 +59,7 @@ export default function PLRevisionReviewModal({
           >
             {revisionReviewSaving ? (
               <>
-                <Loader /> Saving{'\u2026'}
+                <Loader /> Saving…
               </>
             ) : (
               'Approve & apply'
@@ -86,14 +86,14 @@ export default function PLRevisionReviewModal({
         <div>
           <span style={{ color: 'var(--text-muted)' }}>Party ledger change: </span>
           <strong>
-            \u20A8{fromA.toLocaleString()} \u2192 \u20A8{toA.toLocaleString()}
+            ₨{fromA.toLocaleString()} → ₨{toA.toLocaleString()}
           </strong>{' '}
           <span
             style={{
               color: delta === 0 ? 'var(--text-muted, #64748b)' : toA - fromA >= 0 ? 'var(--success, #0f766e)' : 'var(--danger, #dc2626)',
             }}
           >
-            ({toA - fromA >= 0 ? '+' : '\u2212'}\u20A8{Math.abs(toA - fromA).toLocaleString()})
+            ({toA - fromA >= 0 ? '+' : '−'}₨{Math.abs(toA - fromA).toLocaleString()})
           </span>
         </div>
         {req.reason ? (
@@ -104,7 +104,7 @@ export default function PLRevisionReviewModal({
         ) : null}
         <div>
           <span style={{ color: 'var(--text-muted)' }}>Current owner bill: </span>
-          \u20A8{ownerBill.toLocaleString()}
+          ₨{ownerBill.toLocaleString()}
         </div>
         <div>
           <span style={{ color: 'var(--text-muted)' }}>Settlement: </span>
@@ -165,7 +165,7 @@ export default function PLRevisionReviewModal({
                 onChange={(e) =>
                   setRevisionReview((r) => ({ ...r, customOwnerAmount: e.target.value }))
                 }
-                placeholder="Custom owner bill (\u20A8)"
+                placeholder="Custom owner bill (₨)"
               />
             )}
           </>
@@ -184,13 +184,13 @@ export default function PLRevisionReviewModal({
         }}
       >
         <div>
-          New owner bill: <strong>\u20A8{Number(newOwner).toLocaleString()}</strong>
+          New owner bill: <strong>₨{Number(newOwner).toLocaleString()}</strong>
           {revisionReview.updateOwnerBill ? (
             <span
               style={{ color: delta === 0 ? 'var(--text-muted, #64748b)' : delta > 0 ? 'var(--success, #0f766e)' : 'var(--danger, #dc2626)' }}
             >
               {' '}
-              ({delta >= 0 ? '+' : '\u2212'}\u20A8{Math.abs(delta).toLocaleString()})
+              ({delta >= 0 ? '+' : '−'}₨{Math.abs(delta).toLocaleString()})
             </span>
           ) : (
             <span style={{ color: 'var(--text-muted, #64748b)' }}> (unchanged)</span>
@@ -199,8 +199,8 @@ export default function PLRevisionReviewModal({
         {revisionReview.updateOwnerBill && settled && delta !== 0 && (
           <div style={{ marginTop: 6, color: 'var(--warning, #92400e)', fontWeight: 600 }}>
             {delta > 0
-              ? `Adjustment: extra Paid \u2192 Owner payment of \u20A8${delta.toLocaleString()} will be recorded.`
-              : `Adjustment: reversing Received \u2190 Owner payment of \u20A8${Math.abs(delta).toLocaleString()} will be recorded.`}
+              ? `Adjustment: extra Paid → Owner payment of ₨${delta.toLocaleString()} will be recorded.`
+              : `Adjustment: reversing Received ← Owner payment of ₨${Math.abs(delta).toLocaleString()} will be recorded.`}
           </div>
         )}
       </div>

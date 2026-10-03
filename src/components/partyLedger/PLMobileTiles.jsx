@@ -69,10 +69,10 @@ export default function PLMobileTiles({
               </div>
 
               <div className="lot-tile-body">
-                <div className="lot-tile-chips hide-scrollbar" style={{ display: 'flex', flexWrap: 'nowrap', gap: 4, overflow: 'hidden', paddingBottom: 4 }}>
-                  <span className="fabric-chip">{l.fabric || l.itemType || 'Lawn'}</span>
-                  <span className="info-chip">Col: {l.colors || 0}</span>
-                  <span className="info-chip">Pcs: {l.pieces || 0}</span>
+                <div className="pl-mob-meta-line">
+                  <span className="meta-fabric">{l.fabric || l.itemType || 'Lawn'}</span>{' · '}
+                  Col: <strong>{l.colors || 0}</strong>{' · '}
+                  Pcs: <strong>{l.pieces || 0}</strong>
                 </div>
 
                 <div className="lot-tile-info" style={{ flex: 1, marginTop: 4, marginBottom: 8 }}>

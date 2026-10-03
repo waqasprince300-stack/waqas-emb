@@ -2570,8 +2570,14 @@ tbody tr:last-child td {
     display: flex;
     flex-direction: column;
     box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04), 0 0 0 1px rgba(0, 0, 0, 0.02);
-    overflow: hidden;
+    overflow: visible;
     transition: all 0.2s ease;
+    min-width: 0;
+  }
+
+  .lot-tile-card.modern-lot-card {
+    padding: 0 !important;
+    overflow: visible !important;
   }
 
   .pmc-header,
@@ -2605,12 +2611,32 @@ tbody tr:last-child td {
   }
 
   .pl-mob-row,
+  .pl-mob-chips,
   .gh-mob-chips {
     display: flex;
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
     gap: 4px;
-    overflow: hidden;
+    overflow: visible;
     align-items: center;
+  }
+
+  /* Compact inline text meta: Fabric · Col: X · Pcs: Y */
+  .pl-mob-meta-line {
+    font-size: 11px;
+    color: var(--text-secondary, #94a3b8);
+    line-height: 1.5;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+  }
+
+  .pl-mob-meta-line .meta-fabric {
+    color: var(--primary, #60a5fa);
+    font-weight: 700;
+  }
+
+  .pl-mob-meta-line strong {
+    font-weight: 700;
+    color: var(--text-primary, #e2e8f0);
   }
 
   .fabric-chip {
@@ -2619,7 +2645,7 @@ tbody tr:last-child td {
     border: 1px solid var(--border, #bfdbfe);
     border-radius: 20px;
     padding: 2px 6px;
-    font-size: 11px;
+    font-size: 10.5px;
     font-weight: 700;
     letter-spacing: 0.2px;
     white-space: nowrap;
@@ -2630,13 +2656,14 @@ tbody tr:last-child td {
     color: var(--text-secondary, #64748b);
     border: 1px solid var(--border, #e2e8f0);
     border-radius: 20px;
-    padding: 2px 6px;
-    font-size: 10.5px;
+    padding: 2px 5px;
+    font-size: 10px;
     font-weight: 600;
     white-space: nowrap;
   }
 
   .pl-mob-details,
+  .pl-mob-info,
   .gh-mob-info {
     font-size: 13px;
     color: var(--text-secondary, #475569);
@@ -2644,9 +2671,12 @@ tbody tr:last-child td {
     flex-direction: column;
     gap: 3px;
     line-height: 1.4;
+    word-break: break-word;
+    overflow-wrap: break-word;
   }
 
   .pl-mob-amount-row,
+  .pl-mob-bill-row,
   .gh-mob-bill-row {
     display: flex;
     justify-content: space-between;
@@ -2660,6 +2690,7 @@ tbody tr:last-child td {
 
   .pmc-footer,
   .pl-mob-actions,
+  .pl-mob-footer,
   .gh-mob-footer {
     display: flex;
     align-items: center;
@@ -3993,7 +4024,7 @@ select:active,
   box-shadow: var(--shadow, 0 4px 14px rgba(0, 0, 0, 0.03));
   transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s ease, border-color 0.2s ease;
   position: relative;
-  overflow: hidden;
+  overflow: visible;
 }
 
 @media (hover: hover) {

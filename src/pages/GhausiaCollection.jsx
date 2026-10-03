@@ -139,7 +139,14 @@ export default function GhausiaCollection() {
   const completingLotsRef = useRef(new Set());
   const [inlineSummaryBusy, setInlineSummaryBusy] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
-  const [billableCollapsed, setBillableCollapsed] = useState(false);
+  const [billableCollapsed, setBillableCollapsed] = useState(() => {
+    return localStorage.getItem('ghausia_billable_collapsed') === 'true';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('ghausia_billable_collapsed', String(billableCollapsed));
+  }, [billableCollapsed]);
+
   const [billableSearch, setBillableSearch] = useState('');
   const [highlightedBillableLotId, setHighlightedBillableLotId] = useState(null);
   const debouncedBillableSearch = useDebounce(billableSearch, 300);

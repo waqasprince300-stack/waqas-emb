@@ -1,6 +1,7 @@
 import React from 'react';
 import { Modal, FormGroup } from '../UI';
 import Loader from '../Loader';
+import { numberToWords } from '../../utils/numberToWords';
 
 export default function PaymentModal({
   payModal,
@@ -91,6 +92,21 @@ export default function PaymentModal({
           {payErrors.amount && (
             <span style={{ color: 'var(--danger, #dc2626)', fontSize: 11, marginTop: 3, display: 'block' }}>
               {payErrors.amount}
+            </span>
+          )}
+          {payForm.amount && numberToWords(payForm.amount) && (
+            <span
+              style={{
+                color: 'var(--success, #047857)',
+                fontSize: 12,
+                fontWeight: 600,
+                marginTop: 5,
+                display: 'block',
+                letterSpacing: '0.01em',
+                lineHeight: 1.4,
+              }}
+            >
+              💰 {numberToWords(payForm.amount)}
             </span>
           )}
         </FormGroup>
