@@ -816,6 +816,22 @@ export default function PartyLedger() {
     }
   }, [isParty, user?.partyId]);
 
+  /** Deep link: /party-ledger?partyId=... -> pre-select that party */
+  useEffect(() => {
+    const pId = String(searchParams.get('partyId') || '').trim();
+    if (!pId || initialDataLoading) return;
+    
+    // Only set if we're not a party user (party users shouldn't change their own filter)
+    if (!isParty) {
+      setPartyFilter(pId);
+    }
+    
+    const next = new URLSearchParams(searchParams);
+    next.delete('partyId');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams, initialDataLoading, isParty]);
+
+
   /** Deep link: /party-ledger?lotId=... -> show that lot (and open bill review if billReview=1). */
   useEffect(() => {
     const lotId = String(searchParams.get('lotId') || '').trim();

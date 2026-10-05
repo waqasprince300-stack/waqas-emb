@@ -73,7 +73,21 @@ export default function Dashboard() {
 
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
-  const [hideAmounts, setHideAmounts] = useState(false);
+  const [hideAmounts, setHideAmounts] = useState(() => {
+    return localStorage.getItem('dash_hide_amounts') === 'true';
+  });
+  const [hidePartyPerf, setHidePartyPerf] = useState(() => {
+    return localStorage.getItem('dash_hide_party_perf') === 'true';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('dash_hide_amounts', String(hideAmounts));
+  }, [hideAmounts]);
+
+  useEffect(() => {
+    localStorage.setItem('dash_hide_party_perf', String(hidePartyPerf));
+  }, [hidePartyPerf]);
+
   const [alertDaysThreshold, setAlertDaysThreshold] = useState(7);
   const [adminPartyMotivation, setAdminPartyMotivation] = useState(null);
   const customRange = useMemo(
@@ -505,6 +519,7 @@ export default function Dashboard() {
           )}
           <button
             onClick={() => setHideAmounts(h => !h)}
+            className="dash-desktop-only"
             style={{ background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--text-muted)', fontWeight: 600, marginTop: 4 }}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -514,6 +529,19 @@ export default function Dashboard() {
               }
             </svg>
             {hideAmounts ? 'Show Amounts' : 'Hide Amounts'}
+          </button>
+          <button
+            onClick={() => setHideAmounts(h => !h)}
+            className="dash-mobile-only"
+            style={{ background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--text-muted)', fontWeight: 600, marginTop: 4 }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              {hideAmounts
+                ? <><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></>
+                : <><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></>
+              }
+            </svg>
+            {hideAmounts ? 'Show Summary' : 'Hide Summary'}
           </button>
           <DateRangeSelect
             value={dateRange}
@@ -551,7 +579,7 @@ export default function Dashboard() {
 
       {!isParty && (
         <>
-          <section style={{ marginBottom: 28 }}>
+          <section style={{ marginBottom: 28 }} className={hideAmounts ? 'dash-pipeline-mobile-hidden' : ''}>
             <div className="section-title" style={{ textTransform: 'uppercase', letterSpacing: '0.05em', fontSize: 13, fontWeight: 700, color: 'var(--text-secondary, #64748b)', marginBottom: 12 }}>Production Pipeline</div>
             <div
               style={{
@@ -1025,14 +1053,57 @@ export default function Dashboard() {
         </>
       )}
 
+      {!isParty && adminPartyMotivation === null && (
+        <section style={{ marginBottom: 28 }}>
+          <div className="card">
+            <div className="card-header">
+              <span className="card-title">Party Performance Insights</span>
+            </div>
+            <div className="card-body" style={{ padding: '16px' }}>
+              <div className="admin-perf-grid">
+                {Array.from({ length: 3 }).map((_, idx) => (
+                  <div key={`skel-${idx}`} className="admin-perf-card" style={{ pointerEvents: 'none', border: '1px solid var(--border)' }}>
+                    <div className="admin-perf-card-header">
+                      <div className="skeleton skeleton-title" style={{ margin: 0 }}></div>
+                    </div>
+                    <div className="admin-perf-card-stats" style={{ gap: '8px', marginTop: '16px' }}>
+                      <div className="skeleton skeleton-stat"></div>
+                      <div className="skeleton skeleton-stat"></div>
+                      <div className="skeleton skeleton-stat"></div>
+                    </div>
+                    <div className="admin-perf-card-footer" style={{ marginTop: '16px', borderTop: 'none', padding: 0 }}>
+                      <div className="skeleton skeleton-footer"></div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
+
       {!isParty && adminPartyMotivation && adminPartyMotivation.length > 0 && (
         <section style={{ marginBottom: 28 }}>
           <div className="card">
             <div className="card-header">
               <span className="card-title">Party Performance Insights</span>
-              <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600 }}>Pichle 90 din</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <button
+                  onClick={() => setHidePartyPerf(h => !h)}
+                  style={{ background: 'var(--primary-bg, #f0f7ff)', border: '1px solid var(--border, #e2e8f0)', borderRadius: 12, padding: '4px 10px', cursor: 'pointer', fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)' }}
+                >
+                  {hidePartyPerf ? 'Show' : 'Hide'}
+                </button>
+                {!hidePartyPerf && (
+                  <>
+                    <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600 }}>Pichle 90 din</span>
+                    <Link to="/parties" style={{ fontSize: 12, fontWeight: 600, color: 'var(--primary-light, #3b82f6)', textDecoration: 'none' }}>View All →</Link>
+                  </>
+                )}
+              </div>
             </div>
-            <div className="card-body" style={{ padding: '16px' }}>
+            {!hidePartyPerf && (
+              <div className="card-body" style={{ padding: '16px' }}>
               <div className="admin-perf-grid">
                 {adminPartyMotivation.map(p => {
                   const s = p.stats || {};
@@ -1050,8 +1121,18 @@ export default function Dashboard() {
                       : s.rejectionRate > 10
                         ? 'Average'
                         : 'Good';
+                  // Calculate total pieces for this party from scopedLots
+                  const partyLots = scopedLots.filter(l => String(l.partyId ?? '') === String(p.partyId ?? ''));
+                  const totalPieces = partyLots.reduce((sum, l) => sum + (Number(l.pieces || l.quantity) || 0), 0);
                   return (
-                    <div key={p.partyId} className="admin-perf-card">
+                    <div
+                      key={p.partyId}
+                      className="admin-perf-card admin-perf-card--clickable"
+                      onClick={() => navigate(`/party-ledger?partyId=${p.partyId}`)}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => { if (e.key === 'Enter') navigate(`/party-ledger?partyId=${p.partyId}`); }}
+                    >
                       <div className="admin-perf-card-header">
                         <span className="admin-perf-card-name">{p.partyName}</span>
                         <span className={`admin-perf-badge ${badgeClass}`}>{badgeLabel}</span>
@@ -1087,28 +1168,37 @@ export default function Dashboard() {
                             <span className="admin-perf-mini-stat-lbl">Reject</span>
                           </div>
                         )}
-                        {s.completedThisMonth != null && (
+                        {totalPieces > 0 && (
                           <div className="admin-perf-mini-stat">
-                            <span className="admin-perf-mini-stat-val">{s.completedThisMonth}</span>
-                            <span className="admin-perf-mini-stat-lbl">This Month</span>
+                            <span className="admin-perf-mini-stat-val" style={{ color: 'var(--primary-light, #0ea5e9)' }}>{totalPieces.toLocaleString()}</span>
+                            <span className="admin-perf-mini-stat-lbl">Pieces</span>
                           </div>
                         )}
                       </div>
-                      {p.messages && p.messages.length > 0 && (
-                        <div className="admin-perf-msgs">
-                          {p.messages.slice(0, 2).map((m, i) => (
-                            <div key={i} className="admin-perf-msg">
-                              <span className="admin-perf-msg-icon">{m.icon}</span>
-                              <span><strong>{m.title}</strong> — {m.body}</span>
-                            </div>
-                          ))}
+                      <div className="admin-perf-card-footer">
+                        <div className="admin-perf-msgs" style={{ flex: 1 }}>
+                          {p.messages && p.messages.length > 0 && (
+                            p.messages.slice(0, 2).map((m, i) => (
+                              <div key={i} className="admin-perf-msg">
+                                <span className="admin-perf-msg-icon">{m.icon}</span>
+                                <span><strong>{m.title}</strong> — {m.body}</span>
+                              </div>
+                            ))
+                          )}
                         </div>
-                      )}
+                        {s.completedThisMonth != null && (
+                          <div className="admin-perf-this-month">
+                            <span className="admin-perf-this-month-val">{s.completedThisMonth}</span>
+                            <span className="admin-perf-this-month-lbl">This Month</span>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   );
                 })}
               </div>
-            </div>
+              </div>
+            )}
           </div>
         </section>
       )}
@@ -1117,6 +1207,7 @@ export default function Dashboard() {
         <div className="card">
           <div className="card-header">
             <span className="card-title">Recent Lots</span>
+            <Link to="/ghausia" style={{ fontSize: 12, fontWeight: 600, color: 'var(--primary-light, #3b82f6)', textDecoration: 'none' }}>View All →</Link>
           </div>
           <div className="card-body dash-recent" style={{ padding: 0 }}>
             {recentLots.length === 0 ? (
@@ -1128,6 +1219,7 @@ export default function Dashboard() {
                   {recentLots.map((l) => {
                     const lotNo = l.lotNo || l.lotNumber || '—';
                     const design = l.designNo || '—';
+                    const piecesVal = l.pieces || l.quantity || 0;
                     const business = workspaceDisplayTitleForLot(l, businessOwners, {
                       shortIdFallback: isParty,
                     });
@@ -1138,6 +1230,7 @@ export default function Dashboard() {
                             <span className="dash-recent-lot">{lotNo}</span>
                             <span className="dash-recent-sep">·</span>
                             <span className="dash-recent-design">{design}</span>
+                            {piecesVal ? <span className="dash-recent-pcs">{piecesVal} pcs</span> : null}
                           </div>
                           <div className="dash-recent-item-meta">
                             {!isParty && l.partyName ? (
@@ -1164,6 +1257,7 @@ export default function Dashboard() {
                       <tr>
                         <th>Lot</th>
                         <th>Design</th>
+                        <th>Pieces</th>
                         {!isParty && <th>Party</th>}
                         <th>Business</th>
                         <th>Status</th>
@@ -1174,6 +1268,7 @@ export default function Dashboard() {
                         <tr key={l.id}>
                           <td style={{ fontWeight: 600 }}>{l.lotNo || l.lotNumber}</td>
                           <td>{l.designNo}</td>
+                          <td style={{ fontWeight: 600, color: 'var(--primary-light, #0ea5e9)', whiteSpace: 'nowrap' }}>{l.pieces || l.quantity || '—'}</td>
                           {!isParty && (
                             <td style={{ color: 'var(--text-secondary)', fontSize: 13 }}>
                               {l.partyName}

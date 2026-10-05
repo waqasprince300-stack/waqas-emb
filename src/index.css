@@ -1177,6 +1177,19 @@ tbody tr:last-child td {
   flex-shrink: 0;
   padding-top: 1px;
 }
+.dash-recent-pcs {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 8px;
+  padding: 1px 7px;
+  background: var(--primary-bg, #f0f7ff);
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--primary-light, #0ea5e9);
+  white-space: nowrap;
+}
 
 .dash-recent-pay-title {
   align-items: center;
@@ -1298,6 +1311,17 @@ tbody tr:last-child td {
 
   .dash-recent-amount {
     font-size: 13.5px;
+  }
+
+  .dash-desktop-only,
+  .dash-pipeline-mobile-hidden {
+    display: none !important;
+  }
+}
+
+@media (min-width: 769px) {
+  .dash-mobile-only {
+    display: none !important;
   }
 }
 
@@ -3866,7 +3890,15 @@ tbody tr:last-child td {
   border: 1px solid var(--border, #e2e8f0);
   border-radius: 12px;
   padding: 14px 16px;
-  transition: box-shadow 0.2s, border-color 0.2s;
+  transition: box-shadow 0.2s, border-color 0.2s, transform 0.15s;
+  display: flex;
+  flex-direction: column;
+}
+.admin-perf-card--clickable {
+  cursor: pointer;
+}
+.admin-perf-card--clickable:hover {
+  transform: translateY(-2px);
 }
 .admin-perf-card:hover {
   box-shadow: 0 4px 16px rgba(0,0,0,0.06);
@@ -3943,6 +3975,36 @@ tbody tr:last-child td {
 .admin-perf-badge--bad {
   background: var(--danger-bg, #fee2e2);
   color: var(--danger, #dc2626);
+}
+.admin-perf-card-footer {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  margin-top: auto;
+  padding-top: 6px;
+}
+.admin-perf-this-month {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-shrink: 0;
+  background: var(--primary-bg, #f0f7ff);
+  border-radius: 10px;
+  padding: 6px 12px;
+  min-width: 56px;
+}
+.admin-perf-this-month-val {
+  font-size: 20px;
+  font-weight: 900;
+  color: var(--primary-light, #0ea5e9);
+  line-height: 1.1;
+}
+.admin-perf-this-month-lbl {
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--text-muted, #94a3b8);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
 }
 
 @media (max-width: 600px) {
@@ -4082,4 +4144,54 @@ select:active,
   border-radius: 20px;
   font-size: 12px;
   font-weight: 700;
+}
+
+/* Skeleton Loading Animation */
+@keyframes shimmer {
+  0% {
+    background-position: -400px 0;
+  }
+  100% {
+    background-position: 400px 0;
+  }
+}
+
+.skeleton {
+  background: var(--border, #e2e8f0);
+  background-image: linear-gradient(
+    90deg,
+    var(--border, #e2e8f0) 0px,
+    var(--primary-bg, #f8fafc) 40px,
+    var(--border, #e2e8f0) 80px
+  );
+  background-size: 800px 100%;
+  animation: shimmer 2s infinite linear;
+  border-radius: 4px;
+}
+.dark .skeleton {
+  background: var(--border, #334155);
+  background-image: linear-gradient(
+    90deg,
+    var(--border, #334155) 0px,
+    var(--card-bg, #1e293b) 40px,
+    var(--border, #334155) 80px
+  );
+}
+
+.skeleton-title {
+  height: 20px;
+  width: 60%;
+  margin-bottom: 12px;
+}
+
+.skeleton-stat {
+  height: 48px;
+  width: 100%;
+  border-radius: 8px;
+}
+
+.skeleton-footer {
+  height: 16px;
+  width: 80%;
+  margin-top: 16px;
 }

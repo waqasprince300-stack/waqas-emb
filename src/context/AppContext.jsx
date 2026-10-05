@@ -396,7 +396,14 @@ export function AppProvider({ children }) {
   );
 
   // App Data Bootstrap Effect
+  const prevUserIdRef = useRef(null);
+
   useEffect(() => {
+    if (prevUserIdRef.current !== user?._id) {
+      hasLoadedOnceRef.current = false;
+      prevUserIdRef.current = user?._id || null;
+    }
+
     const clearAllData = () => {
       setParties(INITIAL_PARTIES);
       setGhausiaLots(INITIAL_GHAUSIA);

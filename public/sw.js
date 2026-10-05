@@ -1,4 +1,4 @@
-const CACHE_NAME = 'seam-grace-v2';
+const CACHE_NAME = 'seam-grace-v3';
 const urlsToCache = [
   '/',
   '/index.html',
