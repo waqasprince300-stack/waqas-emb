@@ -4195,3 +4195,73 @@ select:active,
   width: 80%;
   margin-top: 16px;
 }
+
+/* Staggered Fade-in Animation */
+@keyframes fadeInUpStagger {
+  0% { opacity: 0; transform: translateY(15px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+.stagger-item {
+  opacity: 0;
+  animation: fadeInUpStagger 0.4s ease-out forwards;
+}
+
+.stagger-item:nth-child(1) { animation-delay: 0.05s; }
+.stagger-item:nth-child(2) { animation-delay: 0.10s; }
+.stagger-item:nth-child(3) { animation-delay: 0.15s; }
+.stagger-item:nth-child(4) { animation-delay: 0.20s; }
+.stagger-item:nth-child(5) { animation-delay: 0.25s; }
+.stagger-item:nth-child(6) { animation-delay: 0.30s; }
+.stagger-item:nth-child(7) { animation-delay: 0.35s; }
+.stagger-item:nth-child(8) { animation-delay: 0.40s; }
+.stagger-item:nth-child(9) { animation-delay: 0.45s; }
+.stagger-item:nth-child(10) { animation-delay: 0.50s; }
+.stagger-item:nth-child(11) { animation-delay: 0.55s; }
+.stagger-item:nth-child(12) { animation-delay: 0.60s; }
+.stagger-item:nth-child(13) { animation-delay: 0.65s; }
+.stagger-item:nth-child(14) { animation-delay: 0.70s; }
+.stagger-item:nth-child(15) { animation-delay: 0.75s; }
+.stagger-item:nth-child(n+16) { animation-delay: 0.80s; }
+
+
+/* Fix for Table Row Stagger Vibration */
+@keyframes fadeInStagger {
+  0% { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+tr.stagger-item {
+  animation-name: fadeInStagger;
+  transform: none;
+}
+
+@media screen and (max-width: 768px) {
+  .dash-modern-header .dash-filter-toggles {
+    width: 100%;
+    justify-content: space-between !important;
+  }
+  .dash-modern-header .dash-top-date-range.date-range-select {
+    width: auto !important;
+    flex: 1;
+    max-width: 200px;
+  }
+}
+
+.owner-ledger-row {
+  transition: background-color 0.15s ease, transform 0.15s ease;
+  cursor: default;
+}
+.owner-ledger-row:hover {
+  background-color: var(--primary-bg, rgba(120, 120, 120, 0.08)) !important;
+}
+
+.party-card-hover {
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+.party-card-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -4px rgba(0,0,0,0.1) !important;
+  border-color: var(--primary-light, #93c5fd) !important;
+}
+

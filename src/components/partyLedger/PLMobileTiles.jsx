@@ -51,7 +51,7 @@ export default function PLMobileTiles({
           const displayComplete = getDisplayCompleteDate(l, pe);
 
           return (
-            <div key={`pl-tile-${l.id}`} className="lot-tile-card modern-lot-card animate-fade-in">
+            <div key={`pl-tile-${l.id}`} className="lot-tile-card modern-lot-card stagger-item">
               <div className="lot-tile-header">
                 <div>
                   <div className="lot-tile-number">Lot #{l.lotNo || l.lotNumber}</div>

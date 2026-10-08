@@ -19,6 +19,7 @@ import {
   STATUS_OPTIONS,
   checkIsCombinedDupatta,
   resolveItemTypeFields,
+  normalizeFabric,
 } from '../../utils/ghausiaHelpers';
 function LotForm({
   initial,
@@ -60,10 +61,24 @@ function LotForm({
     ownerBillingChoice: 'separate',
     dupattaDetails: { partyId: '', partyName: '', itemType: '', customFabric: '', fabric: '', quantity: '', billAmount: '' },
   };
-  const itemTypeOptions = useMemo(
-    () => [...BASE_FABRICS, ...getRememberedItemTypes().filter((t) => !BASE_FABRICS.includes(t))],
-    []
-  );
+  const itemTypeOptions = useMemo(() => {
+    const memory = getRememberedItemTypes();
+    
+    const cleaned = [];
+    const seen = new Set(BASE_FABRICS.map(f => f.toLowerCase()));
+    
+    for (const t of memory) {
+      const mapped = normalizeFabric(t);
+      const mappedLower = mapped.toLowerCase();
+      
+      if (!seen.has(mappedLower)) {
+        seen.add(mappedLower);
+        cleaned.push(mapped);
+      }
+    }
+    
+    return [...BASE_FABRICS, ...cleaned];
+  }, []);
 
   const [headConfig, setHeadConfig] = useState(() => getMachineHeadConfig());
   const [headList, setHeadList] = useState(() => getAllMachineHeads());

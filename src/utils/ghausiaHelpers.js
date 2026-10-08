@@ -1,7 +1,17 @@
 import Swal from 'sweetalert2';
 import { getRememberedItemTypes } from './lotFieldMemory';
 
-export const BASE_FABRICS = ['Lawn', 'Velvet', 'Cambric'];
+export const BASE_FABRICS = [
+  'Lawn',
+  'Velvet',
+  'Cambric',
+  'Silk',
+  'Viscose',
+  'Shafoon',
+  'Net',
+  'Katrai',
+  'Shisha Silk'
+];
 export const COLOR_OPTIONS = Array.from({ length: 13 }, (_, i) => i);
 export const STATUS_OPTIONS = [
   'pending',
@@ -60,13 +70,42 @@ export function checkIsCombinedDupatta(l) {
   return Number(l.billAmount || 0) === 0;
 }
 
+export const FABRIC_TYPO_MAP = {
+  'velvat': 'Velvet',
+  'velvit': 'Velvet',
+  'shfoon': 'Shafoon',
+  'shafoon': 'Shafoon',
+  'chiffon': 'Shafoon',
+  'shisha silk': 'Shisha Silk',
+  'lawn': 'Lawn',
+  'velvet': 'Velvet',
+  'cambric': 'Cambric',
+  'silk': 'Silk',
+  'viscose': 'Viscose',
+  'net': 'Net',
+  'katrai': 'Katrai'
+};
+
+export function normalizeFabric(fabric) {
+  const f = String(fabric || '').trim();
+  const lower = f.toLowerCase();
+  return FABRIC_TYPO_MAP[lower] || f;
+}
+
 export function resolveItemTypeFields(raw) {
   const t = String(raw?.itemType || raw?.fabric || '').trim();
-  if (!t || BASE_FABRICS.includes(t)) {
-    return { itemType: t || 'Lawn', customFabric: '' };
+  const mapped = normalizeFabric(t);
+  
+  // Also check if lowercased mapped exists in BASE_FABRICS to be safe
+  const baseHit = BASE_FABRICS.find(f => f.toLowerCase() === mapped.toLowerCase());
+  
+  if (!mapped || baseHit) {
+    return { itemType: baseHit || 'Lawn', customFabric: '' };
   }
+  
   const remembered = getRememberedItemTypes();
-  const hit = remembered.find((x) => x.toLowerCase() === t.toLowerCase());
+  const hit = remembered.find((x) => x.toLowerCase() === mapped.toLowerCase());
   if (hit) return { itemType: hit, customFabric: '' };
-  return { itemType: '__custom', customFabric: t };
+  
+  return { itemType: '__custom', customFabric: mapped };
 }

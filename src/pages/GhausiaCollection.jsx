@@ -640,7 +640,7 @@ export default function GhausiaCollection() {
     if (billablePage > billablePageCount) setBillablePage(billablePageCount);
   }, [billablePage, billablePageCount]);
   const ownerIn = effectivePayments
-    .filter((p) => p.type === 'Received')
+    .filter((p) => p.type === 'Received' && String(p.party || '').trim().toLowerCase() === 'owner')
     .reduce((s, p) => s + p.amount, 0);
   const ownerPaidToOwner = effectivePayments
     .filter((p) => p.type === 'Paid' && p.party === 'Owner')

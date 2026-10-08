@@ -204,8 +204,26 @@ export default function LazyReceiptThumb({
   }
 
   return (
-    <span ref={containerRef} style={{ color: 'var(--text-muted)', fontSize: 12, whiteSpace: 'nowrap' }}>
+    <div
+      ref={containerRef}
+      style={{
+        width: size,
+        height: size,
+        borderRadius: 8,
+        background: 'var(--primary-bg, #f8fafc)',
+        border: '1px dashed var(--border, #cbd5e1)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontSize: 10,
+        color: 'var(--text-muted, #64748b)',
+        textAlign: 'center',
+        lineHeight: 1.1,
+        cursor: 'default',
+        flexShrink: 0,
+      }}
+    >
       {emptyLabel}
-    </span>
+    </div>
   );
 }

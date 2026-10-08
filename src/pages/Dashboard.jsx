@@ -15,7 +15,7 @@ import {
 
 import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
-import { StatusBadge } from '../components/UI';
+import { StatusBadge, Modal } from '../components/UI';
 import LoaderDashboard from '../components/LoaderDashboard';
 import {
   DateRangeSelect,
@@ -32,6 +32,7 @@ import {
 } from '../utils/paymentDisplay';
 import { partyFacingLotStatusLabel, lotStatusBadgeKey } from '../utils/partyFacingLabels';
 import { getAdminLedgerOrBusinessBill, getBusinessBillAmount } from '../utils/partyBillPrivacy';
+import { normalizeFabric } from '../utils/ghausiaHelpers';
 import { apiService } from '../services/api';
 
 function lotBelongsToPartyUser(lot, partyId, partyName) {
@@ -88,6 +89,7 @@ export default function Dashboard() {
     localStorage.setItem('dash_hide_party_perf', String(hidePartyPerf));
   }, [hidePartyPerf]);
 
+  const [selectedFabric, setSelectedFabric] = useState(null);
   const [alertDaysThreshold, setAlertDaysThreshold] = useState(7);
   const [adminPartyMotivation, setAdminPartyMotivation] = useState(null);
   const customRange = useMemo(
@@ -183,12 +185,12 @@ export default function Dashboard() {
       },
       {
         label: 'Paid to you',
-        display: hideAmounts ? '****' : `₨${paidTotal.toLocaleString()}`,
+        display: `₨${paidTotal.toLocaleString()}`,
         color: 'var(--success, #166534)',
         sub: 'Payments from the business',
       },
     ];
-  }, [isParty, scopedLots, scopedPayments, hideAmounts]);
+  }, [isParty, scopedLots, scopedPayments]);
 
   const paidToNonOwnerParties = useMemo(() => {
     return scopedPayments
@@ -340,10 +342,12 @@ export default function Dashboard() {
   const fabricStats = useMemo(() => {
     const fabricMap = {};
     scopedLots.forEach(l => {
-      const fabric = String(l.itemType || l.fabric || l.customFabric || 'Unknown').trim() || 'Unknown';
-      if (!fabricMap[fabric]) fabricMap[fabric] = { name: fabric, count: 0, revenue: 0 };
+      let fabric = String(l.itemType || l.fabric || l.customFabric || 'Unknown').trim() || 'Unknown';
+      fabric = normalizeFabric(fabric);
+      if (!fabricMap[fabric]) fabricMap[fabric] = { name: fabric, count: 0, revenue: 0, lots: [] };
       fabricMap[fabric].count += 1;
       fabricMap[fabric].revenue += (Number(getBusinessBillAmount(l)) || 0);
+      fabricMap[fabric].lots.push(l);
     });
     const sorted = Object.values(fabricMap).sort((a, b) => b.count - a.count);
     // Show top 4, group remaining into "Others" so pie chart total always matches Total Lots
@@ -351,8 +355,14 @@ export default function Dashboard() {
     const top = sorted.slice(0, 4);
     const rest = sorted.slice(4);
     const others = rest.reduce(
-      (acc, f) => { acc.count += f.count; acc.revenue += f.revenue; return acc; },
-      { name: 'Others', count: 0, revenue: 0 }
+      (acc, f) => { 
+        acc.count += f.count; 
+        acc.revenue += f.revenue; 
+        acc.lots.push(...f.lots);
+        acc.subFabrics.push(f);
+        return acc; 
+      },
+      { name: 'Others', count: 0, revenue: 0, lots: [], subFabrics: [] }
     );
     return [...top, others];
   }, [scopedLots, reportingPartyEdits]);
@@ -517,64 +527,85 @@ export default function Dashboard() {
               </Link>
             </div>
           )}
-          <button
-            onClick={() => setHideAmounts(h => !h)}
-            className="dash-desktop-only"
-            style={{ background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--text-muted)', fontWeight: 600, marginTop: 4 }}
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              {hideAmounts
-                ? <><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></>
-                : <><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></>
-              }
-            </svg>
-            {hideAmounts ? 'Show Amounts' : 'Hide Amounts'}
-          </button>
-          <button
-            onClick={() => setHideAmounts(h => !h)}
-            className="dash-mobile-only"
-            style={{ background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--text-muted)', fontWeight: 600, marginTop: 4 }}
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              {hideAmounts
-                ? <><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></>
-                : <><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></>
-              }
-            </svg>
-            {hideAmounts ? 'Show Summary' : 'Hide Summary'}
-          </button>
-          <DateRangeSelect
-            value={dateRange}
-            onChange={setDateRange}
-            customStart={customStart}
-            customEnd={customEnd}
-            onCustomChange={({ start, end }) => {
-              setCustomStart(start);
-              setCustomEnd(end);
-            }}
-          />
+          <div className="dash-filter-toggles" style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'nowrap', justifyContent: 'flex-end' }}>
+            <DateRangeSelect
+              value={dateRange}
+              onChange={setDateRange}
+              customStart={customStart}
+              customEnd={customEnd}
+              onCustomChange={({ start, end }) => {
+                setCustomStart(start);
+                setCustomEnd(end);
+              }}
+              containerClassName="dash-top-date-range"
+            />
+            {!isParty && (
+              <>
+                <button
+                  onClick={() => setHideAmounts(h => !h)}
+                  className="dash-desktop-only"
+                  style={{ background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--text-muted)', fontWeight: 600, marginTop: 4 }}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    {hideAmounts
+                      ? <><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></>
+                      : <><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></>
+                    }
+                  </svg>
+                  {hideAmounts ? 'Show Amounts' : 'Hide Amounts'}
+                </button>
+                <button
+                  onClick={() => setHideAmounts(h => !h)}
+                  className="dash-mobile-only"
+                  style={{ background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--text-muted)', fontWeight: 600, marginTop: 4 }}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    {hideAmounts
+                      ? <><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></>
+                      : <><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></>
+                    }
+                  </svg>
+                  {hideAmounts ? 'Show Summary' : 'Hide Summary'}
+                </button>
+              </>
+            )}
+          </div>
         </div>
       </div>
 
       {partyMiniStatsCards?.length ? (
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
-            gap: 14,
-            marginBottom: 28,
-          }}
-        >
-          {partyMiniStatsCards.map((c) => (
-            <div key={c.label} className="stat-card-modern" style={{ '--card-accent': c.color }}>
-              <div className="stat-label">{c.label}</div>
-              <div className="stat-value" style={{ color: c.color }}>
-                {'display' in c ? c.display : c.value}
-              </div>
-              <div className="stat-sub">{c.sub}</div>
+        <section style={{ marginBottom: 28 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-secondary, #64748b)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Performance Summary
+            </span>
+            <button
+              onClick={() => setHidePartyPerf(h => !h)}
+              style={{ background: 'var(--primary-bg, #f0f7ff)', border: '1px solid var(--border, #e2e8f0)', borderRadius: 12, padding: '4px 10px', cursor: 'pointer', fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)' }}
+            >
+              {hidePartyPerf ? 'Show' : 'Hide'}
+            </button>
+          </div>
+          {!hidePartyPerf && (
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
+                gap: 14,
+              }}
+            >
+              {partyMiniStatsCards.map((c) => (
+                <div key={c.label} className="stat-card-modern" style={{ '--card-accent': c.color }}>
+                  <div className="stat-label">{c.label}</div>
+                  <div className="stat-value" style={{ color: c.color }}>
+                    {'display' in c ? c.display : c.value}
+                  </div>
+                  <div className="stat-sub">{c.sub}</div>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
+          )}
+        </section>
       ) : null}
 
       {!isParty && (
@@ -769,9 +800,16 @@ export default function Dashboard() {
                               paddingAngle={5}
                               dataKey="count"
                               stroke="none"
+                              animationBegin={200}
+                              animationDuration={800}
                             >
                               {fabricStats.map((entry, index) => (
-                                <Cell key={'cell-' + index} fill={COLORS[index % COLORS.length]} />
+                                <Cell 
+                                  key={'cell-' + index} 
+                                  fill={COLORS[index % COLORS.length]} 
+                                  style={{ cursor: 'pointer', outline: 'none' }}
+                                  onClick={() => setSelectedFabric(entry)}
+                                />
                               ))}
                             </Pie>
                             <RechartsTooltip
@@ -782,9 +820,19 @@ export default function Dashboard() {
                           </PieChart>
                         </ResponsiveContainer>
                       </div>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px 16px', justifyContent: 'center', marginTop: 16 }}>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 12px', justifyContent: 'center', marginTop: 16 }}>
                         {fabricStats.map((f, idx) => (
-                          <div key={f.name} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: 'var(--text-secondary, #475569)' }}>
+                          <div 
+                            key={f.name} 
+                            onClick={() => setSelectedFabric(f)}
+                            style={{ 
+                              display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, 
+                              color: 'var(--text-secondary, #475569)', cursor: 'pointer', 
+                              padding: '4px 8px', borderRadius: 6, transition: 'background 0.2s' 
+                            }}
+                            onMouseEnter={e => e.currentTarget.style.background = 'var(--primary-bg, #f1f5f9)'}
+                            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                          >
                             <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', background: COLORS[idx % COLORS.length] }}></span>
                             {f.name} ({f.count})
                           </div>
@@ -1389,6 +1437,101 @@ export default function Dashboard() {
             )}
           </div>
         </div>
+      )}
+
+      {selectedFabric && (
+        <Modal title={`${selectedFabric.name} Insights`} onClose={() => setSelectedFabric(null)}>
+          <div style={{ padding: '4px 8px' }}>
+            {selectedFabric.name === 'Others' ? (
+              <div>
+                <p style={{ marginBottom: 16, color: 'var(--text-secondary, #64748b)', fontSize: 13 }}>
+                  This category contains smaller fabric types that do not fit in the main pie chart slices.
+                </p>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                  <thead>
+                    <tr>
+                      <th style={{ textAlign: 'left', paddingBottom: 8, borderBottom: '1px solid var(--border, #e2e8f0)', color: 'var(--text-muted, #94a3b8)' }}>Fabric</th>
+                      <th style={{ textAlign: 'center', paddingBottom: 8, borderBottom: '1px solid var(--border, #e2e8f0)', color: 'var(--text-muted, #94a3b8)' }}>Lots</th>
+                      <th style={{ textAlign: 'right', paddingBottom: 8, borderBottom: '1px solid var(--border, #e2e8f0)', color: 'var(--text-muted, #94a3b8)' }}>Revenue</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[...(selectedFabric.subFabrics || [])].sort((a,b) => b.count - a.count).map(sf => (
+                      <tr key={sf.name}>
+                        <td style={{ padding: '12px 0', borderBottom: '1px solid var(--primary-bg, #f1f5f9)', fontWeight: 600 }}>{sf.name}</td>
+                        <td style={{ padding: '12px 0', borderBottom: '1px solid var(--primary-bg, #f1f5f9)', textAlign: 'center' }}>{sf.count}</td>
+                        <td style={{ padding: '12px 0', borderBottom: '1px solid var(--primary-bg, #f1f5f9)', textAlign: 'right', color: 'var(--success, #15803d)', fontWeight: 600 }}>
+                          {hideAmounts ? '****' : formatRupee(sf.revenue)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
+                  <div className="stat-card-modern" style={{ '--card-accent': 'var(--purple, #8b5cf6)', padding: '16px' }}>
+                    <div className="stat-label">Total Lots</div>
+                    <div className="stat-value" style={{ color: 'var(--purple, #8b5cf6)' }}>{selectedFabric.count}</div>
+                  </div>
+                  <div className="stat-card-modern" style={{ '--card-accent': 'var(--success, #10b981)', padding: '16px' }}>
+                    <div className="stat-label">Total Revenue</div>
+                    <div className="stat-value" style={{ color: 'var(--success, #15803d)' }}>{hideAmounts ? '****' : formatRupee(selectedFabric.revenue)}</div>
+                  </div>
+                </div>
+
+                <div style={{ marginBottom: 20 }}>
+                  <h4 style={{ margin: '0 0 12px', fontSize: 14, color: 'var(--text-primary, #0f172a)' }}>Status Breakdown</h4>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                    {Object.entries(
+                      (selectedFabric.lots || []).reduce((acc, l) => {
+                        const s = String(l.status || 'pending').toLowerCase();
+                        acc[s] = (acc[s] || 0) + 1;
+                        return acc;
+                      }, {})
+                    ).sort((a, b) => b[1] - a[1]).map(([status, count]) => (
+                      <div key={status} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'var(--primary-bg, #f1f5f9)', padding: '6px 12px', borderRadius: 12, fontSize: 12, fontWeight: 600, color: 'var(--text-secondary, #475569)' }}>
+                        <StatusBadge status={status} />
+                        <span style={{ color: 'var(--text-muted, #94a3b8)' }}>({count})</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <h4 style={{ margin: '0 0 12px', fontSize: 14, color: 'var(--text-primary, #0f172a)' }}>Top Parties</h4>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {Object.entries(
+                      (selectedFabric.lots || []).reduce((acc, l) => {
+                        const pName = l.partyName || 'Unknown Party';
+                        if (!acc[pName]) acc[pName] = { count: 0, revenue: 0 };
+                        acc[pName].count += 1;
+                        acc[pName].revenue += (Number(getBusinessBillAmount(l)) || 0);
+                        return acc;
+                      }, {})
+                    )
+                      .sort((a, b) => b[1].count - a[1].count)
+                      .slice(0, 5)
+                      .map(([pName, stats], idx) => (
+                        <div key={pName} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', background: 'var(--card-bg, #ffffff)', border: '1px solid var(--border, #e2e8f0)', borderRadius: 8 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted, #94a3b8)' }}>#{idx + 1}</span>
+                            <span style={{ fontWeight: 600, color: 'var(--text-primary, #0f172a)', fontSize: 13 }}>{pName}</span>
+                          </div>
+                          <div style={{ textAlign: 'right', fontSize: 12 }}>
+                            <span style={{ fontWeight: 600, color: 'var(--text-secondary, #475569)' }}>{stats.count} lots</span>
+                            <span style={{ margin: '0 6px', color: 'var(--border, #e2e8f0)' }}>|</span>
+                            <span style={{ color: 'var(--success, #15803d)', fontWeight: 600 }}>{hideAmounts ? '****' : formatRupee(stats.revenue)}</span>
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </Modal>
       )}
     </div>
   );

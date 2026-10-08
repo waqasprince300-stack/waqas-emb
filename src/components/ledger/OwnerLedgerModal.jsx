@@ -443,6 +443,7 @@ export default function OwnerLedgerModal({ ownerId, ownerName, payments, lots, o
               return (
                 <div
                   key={t.rowKey}
+                  className="owner-ledger-row"
                   style={{
                     display: 'grid',
                     gridTemplateColumns: 'minmax(120px, 1.2fr) minmax(75px, 1fr) minmax(75px, 1fr)',

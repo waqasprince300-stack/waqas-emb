@@ -220,7 +220,6 @@ function formatMoney(n) {
 function paymentMatchesParty(p, party, getPartyName) {
   const pid = String(party.id ?? party._id ?? '');
   const pname = String(getPartyName(pid) || party.name || '').trim();
-  if (p.type !== 'Paid') return false;
   if (p.partyId != null && String(p.partyId).trim() !== '') {
     return String(p.partyId) === pid;
   }
@@ -831,6 +830,7 @@ export default function Parties() {
             return (
               <div
                 key={party.id}
+                className="stagger-item party-card-hover"
                 style={{
                   background: 'var(--card-bg, #fff)',
                   border: '1px solid var(--border)',

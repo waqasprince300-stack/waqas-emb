@@ -93,7 +93,7 @@ export default function PLDesktopTable({
                   <tr
                     key={l.id}
                     id={`pl-lot-row-${l.id}`}
-                    className="animate-fade-in"
+                    className="stagger-item"
                     style={
                       String(highlightLotId) === String(l.id)
                         ? { background: 'var(--warning-bg, #fef3c7)', outline: '2px solid var(--warning, #f59e0b)' }
