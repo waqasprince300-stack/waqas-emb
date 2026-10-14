@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useCallback, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   LineChart,
@@ -35,6 +35,16 @@ import { getAdminLedgerOrBusinessBill, getBusinessBillAmount } from '../utils/pa
 import { normalizeFabric } from '../utils/ghausiaHelpers';
 import { apiService } from '../services/api';
 
+function lotRelevantDate(l) {
+  const st = String(l?.status || '').toLowerCase().trim();
+  if (st === 'dispatched' && l?.dispatchDate) return l.dispatchDate;
+  if (st === 'received back' && l?.receivedBackDate) return l.receivedBackDate;
+  if (st === 'completed') {
+    return l?.completionApprovedAt || l?.receivedBackDate || l?.allotDate || l?.createdAt;
+  }
+  return l?.allotDate || l?.dispatchDate || l?.createdAt || l?.date;
+}
+
 function lotBelongsToPartyUser(lot, partyId, partyName) {
   const pid = String(partyId || '').trim();
   const pname = String(partyName || '').trim();
@@ -51,6 +61,19 @@ function paymentBelongsToPartyUser(payment, partyId, partyName) {
     return String(payment.partyId) === pid;
   }
   return String(payment.party || '').trim() === pname;
+}
+
+function getPageNumbers(current, total) {
+  if (total <= 7) {
+    return Array.from({ length: total }, (_, i) => i + 1);
+  }
+  if (current <= 4) {
+    return [1, 2, 3, 4, 5, '...', total];
+  }
+  if (current >= total - 3) {
+    return [1, '...', total - 4, total - 3, total - 2, total - 1, total];
+  }
+  return [1, '...', current - 1, current, current + 1, '...', total];
 }
 
 export default function Dashboard() {
@@ -89,6 +112,33 @@ export default function Dashboard() {
     localStorage.setItem('dash_hide_party_perf', String(hidePartyPerf));
   }, [hidePartyPerf]);
 
+  const recentLotsCardRef = useRef(null);
+  const [isMobileScreen, setIsMobileScreen] = useState(() => {
+    return typeof window !== 'undefined' ? window.innerWidth <= 768 : false;
+  });
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobileScreen(window.innerWidth <= 768);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  const [mobilePageSize, setMobilePageSize] = useState(5);
+  const [desktopPageSize, setDesktopPageSize] = useState(10);
+  const recentLotsPageSize = isMobileScreen ? mobilePageSize : desktopPageSize;
+
+  const [recentLotsStatusFilter, setRecentLotsStatusFilter] = useState('all');
+  const [selectedLotDetail, setSelectedLotDetail] = useState(null);
+  const [recentLotsPage, setRecentLotsPage] = useState(1);
+
+  const handlePageChange = useCallback((newPage) => {
+    setRecentLotsPage(newPage);
+    if (isMobileScreen && recentLotsCardRef.current) {
+      recentLotsCardRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [isMobileScreen]);
   const [selectedFabric, setSelectedFabric] = useState(null);
   const [alertDaysThreshold, setAlertDaysThreshold] = useState(7);
   const [adminPartyMotivation, setAdminPartyMotivation] = useState(null);
@@ -380,6 +430,55 @@ export default function Dashboard() {
     return `${(totalDays / lotsWithTatDates.length).toFixed(1)} Days`;
   }, [scopedLots]);
 
+  const byStatusCount = useCallback(
+    (s) => {
+      const target = String(s).toLowerCase().trim();
+      let count = 0;
+      for (const [k, v] of Object.entries(lotStats.byStatus || {})) {
+        if (String(k).toLowerCase().trim() === target) {
+          count += Number(v) || 0;
+        }
+      }
+      return count;
+    },
+    [lotStats.byStatus]
+  );
+
+  const LOT_FILTER_TABS = useMemo(
+    () => [
+      { key: 'all', label: 'All', dotColor: 'var(--primary-light, #3b82f6)' },
+      { key: 'dispatched', label: isParty ? 'With You (Dispatched)' : 'Dispatched', dotColor: '#0ea5e9' },
+      { key: 'received back', label: isParty ? 'Delivered (Received Back)' : 'Received Back', dotColor: '#ef4444' },
+      { key: 'completed', label: 'Completed', dotColor: '#10b981' },
+      { key: 'pending', label: isParty ? 'Not Received Yet' : 'Pending', dotColor: '#f59e0b' },
+      { key: 'pending approval', label: isParty ? 'In Review' : 'Pending Approval', dotColor: '#eab308' },
+      { key: 'rejected', label: isParty ? 'Needs Rework' : 'Rejected', dotColor: '#f87171' },
+    ],
+    [isParty]
+  );
+
+  const filteredRecentLots = useMemo(() => {
+    let list = scopedLots;
+    if (recentLotsStatusFilter !== 'all') {
+      const target = recentLotsStatusFilter.toLowerCase().trim();
+      list = scopedLots.filter((l) => String(l.status || '').toLowerCase().trim() === target);
+    }
+    return [...list].sort((a, b) => compareRowsByUpdatedNewestFirst(a, b, 'lot'));
+  }, [scopedLots, recentLotsStatusFilter]);
+
+  const totalRecentPages = Math.max(1, Math.ceil(filteredRecentLots.length / recentLotsPageSize));
+
+  useEffect(() => {
+    setRecentLotsPage(1);
+  }, [recentLotsStatusFilter, dateRange, customStart, customEnd, scopedLots.length, recentLotsPageSize]);
+
+  const safeRecentPage = Math.min(recentLotsPage, totalRecentPages);
+
+  const paginatedRecentLots = useMemo(() => {
+    const startIndex = (safeRecentPage - 1) * recentLotsPageSize;
+    return filteredRecentLots.slice(startIndex, startIndex + recentLotsPageSize);
+  }, [filteredRecentLots, safeRecentPage, recentLotsPageSize]);
+
   if (initialDataLoading) {
     return (
       <div
@@ -449,10 +548,6 @@ export default function Dashboard() {
     .reduce((s, p) => s + (Number(p.amount) || 0), 0);
   /** Cash movements shown on dashboard: owner receipts vs payouts to parties (excludes "owner" payees). */
   const netOwnerVsParties = ownerIn - paidToNonOwnerParties;
-
-  const recentLots = [...scopedLots]
-    .sort((a, b) => compareRowsByUpdatedNewestFirst(a, b, 'lot'))
-    .slice(0, 12);
 
   const paymentTypeClass = (p) => {
     if (p.type === 'Received') return 'dash-pay-type--in';
@@ -1252,51 +1347,191 @@ export default function Dashboard() {
       )}
 
       <div style={{ marginBottom: 24 }}>
-        <div className="card">
-          <div className="card-header">
-            <span className="card-title">Recent Lots</span>
-            <Link to="/ghausia" style={{ fontSize: 12, fontWeight: 600, color: 'var(--primary-light, #3b82f6)', textDecoration: 'none' }}>View All →</Link>
+        <div className="card" ref={recentLotsCardRef}>
+          <div className="card-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span className="card-title">Recent Lots</span>
+              <span className="dash-recent-count-tag">
+                {recentLotsStatusFilter === 'all'
+                  ? `${filteredRecentLots.length} ${filteredRecentLots.length === 1 ? 'lot' : 'lots'}`
+                  : `${filteredRecentLots.length} of ${scopedLots.length} lots`}
+              </span>
+            </div>
+            <Link
+              to={isParty
+                ? (recentLotsStatusFilter !== 'all' ? `/party-ledger?status=${encodeURIComponent(recentLotsStatusFilter)}` : '/party-ledger')
+                : (recentLotsStatusFilter !== 'all' ? `/ghausia?status=${encodeURIComponent(recentLotsStatusFilter)}` : '/ghausia')
+              }
+              style={{ fontSize: 12, fontWeight: 600, color: 'var(--primary-light, #3b82f6)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+            >
+              View All {recentLotsStatusFilter !== 'all' ? `(${byStatusCount(recentLotsStatusFilter)})` : ''} →
+            </Link>
           </div>
+
+          <div className="dash-recent-filter-bar">
+            <div className="dash-recent-filter-scroll">
+              {LOT_FILTER_TABS.map((tab) => {
+                const isSelected = recentLotsStatusFilter === tab.key;
+                const count = tab.key === 'all' ? scopedLots.length : byStatusCount(tab.key);
+                return (
+                  <button
+                    key={tab.key}
+                    type="button"
+                    className={`dash-recent-filter-btn ${isSelected ? 'active' : ''}`}
+                    onClick={() => {
+                      setRecentLotsStatusFilter(tab.key);
+                      setRecentLotsPage(1);
+                    }}
+                    aria-pressed={isSelected}
+                  >
+                    {tab.dotColor && (
+                      <span
+                        className="dash-recent-filter-dot"
+                        style={{ background: tab.dotColor }}
+                      />
+                    )}
+                    <span>{tab.label}</span>
+                    <span className="dash-recent-filter-count">{count}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           <div className="card-body dash-recent" style={{ padding: 0 }}>
-            {recentLots.length === 0 ? (
-              <p className="dash-recent-empty">No lots in this period</p>
+            {filteredRecentLots.length === 0 ? (
+              <div className="dash-recent-empty">
+                <p style={{ margin: 0, fontWeight: 600, fontSize: 13 }}>
+                  No {recentLotsStatusFilter === 'all' ? '' : `“${LOT_FILTER_TABS.find(t => t.key === recentLotsStatusFilter)?.label || recentLotsStatusFilter}”`} lots in this period
+                </p>
+                {recentLotsStatusFilter !== 'all' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRecentLotsStatusFilter('all');
+                      setRecentLotsPage(1);
+                    }}
+                    style={{
+                      marginTop: 10,
+                      background: 'transparent',
+                      border: '1px solid var(--border)',
+                      color: 'var(--primary-light, #3b82f6)',
+                      borderRadius: 8,
+                      padding: '5px 12px',
+                      fontSize: 12,
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Show All Lots ({scopedLots.length})
+                  </button>
+                )}
+              </div>
             ) : (
               <>
                 {/* Mobile: stacked list */}
-                <ul className="dash-recent-list dash-recent-mobile">
-                  {recentLots.map((l) => {
-                    const lotNo = l.lotNo || l.lotNumber || '—';
-                    const design = l.designNo || '—';
-                    const piecesVal = l.pieces || l.quantity || 0;
-                    const business = workspaceDisplayTitleForLot(l, businessOwners, {
-                      shortIdFallback: isParty,
-                    });
-                    return (
-                      <li key={l.id} className="dash-recent-item">
-                        <div className="dash-recent-item-main">
-                          <div className="dash-recent-item-title">
-                            <span className="dash-recent-lot">{lotNo}</span>
-                            <span className="dash-recent-sep">·</span>
-                            <span className="dash-recent-design">{design}</span>
-                            {piecesVal ? <span className="dash-recent-pcs">{piecesVal} pcs</span> : null}
+                <div className="dash-recent-mobile">
+                  <ul className="dash-recent-list">
+                    {paginatedRecentLots.map((l) => {
+                      const lotNo = l.lotNo || l.lotNumber || '—';
+                      const design = l.designNo || '—';
+                      const piecesVal = l.pieces || l.quantity || 0;
+                      const business = workspaceDisplayTitleForLot(l, businessOwners, {
+                        shortIdFallback: isParty,
+                      });
+                      const lotDateStr = formatDisplayDate(lotRelevantDate(l));
+                      return (
+                        <li
+                          key={l.id}
+                          className="dash-recent-item dash-recent-item-clickable"
+                          onClick={() => setSelectedLotDetail(l)}
+                          role="button"
+                          tabIndex={0}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') setSelectedLotDetail(l);
+                          }}
+                          title="Tap to view lot details"
+                        >
+                          <div className="dash-recent-item-main">
+                            <div className="dash-recent-item-title">
+                              <span className="dash-recent-lot">{lotNo}</span>
+                              <span className="dash-recent-sep">·</span>
+                              <span className="dash-recent-design">{design}</span>
+                              {piecesVal ? <span className="dash-recent-pcs">{piecesVal} pcs</span> : null}
+                            </div>
+                            <div className="dash-recent-item-meta">
+                              {!isParty && l.partyName ? (
+                                <span className="dash-recent-party">{l.partyName}</span>
+                              ) : null}
+                              {!isParty && l.partyName && business ? (
+                                <span className="dash-recent-sep" style={{ opacity: 0.6 }}>·</span>
+                              ) : null}
+                              {business ? <span className="dash-recent-biz">{business}</span> : null}
+                            </div>
                           </div>
-                          <div className="dash-recent-item-meta">
-                            {!isParty && l.partyName ? (
-                              <span className="dash-recent-party">{l.partyName}</span>
-                            ) : null}
-                            {business ? <span className="dash-recent-biz">{business}</span> : null}
+                          <div className="dash-recent-item-status">
+                            <StatusBadge
+                              status={lotStatusBadgeKey(l.status)}
+                              label={isParty ? partyFacingLotStatusLabel(l.status) : undefined}
+                            />
+                            {lotDateStr !== '—' && (
+                              <span className="dash-recent-date-sub">
+                                {lotDateStr}
+                              </span>
+                            )}
                           </div>
+                          <div className="dash-recent-chevron" aria-hidden="true">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                              <polyline points="9 18 15 12 9 6"></polyline>
+                            </svg>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                  {totalRecentPages > 1 && (
+                    <div className="dash-recent-mobile-pagination">
+                      <button
+                        type="button"
+                        className="dash-page-btn dash-page-nav-btn"
+                        disabled={safeRecentPage <= 1}
+                        onClick={() => handlePageChange(Math.max(1, safeRecentPage - 1))}
+                      >
+                        ← Prev
+                      </button>
+                      <div className="dash-page-mobile-indicator">
+                        <div>
+                          Page <strong>{safeRecentPage}</strong> of <strong>{totalRecentPages}</strong>
                         </div>
-                        <div className="dash-recent-item-status">
-                          <StatusBadge
-                            status={lotStatusBadgeKey(l.status)}
-                            label={isParty ? partyFacingLotStatusLabel(l.status) : undefined}
-                          />
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
+                        <span className="dash-page-mobile-total">({filteredRecentLots.length} lots)</span>
+                      </div>
+                      <button
+                        type="button"
+                        className="dash-page-btn dash-page-nav-btn"
+                        disabled={safeRecentPage >= totalRecentPages}
+                        onClick={() => handlePageChange(Math.min(totalRecentPages, safeRecentPage + 1))}
+                      >
+                        Next →
+                      </button>
+                    </div>
+                  )}
+                  <div className="dash-recent-mobile-size-row">
+                    <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600 }}>Lots:</span>
+                    {[5, 10, 15].map((size) => (
+                      <button
+                        key={size}
+                        type="button"
+                        className={`dash-recent-size-pill ${mobilePageSize === size ? 'active' : ''}`}
+                        onClick={() => {
+                          setMobilePageSize(size);
+                          setRecentLotsPage(1);
+                        }}
+                      >
+                        {size}
+                      </button>
+                    ))}
+                  </div>
+                </div>
 
                 {/* Desktop: table */}
                 <div className="dash-recent-desktop table-scroll">
@@ -1308,24 +1543,47 @@ export default function Dashboard() {
                         <th>Pieces</th>
                         {!isParty && <th>Party</th>}
                         <th>Business</th>
+                        <th>Date</th>
                         <th>Status</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {recentLots.map((l) => (
-                        <tr key={l.id}>
-                          <td style={{ fontWeight: 600 }}>{l.lotNo || l.lotNumber}</td>
-                          <td>{l.designNo}</td>
-                          <td style={{ fontWeight: 600, color: 'var(--primary-light, #0ea5e9)', whiteSpace: 'nowrap' }}>{l.pieces || l.quantity || '—'}</td>
+                      {paginatedRecentLots.map((l) => (
+                        <tr
+                          key={l.id}
+                          className="dash-recent-row-clickable"
+                          onClick={() => setSelectedLotDetail(l)}
+                          title="Click to view lot details"
+                        >
+                          <td>
+                            <button
+                              type="button"
+                              className="dash-recent-lot-badge-link"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedLotDetail(l);
+                              }}
+                              title="View lot details"
+                            >
+                              {l.lotNo || l.lotNumber || '—'}
+                            </button>
+                          </td>
+                          <td style={{ fontWeight: 500 }}>{l.designNo || '—'}</td>
+                          <td style={{ fontWeight: 600, color: 'var(--primary-light, #0ea5e9)', whiteSpace: 'nowrap' }}>
+                            {l.pieces || l.quantity || '—'}
+                          </td>
                           {!isParty && (
                             <td style={{ color: 'var(--text-secondary)', fontSize: 13 }}>
-                              {l.partyName}
+                              {l.partyName || '—'}
                             </td>
                           )}
                           <td style={{ color: 'var(--text-secondary)', fontSize: 13 }}>
                             {workspaceDisplayTitleForLot(l, businessOwners, {
                               shortIdFallback: isParty,
                             })}
+                          </td>
+                          <td style={{ color: 'var(--text-secondary)', fontSize: 12, whiteSpace: 'nowrap' }}>
+                            {formatDisplayDate(lotRelevantDate(l))}
                           </td>
                           <td>
                             <StatusBadge
@@ -1338,6 +1596,71 @@ export default function Dashboard() {
                     </tbody>
                   </table>
                 </div>
+
+                {/* Desktop Pagination */}
+                {totalRecentPages > 1 && (
+                  <div className="dash-recent-desktop">
+                    <div className="dash-recent-pagination">
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                        <span className="dash-recent-pagination-info">
+                          Showing <strong>{(safeRecentPage - 1) * recentLotsPageSize + 1}</strong>–<strong>{Math.min(safeRecentPage * recentLotsPageSize, filteredRecentLots.length)}</strong> of <strong>{filteredRecentLots.length}</strong> lots
+                        </span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600 }}>Per page:</span>
+                          {[10, 15, 25, 50].map((size) => (
+                            <button
+                              key={size}
+                              type="button"
+                              className={`dash-recent-size-pill ${desktopPageSize === size ? 'active' : ''}`}
+                              onClick={() => {
+                                setDesktopPageSize(size);
+                                setRecentLotsPage(1);
+                              }}
+                            >
+                              {size}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="dash-recent-pagination-controls">
+                        <button
+                          type="button"
+                          className="dash-page-btn"
+                          disabled={safeRecentPage <= 1}
+                          onClick={() => handlePageChange(Math.max(1, safeRecentPage - 1))}
+                          title="Previous Page"
+                        >
+                          ← Prev
+                        </button>
+                        <div className="dash-page-numbers">
+                          {getPageNumbers(safeRecentPage, totalRecentPages).map((pNum, idx) =>
+                            pNum === '...' ? (
+                              <span key={`dots-${idx}`} className="dash-page-dots">…</span>
+                            ) : (
+                              <button
+                                key={pNum}
+                                type="button"
+                                className={`dash-page-num ${safeRecentPage === pNum ? 'active' : ''}`}
+                                onClick={() => handlePageChange(pNum)}
+                              >
+                                {pNum}
+                              </button>
+                            )
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          className="dash-page-btn"
+                          disabled={safeRecentPage >= totalRecentPages}
+                          onClick={() => handlePageChange(Math.min(totalRecentPages, safeRecentPage + 1))}
+                          title="Next Page"
+                        >
+                          Next →
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </>
             )}
           </div>
@@ -1530,6 +1853,131 @@ export default function Dashboard() {
                 </div>
               </div>
             )}
+          </div>
+        </Modal>
+      )}
+
+      {selectedLotDetail && (
+        <Modal
+          title={`Lot Details #${selectedLotDetail.lotNo || selectedLotDetail.lotNumber || '—'}`}
+          onClose={() => setSelectedLotDetail(null)}
+          footer={
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', gap: 10, flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setSelectedLotDetail(null)}
+              >
+                Close
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => {
+                  const lotNo = selectedLotDetail.lotNo || selectedLotDetail.lotNumber;
+                  const targetUrl = isParty
+                    ? `/party-ledger?lotId=${selectedLotDetail.id}&search=${encodeURIComponent(lotNo || '')}`
+                    : `/ghausia?search=${encodeURIComponent(lotNo || '')}`;
+                  setSelectedLotDetail(null);
+                  navigate(targetUrl);
+                }}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+              >
+                <span>{isParty ? 'View in Party Ledger' : 'Open in Work Spaces'}</span>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                  <polyline points="15 3 21 3 21 9"></polyline>
+                  <line x1="10" y1="14" x2="21" y2="3"></line>
+                </svg>
+              </button>
+            </div>
+          }
+        >
+          <div style={{ padding: '4px 0' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, paddingBottom: 12, borderBottom: '1px solid var(--border)' }}>
+              <div>
+                <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Status</span>
+                <div style={{ marginTop: 4 }}>
+                  <StatusBadge
+                    status={lotStatusBadgeKey(selectedLotDetail.status)}
+                    label={isParty ? partyFacingLotStatusLabel(selectedLotDetail.status) : undefined}
+                  />
+                </div>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Date</span>
+                <div style={{ fontWeight: 600, fontSize: 13, marginTop: 4 }}>
+                  {formatDisplayDate(lotRelevantDate(selectedLotDetail))}
+                </div>
+              </div>
+            </div>
+
+            <div className="dash-lot-modal-grid">
+              <div className="dash-lot-detail-item">
+                <span className="dash-lot-detail-label">Lot Number</span>
+                <span className="dash-lot-detail-value" style={{ color: 'var(--primary-light, #0284c7)', fontSize: 16 }}>
+                  {selectedLotDetail.lotNo || selectedLotDetail.lotNumber || '—'}
+                </span>
+              </div>
+              <div className="dash-lot-detail-item">
+                <span className="dash-lot-detail-label">Design Number</span>
+                <span className="dash-lot-detail-value">
+                  {selectedLotDetail.designNo || '—'}
+                </span>
+              </div>
+              <div className="dash-lot-detail-item">
+                <span className="dash-lot-detail-label">Pieces / Quantity</span>
+                <span className="dash-lot-detail-value" style={{ color: 'var(--success, #16a34a)' }}>
+                  {selectedLotDetail.pieces || selectedLotDetail.quantity || '0'} pcs
+                </span>
+              </div>
+              {!isParty && (
+                <div className="dash-lot-detail-item">
+                  <span className="dash-lot-detail-label">Party</span>
+                  <span className="dash-lot-detail-value">
+                    {selectedLotDetail.partyName || '—'}
+                  </span>
+                </div>
+              )}
+              <div className="dash-lot-detail-item">
+                <span className="dash-lot-detail-label">Workspace / Collection</span>
+                <span className="dash-lot-detail-value">
+                  {workspaceDisplayTitleForLot(selectedLotDetail, businessOwners, {
+                    shortIdFallback: isParty,
+                  }) || '—'}
+                </span>
+              </div>
+              <div className="dash-lot-detail-item">
+                <span className="dash-lot-detail-label">Fabric / Item Type</span>
+                <span className="dash-lot-detail-value">
+                  {selectedLotDetail.itemType || selectedLotDetail.fabric || selectedLotDetail.customFabric || '—'}
+                </span>
+              </div>
+              {selectedLotDetail.colors && (
+                <div className="dash-lot-detail-item">
+                  <span className="dash-lot-detail-label">Colors</span>
+                  <span className="dash-lot-detail-value">
+                    {selectedLotDetail.colors}
+                  </span>
+                </div>
+              )}
+              {!isParty && !hideAmounts && (
+                <div className="dash-lot-detail-item">
+                  <span className="dash-lot-detail-label">Bill Amount</span>
+                  <span className="dash-lot-detail-value" style={{ color: 'var(--primary-light, #0284c7)' }}>
+                    {formatRupee(getBusinessBillAmount(selectedLotDetail))}
+                  </span>
+                </div>
+              )}
+              {selectedLotDetail.description && (
+                <div className="dash-lot-detail-item" style={{ gridColumn: 'span 2' }}>
+                  <span className="dash-lot-detail-label">Description / Remarks</span>
+                  <span className="dash-lot-detail-value" style={{ fontWeight: 400, fontSize: 13 }}>
+                    {selectedLotDetail.description}
+                  </span>
+                </div>
+              )}
+            </div>
           </div>
         </Modal>
       )}

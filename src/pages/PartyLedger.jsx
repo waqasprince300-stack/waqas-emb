@@ -831,6 +831,14 @@ export default function PartyLedger() {
     setSearchParams(next, { replace: true });
   }, [searchParams, setSearchParams, initialDataLoading, isParty]);
 
+  /** Deep link: /party-ledger?search=... or /party-ledger?lotNo=... */
+  useEffect(() => {
+    const q = String(searchParams.get('search') || searchParams.get('lotNo') || '').trim();
+    if (!q || initialDataLoading) return;
+    setSearch(q);
+    setSearchField('all');
+  }, [searchParams, initialDataLoading]);
+
 
   /** Deep link: /party-ledger?lotId=... -> show that lot (and open bill review if billReview=1). */
   useEffect(() => {

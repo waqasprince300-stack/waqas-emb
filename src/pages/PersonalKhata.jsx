@@ -38,6 +38,7 @@ import {
 } from '../utils/pickDeviceContact';
 import { useAuth } from '../context/AuthContext';
 import { apiService } from '../services/api';
+import { onDataChanged } from '../services/realtime';
 import { formatDisplayDateTime } from '../utils/dateFilters';
 import './personalKhata.css';
 
@@ -175,6 +176,10 @@ export default function PersonalKhata({ standalone = false } = {}) {
   const [entries, setEntries] = useState([]);
   const [businesses, setBusinesses] = useState([]);
   const [activeBusinessId, setActiveBusinessId] = useState('');
+  const [syncStatus, setSyncStatus] = useState('saved'); // 'saved' | 'saving' | 'error'
+  const isSavingRef = useRef(false);
+  const lastLocalEditAtRef = useRef(0);
+  const stateRef = useRef({ businesses: [], activeBusinessId: '', contacts: [], entries: [] });
   const [khataHydrated, setKhataHydrated] = useState(false);
   const khataHydrateGenRef = useRef(0);
   const khataScopeRef = useRef(khataStorageScope);
@@ -182,6 +187,74 @@ export default function PersonalKhata({ standalone = false } = {}) {
   const [bizModalOpen, setBizModalOpen] = useState(false);
   const [formBizName, setFormBizName] = useState('');
   const [search, setSearch] = useState('');
+
+  useEffect(() => {
+    stateRef.current = { businesses, activeBusinessId, contacts, entries };
+  }, [businesses, activeBusinessId, contacts, entries]);
+
+  const commitState = useCallback(
+    async (updates) => {
+      lastLocalEditAtRef.current = Date.now();
+      isSavingRef.current = true;
+      setSyncStatus('saving');
+
+      const prev = stateRef.current;
+      const nextBusinesses =
+        updates.businesses !== undefined ? updates.businesses : prev.businesses;
+      const nextActiveBusinessId =
+        updates.activeBusinessId !== undefined ? updates.activeBusinessId : prev.activeBusinessId;
+      const nextContacts = updates.contacts !== undefined ? updates.contacts : prev.contacts;
+      const nextEntries = updates.entries !== undefined ? updates.entries : prev.entries;
+
+      const nextState = {
+        businesses: nextBusinesses,
+        activeBusinessId: nextActiveBusinessId,
+        contacts: nextContacts,
+        entries: nextEntries,
+      };
+
+      stateRef.current = nextState;
+
+      if (updates.businesses !== undefined) setBusinesses(nextBusinesses);
+      if (updates.activeBusinessId !== undefined) setActiveBusinessId(nextActiveBusinessId);
+      if (updates.contacts !== undefined) setContacts(nextContacts);
+      if (updates.entries !== undefined) setEntries(nextEntries);
+
+      // Immediate local persistence
+      try {
+        saveKhataState(nextState, khataStorageScope || undefined);
+      } catch (e) {
+        console.warn('Local storage cache save failed:', e);
+      }
+
+      // Immediate server sync for logged-in accounts
+      if (khataStorageScope) {
+        try {
+          const compressed = await compressState(nextState);
+          await apiService.savePersonalKhata(compressed);
+          setSyncStatus('saved');
+        } catch (err) {
+          console.error('Personal Khata cloud save failed:', err);
+          setSyncStatus('error');
+          Swal.fire({
+            toast: true,
+            position: 'top-end',
+            icon: 'error',
+            title: 'Cloud sync failed. Saved on device.',
+            showConfirmButton: false,
+            timer: 3200,
+          });
+        } finally {
+          isSavingRef.current = false;
+        }
+      } else {
+        isSavingRef.current = false;
+        setSyncStatus('saved');
+      }
+      return nextState;
+    },
+    [khataStorageScope]
+  );
 
   const [entryModal, setEntryModal] = useState(null);
   const [contactModal, setContactModal] = useState(false);
@@ -262,6 +335,7 @@ export default function PersonalKhata({ standalone = false } = {}) {
       const compressedData = await compressState(data);
       if (cancelled || gen !== khataHydrateGenRef.current) return;
 
+      stateRef.current = compressedData;
       setBusinesses(compressedData.businesses);
       setActiveBusinessId((prev) => {
         if (isFromServer && prev && compressedData.businesses.some((b) => b.id === prev)) {
@@ -272,7 +346,7 @@ export default function PersonalKhata({ standalone = false } = {}) {
       setContacts(compressedData.contacts);
       setEntries(compressedData.entries);
       setKhataHydrated(true);
-      
+
       if (compressedData._modified && !isFromServer) {
         saveKhataState(compressedData, khataStorageScope);
       }
@@ -288,53 +362,38 @@ export default function PersonalKhata({ standalone = false } = {}) {
       };
     }
 
-    // Logged-in: show the cached ledger instantly (no blocking spinner), then reconcile with the
-    // server in the background. Atlas latency no longer makes the page sit on "Loading…".
+    // Clean up any legacy anonymous cache keys when logged in, so they never resurrect or leak
+    try {
+      localStorage.removeItem('ghausia_personal_khata_v1');
+      localStorage.removeItem('ghausia_personal_khata_v2');
+    } catch {
+      /* ignore */
+    }
+
+    // Logged-in: show the cached ledger instantly (no blocking spinner), then reconcile with server
     const cached = loadKhataState(khataStorageScope);
     if (cached.contacts.length > 0 || cached.entries.length > 0) {
       applyState(cached);
     }
 
-    // Logged-in Personal Khata: server is the source of truth so any device/browser sees the same data.
+    // Logged-in Personal Khata: server is the single source of truth
     (async () => {
       try {
+        setSyncStatus('saving');
         const remote = await apiService.getPersonalKhata();
-        let state = normalizeKhataState(remote);
-        const remoteEmpty = state.contacts.length === 0 && state.entries.length === 0;
-        if (remoteEmpty) {
-          // First sync on this account — push up any data this device had stored locally.
-          let local = loadKhataState(khataStorageScope);
-          // If nothing under this account locally, adopt the anonymous device khata so users
-          // who started before signing in (or existing accounts) keep their data linked.
-          if (local.contacts.length === 0 && local.entries.length === 0) {
-            const anon = loadKhataState(undefined);
-            if (anon.contacts.length > 0 || anon.entries.length > 0) {
-              local = anon;
-            }
-          }
-          if (local.contacts.length > 0 || local.entries.length > 0) {
-            const compressedLocal = await compressState(local);
-            state = compressedLocal;
-            if (compressedLocal._modified) {
-              saveKhataState(compressedLocal, khataStorageScope);
-            }
-            try {
-              await apiService.savePersonalKhata(state);
-            } catch {
-              /* keep local copy; next change will retry */
-            }
-          }
-        }
-        // Mirror to localStorage as an offline cache.
+        const state = normalizeKhataState(remote);
         try {
           saveKhataState(state, khataStorageScope);
         } catch {
           /* ignore */
         }
-        applyState(state, true);
-      } catch {
+        await applyState(state, true);
+        setSyncStatus('saved');
+      } catch (err) {
+        console.warn('Personal Khata initial server sync error:', err);
         // Offline / server error — fall back to the local cache so the user is never blocked.
         applyState(loadKhataState(khataStorageScope));
+        setSyncStatus('error');
       }
     })();
 
@@ -343,42 +402,19 @@ export default function PersonalKhata({ standalone = false } = {}) {
     };
   }, [khataStorageScope]);
 
-  useEffect(() => {
-    if (!khataHydrated) return undefined;
-    const scopeForRun = khataStorageScope;
-    const payload = { businesses, activeBusinessId, contacts, entries };
-
-    // Always keep a local cache (offline + fast reloads).
-    saveKhataState(payload, scopeForRun || undefined);
-
-    if (!scopeForRun) return undefined;
-
-    // Debounce server writes so rapid edits don't spam the API.
-    const t = setTimeout(() => {
-      if (scopeForRun !== khataScopeRef.current) return;
-      (async () => {
-        try {
-          const compressedPayload = await compressState(payload);
-          await apiService.savePersonalKhata(compressedPayload);
-        } catch (err) {
-          console.error("Personal Khata sync failed:", err);
-        }
-      })();
-    }, 800);
-    return () => clearTimeout(t);
-  }, [khataHydrated, khataStorageScope, businesses, activeBusinessId, contacts, entries]);
-
   // Re-fetch from server when tab regains focus so another device’s changes appear.
   useEffect(() => {
     if (!khataStorageScope || !khataHydrated) return undefined;
     const refreshFromServer = () => {
       if (document.visibilityState !== 'visible') return;
       if (entryModal || contactModal || bizModalOpen) return;
+      if (isSavingRef.current || Date.now() - lastLocalEditAtRef.current < 3000) return;
       void (async () => {
         try {
           const remote = await apiService.getPersonalKhata();
           const state = normalizeKhataState(remote);
           saveKhataState(state, khataStorageScope);
+          stateRef.current = state;
           setBusinesses(state.businesses);
           setActiveBusinessId((prev) => {
             if (prev && state.businesses.some((b) => b.id === prev)) {
@@ -388,6 +424,7 @@ export default function PersonalKhata({ standalone = false } = {}) {
           });
           setContacts(state.contacts);
           setEntries(state.entries);
+          setSyncStatus('saved');
         } catch {
           /* offline — keep local cache */
         }
@@ -395,6 +432,42 @@ export default function PersonalKhata({ standalone = false } = {}) {
     };
     document.addEventListener('visibilitychange', refreshFromServer);
     return () => document.removeEventListener('visibilitychange', refreshFromServer);
+  }, [khataStorageScope, khataHydrated, entryModal, contactModal, bizModalOpen]);
+
+  // Realtime Socket.io push channel — sync instantly when another device or tab saves
+  useEffect(() => {
+    if (!khataStorageScope || !khataHydrated) return undefined;
+    const unsubscribe = onDataChanged((event) => {
+      if (event?.type === 'personal_khata') {
+        if (event?.targetUserId && event.targetUserId !== khataStorageScope) return;
+        if (isSavingRef.current || Date.now() - lastLocalEditAtRef.current < 2000) return;
+        if (entryModal || contactModal || bizModalOpen) return;
+
+        void (async () => {
+          try {
+            const remote = await apiService.getPersonalKhata();
+            const state = normalizeKhataState(remote);
+            saveKhataState(state, khataStorageScope);
+            stateRef.current = state;
+            setBusinesses(state.businesses);
+            setActiveBusinessId((prev) => {
+              if (prev && state.businesses.some((b) => b.id === prev)) {
+                return prev;
+              }
+              return state.activeBusinessId;
+            });
+            setContacts(state.contacts);
+            setEntries(state.entries);
+            setSyncStatus('saved');
+          } catch (err) {
+            console.error('Realtime Personal Khata fetch failed:', err);
+          }
+        })();
+      }
+    });
+    return () => {
+      unsubscribe();
+    };
   }, [khataStorageScope, khataHydrated, entryModal, contactModal, bizModalOpen]);
 
   const scopedContacts = useMemo(() => {
@@ -470,7 +543,7 @@ export default function PersonalKhata({ standalone = false } = {}) {
       );
     }
     return sortedContactList.map((c) => {
-      const { net } = contactBalance(c.id, entries);
+      const { net } = contactBalance(c.id, scopedEntries);
       const accent =
         net > 0
           ? 'pk-contact-accent--in'
@@ -621,7 +694,7 @@ export default function PersonalKhata({ standalone = false } = {}) {
     }
   };
 
-  const saveContact = () => {
+  const saveContact = async () => {
     const name = formName.trim();
     if (!name) {
       Swal.fire({ icon: 'warning', title: 'Name required', text: 'Enter contact name.' });
@@ -644,8 +717,8 @@ export default function PersonalKhata({ standalone = false } = {}) {
       createdAt: nowIso(),
       updatedAt: nowIso(),
     };
-    setContacts([row, ...contacts]);
     setContactModal(false);
+    await commitState({ contacts: [row, ...contacts] });
   };
 
   const openEntry = (type, preselectContactId = '') => {
@@ -657,7 +730,7 @@ export default function PersonalKhata({ standalone = false } = {}) {
     setFormContactId(preselectContactId || contactId || scopedContacts[0]?.id || '');
   };
 
-  const saveEntry = () => {
+  const saveEntry = async () => {
     const type = entryModal;
     if (!type) return;
     const cid = formContactId;
@@ -695,10 +768,12 @@ export default function PersonalKhata({ standalone = false } = {}) {
       createdAt: ts,
       updatedAt: ts,
     };
-    const nextContacts = contacts.map((c) => (c.id === cid ? { ...c, updatedAt: ts } : c));
-    setContacts(nextContacts);
-    setEntries([row, ...entries]);
     setEntryModal(null);
+    const nextContacts = contacts.map((c) => (c.id === cid ? { ...c, updatedAt: ts } : c));
+    await commitState({
+      contacts: nextContacts,
+      entries: [row, ...entries],
+    });
   };
 
   const deleteEntry = async (eid) => {
@@ -710,7 +785,9 @@ export default function PersonalKhata({ standalone = false } = {}) {
       cancelButtonText: 'No',
     });
     if (!ok.isConfirmed) return;
-    setEntries(entries.filter((e) => e.id !== eid));
+    await commitState({
+      entries: entries.filter((e) => e.id !== eid),
+    });
   };
 
   const deleteContact = async (cid) => {
@@ -723,8 +800,10 @@ export default function PersonalKhata({ standalone = false } = {}) {
       cancelButtonText: 'Cancel',
     });
     if (!ok.isConfirmed) return;
-    setContacts(contacts.filter((c) => c.id !== cid));
-    setEntries(entries.filter((e) => e.contactId !== cid));
+    await commitState({
+      contacts: contacts.filter((c) => c.id !== cid),
+      entries: entries.filter((e) => e.contactId !== cid),
+    });
     navigate('/personal-khata');
   };
 
@@ -756,14 +835,17 @@ export default function PersonalKhata({ standalone = false } = {}) {
     if (!ok.isConfirmed) return;
 
     const nextBiz = businesses.filter((b) => b.id !== activeBusinessId);
-    setBusinesses(nextBiz);
-    setContacts(contacts.filter((c) => String(c.businessId || bid) !== bid));
-    setEntries(entries.filter((e) => !contactIds.has(e.contactId)));
-    setActiveBusinessId(nextBiz[0]?.id || '');
+    const nextBizId = nextBiz[0]?.id || '';
+    await commitState({
+      businesses: nextBiz,
+      activeBusinessId: nextBizId,
+      contacts: contacts.filter((c) => String(c.businessId || bid) !== bid),
+      entries: entries.filter((e) => !contactIds.has(e.contactId)),
+    });
     navigate('/personal-khata');
   };
 
-  const saveNewBusiness = () => {
+  const saveNewBusiness = async () => {
     const name = formBizName.trim();
     if (!name) {
       Swal.fire({
@@ -775,10 +857,13 @@ export default function PersonalKhata({ standalone = false } = {}) {
     }
     const id = newId();
     const row = { id, name, createdAt: nowIso() };
-    setBusinesses((prev) => [...prev, row]);
-    setActiveBusinessId(id);
+    const nextBiz = [...businesses, row];
     setFormBizName('');
     setBizModalOpen(false);
+    await commitState({
+      businesses: nextBiz,
+      activeBusinessId: id,
+    });
   };
 
   const copyContactShareLink = useCallback(
@@ -1061,6 +1146,25 @@ export default function PersonalKhata({ standalone = false } = {}) {
                 >
                   <FileDown size={22} strokeWidth={2.25} />
                 </button>
+                <button
+                  type="button"
+                  aria-label="Delete contact"
+                  title="Delete contact"
+                  style={{
+                    background: 'rgba(239, 68, 68, 0.25)',
+                    border: '1px solid rgba(239, 68, 68, 0.4)',
+                    borderRadius: 12,
+                    padding: 10,
+                    cursor: 'pointer',
+                    color: '#fca5a5',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                  onClick={() => deleteContact(active.id)}
+                >
+                  <Trash2 size={22} strokeWidth={2.25} />
+                </button>
               </div>
             </div>
 
@@ -1285,20 +1389,33 @@ export default function PersonalKhata({ standalone = false } = {}) {
                   <Link to="/personal-khata/account">Sign in</Link> to sync on every device
                 </p>
               )}
-              {khataStorageScope && user?.role === 'personal_khata' && (
-                <p className="pk-header-sub">
-                  Synced on every device · <Link to="/personal-khata/upgrade">Upgrade</Link>
+              {khataStorageScope && (
+                <p className="pk-header-sub" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                  <span className={`pk-sync-dot pk-sync-dot--${syncStatus}`} aria-hidden />
+                  <span>
+                    {syncStatus === 'saving'
+                      ? 'Syncing to cloud…'
+                      : syncStatus === 'error'
+                      ? 'Sync error'
+                      : 'Synced on every device'}
+                  </span>
+                  {user?.role === 'personal_khata' && (
+                    <>
+                      {' · '}
+                      <Link to="/personal-khata/upgrade">Upgrade</Link>
+                    </>
+                  )}
                 </p>
-              )}
-              {khataStorageScope && user?.role !== 'personal_khata' && (
-                <p className="pk-header-sub">Synced on every device</p>
               )}
             </div>
             <div className="pk-biz-pill">
               <select
                 id="pk-biz-picker"
                 value={activeBusinessId}
-                onChange={(e) => setActiveBusinessId(e.target.value)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  commitState({ activeBusinessId: val });
+                }}
                 aria-label="Business"
               >
                 {businesses.map((b) => (

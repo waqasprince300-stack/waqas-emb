@@ -8,8 +8,7 @@ import Loader from '../components/Loader';
 import LoaderDashboard from '../components/LoaderDashboard';
 import ImageUploader from '../components/ImageUploader';
 import OwnerLedgerModal from '../components/ledger/OwnerLedgerModal';
-import apiService from '../services/api';
-import { receiptPreviewKind } from '../components/receipt/ReceiptThumb';
+import PaymentSlipCell from '../components/receipt/PaymentSlipCell';
 import {
   latestDateFrom,
   compareRowsByUpdatedNewestFirst,
@@ -107,96 +106,6 @@ function parseDateFlexible(ymd) {
   if (!ymd) return null;
   const d = typeof ymd === 'string' ? new Date(ymd) : new Date(ymd);
   return Number.isNaN(d.getTime()) ? null : d;
-}
-
-/** Lazy slip viewer for a payment row. List payloads omit the base64 blob, so we fetch on click. */
-function PaymentSlipCell({ payment, isParty }) {
-  const [loaded, setLoaded] = useState(String(payment.receipt || ''));
-  const [loading, setLoading] = useState(false);
-  const [preview, setPreview] = useState(null);
-
-  const hasSlip = Boolean(payment.receipt) || payment.hasReceipt === true;
-  if (payment._synthetic || !hasSlip) {
-    return <span style={{ color: 'var(--text-muted)' }}>—</span>;
-  }
-
-  const open = async () => {
-    let src = loaded;
-    if (!src) {
-      setLoading(true);
-      try {
-        const full = await apiService.getPayment(payment.id ?? payment._id, {
-          skipTenantHeader: isParty,
-          businessOwnerId: isParty
-            ? undefined
-            : String(payment.businessOwnerId?._id ?? payment.businessOwnerId ?? '').trim() ||
-              undefined,
-        });
-        src = String(full?.receipt || '');
-        setLoaded(src);
-      } catch (err) {
-        src = '';
-        await Swal.fire({
-          icon: 'error',
-          title: 'Could not load slip',
-          text: err?.message || 'Please try again.',
-        });
-      } finally {
-        setLoading(false);
-      }
-    }
-    if (src) setPreview({ kind: receiptPreviewKind(src), src });
-  };
-
-  return (
-    <>
-      <button
-        type="button"
-        className="btn-icon"
-        onClick={open}
-        title="View slip"
-        disabled={loading}
-        style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
-      >
-        {loading ? (
-          <Loader />
-        ) : (
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="var(--primary, #1e40af)"
-            strokeWidth="2"
-          >
-            <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
-          </svg>
-        )}
-      </button>
-      {preview && (
-        <Modal title="Payment Slip" onClose={() => setPreview(null)}>
-          {preview.kind === 'pdf' ? (
-            <iframe
-              src={preview.src}
-              title="Slip PDF"
-              style={{
-                width: '100%',
-                height: '70vh',
-                border: '1px solid var(--border)',
-                borderRadius: 8,
-              }}
-            />
-          ) : (
-            <img
-              src={preview.src}
-              alt=""
-              style={{ maxWidth: '100%', borderRadius: 8, display: 'block', margin: '0 auto' }}
-            />
-          )}
-        </Modal>
-      )}
-    </>
-  );
 }
 
 const paymentToast = (icon, title) => {

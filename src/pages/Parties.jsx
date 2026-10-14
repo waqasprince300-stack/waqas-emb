@@ -13,6 +13,7 @@ import {
 } from '../utils/dateFilters';
 import { getAdminLedgerOrBusinessBill } from '../utils/partyBillPrivacy';
 import useDebounce from '../hooks/useDebounce';
+import PaymentSlipCell from '../components/receipt/PaymentSlipCell';
 
 function toPartyFormFields(initial, businessOwners = []) {
   if (!initial) {
@@ -1136,6 +1137,7 @@ export default function Parties() {
                   // Paid out reduces what you owe; Received from party increases it (ledger-aligned).
                   diye: isReceived ? 0 : amt,
                   liye: isReceived ? amt : 0,
+                  payment: p,
                 });
               });
 
@@ -1163,6 +1165,8 @@ export default function Parties() {
                     status: pe.overrideStatus || l.status,
                     diye: 0,
                     liye: ['completed', 'received back', 'billable'].includes(statusLower) ? bill : 0,
+                    lot: l,
+                    partyEdit: pe,
                   });
               });
 
@@ -1238,7 +1242,7 @@ export default function Parties() {
                     style={{
                       display: 'grid',
                       gridTemplateColumns:
-                        'minmax(145px, 1.2fr) minmax(88px, 1fr) minmax(88px, 1fr)',
+                        'minmax(140px, 1.3fr) minmax(88px, 1fr) minmax(88px, 1fr) 52px',
                       gap: 8,
                       padding: '8px 10px',
                       background: 'var(--primary-bg, #f8fafc)',
@@ -1260,6 +1264,7 @@ export default function Parties() {
                       In
                       <div style={{ fontWeight: 500, opacity: 0.85 }}>(bill / from party)</div>
                     </div>
+                    <div style={{ textAlign: 'center' }}>Slip</div>
                   </div>
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -1294,7 +1299,7 @@ export default function Parties() {
                           style={{
                             display: 'grid',
                             gridTemplateColumns:
-                              'minmax(145px, 1.2fr) minmax(88px, 1fr) minmax(88px, 1fr)',
+                              'minmax(140px, 1.3fr) minmax(88px, 1fr) minmax(88px, 1fr) 52px',
                             gap: 8,
                             alignItems: 'stretch',
                             padding: '10px 10px',
@@ -1353,6 +1358,21 @@ export default function Parties() {
                             }}
                           >
                             {liye ? formatMoney(liye) : '—'}
+                          </div>
+                          <div
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                            }}
+                          >
+                            {t.payment ? (
+                              <PaymentSlipCell payment={t.payment} isParty={false} />
+                            ) : t.lot ? (
+                              <PaymentSlipCell lot={t.lot} partyEdit={t.partyEdit} />
+                            ) : (
+                              <span style={{ color: 'var(--text-muted)' }}>—</span>
+                            )}
                           </div>
                         </div>
                       );

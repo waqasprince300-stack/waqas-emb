@@ -163,6 +163,11 @@ export default function GhausiaCollection() {
     if (params.get('status')) {
       setStatusFilter(params.get('status'));
     }
+    const q = params.get('search') || params.get('lotNo') || params.get('lotNumber');
+    if (q) {
+      setSearch(q);
+      setSearchField('all');
+    }
   }, [location.search]);
 
   const effectiveCollectionLots = useMemo(() => {

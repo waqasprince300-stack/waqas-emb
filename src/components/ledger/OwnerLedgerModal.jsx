@@ -4,6 +4,7 @@ import { latestDateFrom, formatDisplayDateTime, DateRangeSelect, isWithinDateRan
 import { getBusinessBillAmount } from '../../utils/partyBillPrivacy';
 import { normalizedBusinessOwnerId } from '../../utils/businessWorkspace';
 import apiService from '../../services/api';
+import PaymentSlipCell from '../receipt/PaymentSlipCell';
 
 function TallyModal({ ownerId, ownerName, onClose, onAdded }) {
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
@@ -175,6 +176,7 @@ export default function OwnerLedgerModal({ ownerId, ownerName, payments, lots, o
       paymentType: p.type || 'Received',
       received: isReceived ? amt : 0, // Money from owner
       billed: (isReceived || p.type === 'Tally') ? 0 : amt, // Paid to owner (acts like bill, increases what they owe us)
+      payment: p,
     });
   });
 
@@ -213,6 +215,7 @@ export default function OwnerLedgerModal({ ownerId, ownerName, payments, lots, o
       received: 0, // Lot is just work billed
       billed: bill, // Work billed increases what they owe us
       isCombinedDupatta: Boolean(l.suitComponent === 'dupatta' && bill === 0),
+      lot: l,
     });
   });
 
@@ -346,7 +349,7 @@ export default function OwnerLedgerModal({ ownerId, ownerName, payments, lots, o
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: 'minmax(120px, 1.2fr) minmax(75px, 1fr) minmax(75px, 1fr)',
+              gridTemplateColumns: 'minmax(120px, 1.2fr) minmax(75px, 1fr) minmax(75px, 1fr) 52px',
               gap: 8,
               padding: '8px 10px',
               background: 'var(--primary-bg, #f8fafc)',
@@ -368,6 +371,7 @@ export default function OwnerLedgerModal({ ownerId, ownerName, payments, lots, o
               In
               <div style={{ fontWeight: 500, opacity: 0.85 }}>(from owner)</div>
             </div>
+            <div style={{ textAlign: 'center' }}>Slip</div>
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -441,69 +445,85 @@ export default function OwnerLedgerModal({ ownerId, ownerName, payments, lots, o
               }
 
               return (
-                <div
-                  key={t.rowKey}
-                  className="owner-ledger-row"
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'minmax(120px, 1.2fr) minmax(75px, 1fr) minmax(75px, 1fr)',
-                    gap: 8,
-                    padding: '12px 10px',
-                    background: 'var(--card-bg, #fff)',
-                    border: '1px solid var(--border)',
-                    borderRadius: 8,
-                    alignItems: 'center',
-                    boxShadow: '0 1px 2px rgba(0,0,0,0.02)',
-                  }}
-                >
-                  <div>
-                    <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
-                      {formattedDate}
-                    </div>
-                    <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>
-                      {subtitle}
-                    </div>
-                    <div style={{ marginTop: 6 }}>
-                      <span
-                        style={{
-                          display: 'inline-flex',
-                          padding: '2px 8px',
-                          borderRadius: 999,
-                          border: '1px solid var(--danger-bg, #fecaca)',
-                          background: 'var(--card-bg)',
-                          fontSize: 10,
-                          fontWeight: 600,
-                          color: 'var(--text-secondary)',
-                        }}
-                      >
-                        Bal. {t.balanceAfter < 0 ? '-' : ''}
-                        {formatMoney(t.balanceAfter)}
-                      </span>
-                    </div>
-                  </div>
-
                   <div
+                    key={t.rowKey}
+                    className="owner-ledger-row"
                     style={{
-                      textAlign: 'center',
-                      fontSize: 14,
-                      fontWeight: 700,
-                      color: billed ? 'var(--danger, #b91c1c)' : 'var(--text-muted)',
+                      display: 'grid',
+                      gridTemplateColumns: 'minmax(120px, 1.2fr) minmax(75px, 1fr) minmax(75px, 1fr) 52px',
+                      gap: 8,
+                      padding: '12px 10px',
+                      background: 'var(--card-bg, #fff)',
+                      border: '1px solid var(--border)',
+                      borderRadius: 8,
+                      alignItems: 'center',
+                      boxShadow: '0 1px 2px rgba(0,0,0,0.02)',
                     }}
                   >
-                    {billed ? formatMoney(billed) : '—'}
-                  </div>
+                    <div>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
+                        {formattedDate}
+                      </div>
+                      <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>
+                        {subtitle}
+                      </div>
+                      <div style={{ marginTop: 6 }}>
+                        <span
+                          style={{
+                            display: 'inline-flex',
+                            padding: '2px 8px',
+                            borderRadius: 999,
+                            border: '1px solid var(--danger-bg, #fecaca)',
+                            background: 'var(--card-bg)',
+                            fontSize: 10,
+                            fontWeight: 600,
+                            color: 'var(--text-secondary)',
+                          }}
+                        >
+                          Bal. {t.balanceAfter < 0 ? '-' : ''}
+                          {formatMoney(t.balanceAfter)}
+                        </span>
+                      </div>
+                    </div>
 
-                  <div
-                    style={{
-                      textAlign: 'center',
-                      fontSize: 14,
-                      fontWeight: 700,
-                      color: received ? 'var(--success, #047857)' : 'var(--text-muted)',
-                    }}
-                  >
-                    {received ? formatMoney(received) : '—'}
+                    <div
+                      style={{
+                        textAlign: 'center',
+                        fontSize: 14,
+                        fontWeight: 700,
+                        color: billed ? 'var(--danger, #b91c1c)' : 'var(--text-muted)',
+                      }}
+                    >
+                      {billed ? formatMoney(billed) : '—'}
+                    </div>
+
+                    <div
+                      style={{
+                        textAlign: 'center',
+                        fontSize: 14,
+                        fontWeight: 700,
+                        color: received ? 'var(--success, #047857)' : 'var(--text-muted)',
+                      }}
+                    >
+                      {received ? formatMoney(received) : '—'}
+                    </div>
+
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      {t.payment ? (
+                        <PaymentSlipCell payment={t.payment} isParty={false} />
+                      ) : t.lot ? (
+                        <PaymentSlipCell lot={t.lot} />
+                      ) : (
+                        <span style={{ color: 'var(--text-muted)' }}>—</span>
+                      )}
+                    </div>
                   </div>
-                </div>
               );
             })}
           </div>
