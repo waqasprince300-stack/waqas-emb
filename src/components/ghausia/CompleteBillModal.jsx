@@ -166,7 +166,19 @@ export default function CompleteBillModal({
           )}
         </FormGroup>
       )}
-      <strong>Owner Received:</strong> ₨{ownerReceivedNet.toLocaleString()}
+      <div style={{ marginTop: 14, fontSize: 12.5, color: 'var(--text-secondary)' }}>
+        <strong>Owner Advance Cash:</strong>{' '}
+        {ownerReceivedNet > 0 ? (
+          <span style={{ color: 'var(--success, #15803d)', fontWeight: 700 }}>₨{ownerReceivedNet.toLocaleString()}</span>
+        ) : (
+          <span style={{ color: 'var(--text-muted)' }}>₨0 (Exhausted)</span>
+        )}
+        {ownerReceivedNet < 0 && (
+          <span style={{ color: 'var(--danger, #dc2626)', marginLeft: 8, fontWeight: 600 }}>
+            · Current pending udhaar: ₨{Math.abs(ownerReceivedNet).toLocaleString()}
+          </span>
+        )}
+      </div>
     </Modal>
   );
 }

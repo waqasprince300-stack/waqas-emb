@@ -1306,6 +1306,9 @@ export default function GhausiaCollection() {
         billableTotal={billableTotal}
         ownerReceivedNet={ownerReceivedNet}
         ownerReceivedIsPending={ownerReceivedIsPending}
+        ownerIn={ownerIn}
+        ownerPaidToOwner={ownerPaidToOwner}
+        billableSettledTotal={billableSettledTotal}
         statsRefreshing={statsRefreshing}
       />
 

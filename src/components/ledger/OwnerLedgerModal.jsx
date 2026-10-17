@@ -5,6 +5,7 @@ import { getBusinessBillAmount } from '../../utils/partyBillPrivacy';
 import { normalizedBusinessOwnerId } from '../../utils/businessWorkspace';
 import apiService from '../../services/api';
 import PaymentSlipCell from '../receipt/PaymentSlipCell';
+import { formatLakhCrore } from '../../utils/numberToWords';
 
 function TallyModal({ ownerId, ownerName, onClose, onAdded }) {
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
@@ -257,7 +258,7 @@ export default function OwnerLedgerModal({ ownerId, ownerName, payments, lots, o
 
   return (
     <Modal wide title={`${ownerName || 'Business Owner'} — Ledger`} onClose={onClose}>
-      <div style={{ maxHeight: 'min(70vh, 560px)', overflowY: 'auto' }}>
+      <div className="party-ledger-modal-body">
         <div style={{ padding: '0 0 8px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>Filter Ledger:</div>
@@ -297,13 +298,38 @@ export default function OwnerLedgerModal({ ownerId, ownerName, payments, lots, o
             </div>
             <div
               style={{
-                fontSize: 26,
-                fontWeight: 800,
-                color: netBalance >= 0 ? 'var(--danger, #b91c1c)' : 'var(--success, #047857)',
+                display: 'flex',
+                alignItems: 'baseline',
+                gap: 8,
+                flexWrap: 'wrap',
                 marginTop: 4,
               }}
             >
-              {netBalance < 0 ? '-' : ''}{formatMoney(netBalance)}
+              <span
+                style={{
+                  fontSize: 26,
+                  fontWeight: 800,
+                  color: netBalance >= 0 ? 'var(--danger, #b91c1c)' : 'var(--success, #047857)',
+                }}
+              >
+                {netBalance < 0 ? '-' : ''}{formatMoney(netBalance)}
+              </span>
+              {formatLakhCrore(netBalance) && (
+                <span
+                  style={{
+                    fontSize: 11.5,
+                    fontWeight: 700,
+                    padding: '1.5px 6px',
+                    borderRadius: 6,
+                    background: 'var(--primary-bg, rgba(255, 255, 255, 0.08))',
+                    color: 'var(--text-secondary, #c2b6b1)',
+                    border: '1px solid var(--border)',
+                    letterSpacing: '0.01em',
+                  }}
+                >
+                  {formatLakhCrore(netBalance)}
+                </span>
+              )}
             </div>
             <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4 }}>
               {netBalance > 0
@@ -346,22 +372,8 @@ export default function OwnerLedgerModal({ ownerId, ownerName, payments, lots, o
             </div>
           </div>
 
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'minmax(120px, 1.2fr) minmax(75px, 1fr) minmax(75px, 1fr) 52px',
-              gap: 8,
-              padding: '8px 10px',
-              background: 'var(--primary-bg, #f8fafc)',
-              borderRadius: 8,
-              marginBottom: 6,
-              fontSize: 11,
-              fontWeight: 700,
-              color: 'var(--text-secondary)',
-              borderBottom: '1px solid var(--border)',
-              alignItems: 'end',
-            }}
-          >
+          {/* Desktop Table Header */}
+          <div className="party-ledger-desktop-header">
             <div>Date</div>
             <div style={{ color: 'var(--danger, #b91c1c)', textAlign: 'center' }}>
               Work Billed
@@ -445,52 +457,35 @@ export default function OwnerLedgerModal({ ownerId, ownerName, payments, lots, o
               }
 
               return (
-                  <div
-                    key={t.rowKey}
-                    className="owner-ledger-row"
-                    style={{
-                      display: 'grid',
-                      gridTemplateColumns: 'minmax(120px, 1.2fr) minmax(75px, 1fr) minmax(75px, 1fr) 52px',
-                      gap: 8,
-                      padding: '12px 10px',
-                      background: 'var(--card-bg, #fff)',
-                      border: '1px solid var(--border)',
-                      borderRadius: 8,
-                      alignItems: 'center',
-                      boxShadow: '0 1px 2px rgba(0,0,0,0.02)',
-                    }}
-                  >
+                <div key={t.rowKey} className="party-ledger-row-wrapper">
+                  {/* Desktop Layout */}
+                  <div className="party-ledger-row-desktop">
                     <div>
-                      <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
+                      <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
                         {formattedDate}
                       </div>
-                      <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>
+                      <div
+                        style={{
+                          fontSize: 11,
+                          color: 'var(--text-muted)',
+                          marginTop: 4,
+                          lineHeight: 1.35,
+                        }}
+                      >
                         {subtitle}
                       </div>
-                      <div style={{ marginTop: 6 }}>
-                        <span
-                          style={{
-                            display: 'inline-flex',
-                            padding: '2px 8px',
-                            borderRadius: 999,
-                            border: '1px solid var(--danger-bg, #fecaca)',
-                            background: 'var(--card-bg)',
-                            fontSize: 10,
-                            fontWeight: 600,
-                            color: 'var(--text-secondary)',
-                          }}
-                        >
-                          Bal. {t.balanceAfter < 0 ? '-' : ''}
-                          {formatMoney(t.balanceAfter)}
-                        </span>
+                      <div className="party-ledger-bal-pill">
+                        Bal. {t.balanceAfter < 0 ? '-' : ''}
+                        {formatMoney(t.balanceAfter)}
                       </div>
                     </div>
 
                     <div
                       style={{
                         textAlign: 'center',
-                        fontSize: 14,
-                        fontWeight: 700,
+                        fontWeight: 800,
+                        alignSelf: 'center',
+                        fontVariantNumeric: 'tabular-nums',
                         color: billed ? 'var(--danger, #b91c1c)' : 'var(--text-muted)',
                       }}
                     >
@@ -500,8 +495,9 @@ export default function OwnerLedgerModal({ ownerId, ownerName, payments, lots, o
                     <div
                       style={{
                         textAlign: 'center',
-                        fontSize: 14,
-                        fontWeight: 700,
+                        fontWeight: 800,
+                        alignSelf: 'center',
+                        fontVariantNumeric: 'tabular-nums',
                         color: received ? 'var(--success, #047857)' : 'var(--text-muted)',
                       }}
                     >
@@ -524,6 +520,45 @@ export default function OwnerLedgerModal({ ownerId, ownerName, payments, lots, o
                       )}
                     </div>
                   </div>
+
+                  {/* Mobile Layout (Full-width card, auto-adjusting, no horizontal scroll) */}
+                  <div className="party-ledger-row-mobile">
+                    <div className="party-ledger-mob-top">
+                      <span className="party-ledger-mob-date">{formattedDate}</span>
+                      <div className="party-ledger-mob-amount-wrap">
+                        {billed ? (
+                          <span className="party-ledger-mob-amount paid" title="Work Billed (to owner)">
+                            −{formatMoney(billed)}
+                          </span>
+                        ) : received ? (
+                          <span className="party-ledger-mob-amount in" title="Payment Received (from owner)">
+                            +{formatMoney(received)}
+                          </span>
+                        ) : (
+                          <span className="party-ledger-mob-amount neutral">—</span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="party-ledger-mob-subtitle">{subtitle}</div>
+
+                    <div className="party-ledger-mob-bottom">
+                      <span className="party-ledger-bal-pill">
+                        Bal. {t.balanceAfter < 0 ? '-' : ''}
+                        {formatMoney(t.balanceAfter)}
+                      </span>
+                      {(t.payment || t.lot) && (
+                        <div className="party-ledger-mob-slip">
+                          {t.payment ? (
+                            <PaymentSlipCell payment={t.payment} isParty={false} />
+                          ) : (
+                            <PaymentSlipCell lot={t.lot} />
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
               );
             })}
           </div>

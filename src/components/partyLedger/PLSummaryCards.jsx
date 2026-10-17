@@ -1,4 +1,5 @@
 import React from 'react';
+import { formatLakhCrore } from '../../utils/numberToWords';
 
 /**
  * PLSummaryCards — Renders the summary stat cards grid for Party Ledger.
@@ -19,6 +20,7 @@ export default function PLSummaryCards({ totals, partyBalanceInfo, isParty }) {
           key: 'bill',
           label: isParty ? 'Your ledger total' : 'Total Bill Value',
           value: `₨${(totals.billTotal ?? 0).toLocaleString()}`,
+          numValue: totals.billTotal,
           color: 'var(--purple, #7c3aed)',
           sub: 'All lots in this view',
         },
@@ -31,6 +33,7 @@ export default function PLSummaryCards({ totals, partyBalanceInfo, isParty }) {
             </>
           ),
           value: `₨${(totals.completedAmount ?? 0).toLocaleString()}`,
+          numValue: totals.completedAmount,
           color: 'var(--success, #15803d)',
         },
         {
@@ -53,6 +56,7 @@ export default function PLSummaryCards({ totals, partyBalanceInfo, isParty }) {
             </>
           ),
           value: `₨${(totals.inProgressAmount ?? 0).toLocaleString()}`,
+          numValue: totals.inProgressAmount,
           color: 'var(--warning, #d97706)',
         },
         {
@@ -64,6 +68,7 @@ export default function PLSummaryCards({ totals, partyBalanceInfo, isParty }) {
             </>
           ),
           value: totals.otherCount > 0 ? `₨${(totals.otherAmount ?? 0).toLocaleString()}` : 'None',
+          numValue: totals.otherCount > 0 ? totals.otherAmount : null,
           color: '#a16207',
           sub:
             totals.otherCount > 0
@@ -77,6 +82,7 @@ export default function PLSummaryCards({ totals, partyBalanceInfo, isParty }) {
               : '(advance)'
             }`,
           value: `₨${(partyBalanceInfo?.completedNet ?? 0).toLocaleString()}`,
+          numValue: partyBalanceInfo?.completedNet,
           color: `${(partyBalanceInfo?.completedNet ?? 0) >= 0 ? 'var(--success, #0f766e)' : 'var(--danger, #dc2626)'}`,
           sub: isParty 
             ? 'Your ledger (received - completed bill)' 
@@ -89,13 +95,32 @@ export default function PLSummaryCards({ totals, partyBalanceInfo, isParty }) {
               : '(advance)'
             }`,
           value: `₨${(partyBalanceInfo?.balance ?? 0).toLocaleString()}`,
+          numValue: partyBalanceInfo?.balance,
           color: `${(partyBalanceInfo?.balance ?? 0) >= 0 ? 'var(--success, #0f766e)' : 'var(--danger, #dc2626)'}`,
           sub: 'Overall ledger (Status filter does not change these totals).',
         },
       ].map((c) => (
         <div key={c.key} className="stat-card">
           <div className="stat-label">{c.label}</div>
-          <div style={{ fontSize: 20, fontWeight: 700, color: c.color }}>{c.value}</div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' }}>
+            <div style={{ fontSize: 20, fontWeight: 700, color: c.color }}>{c.value}</div>
+            {c.numValue != null && formatLakhCrore(c.numValue) && (
+              <span
+                style={{
+                  fontSize: 11,
+                  fontWeight: 700,
+                  padding: '1.5px 6px',
+                  borderRadius: 6,
+                  background: 'var(--primary-bg, rgba(255, 255, 255, 0.08))',
+                  color: 'var(--text-secondary, #c2b6b1)',
+                  border: '1px solid var(--border)',
+                  letterSpacing: '0.01em',
+                }}
+              >
+                {formatLakhCrore(c.numValue)}
+              </span>
+            )}
+          </div>
           {c.sub && (
             <div
               style={{

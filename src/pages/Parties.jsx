@@ -14,6 +14,7 @@ import {
 import { getAdminLedgerOrBusinessBill } from '../utils/partyBillPrivacy';
 import useDebounce from '../hooks/useDebounce';
 import PaymentSlipCell from '../components/receipt/PaymentSlipCell';
+import { formatLakhCrore } from '../utils/numberToWords';
 
 function toPartyFormFields(initial, businessOwners = []) {
   if (!initial) {
@@ -767,20 +768,46 @@ export default function Parties() {
             value: rangedLots.filter((l) => String(l.partyId || '').trim()).length,
             color: 'var(--purple, #7c3aed)',
           },
-          {
-            label: 'Total Payable',
-            value: hideAmounts ? '****' : formatMoney(Array.from(statsByPartyId.values()).reduce((s, st) => s + (st.remaining > 0 ? st.remaining : 0), 0)),
-            color: 'var(--danger, #dc2626)',
-          },
-          {
-            label: 'Total Advance',
-            value: hideAmounts ? '****' : formatMoney(Array.from(statsByPartyId.values()).reduce((s, st) => s + (st.remaining < 0 ? Math.abs(st.remaining) : 0), 0)),
-            color: 'var(--success, #10b981)',
-          },
+          (() => {
+            const totalPayableVal = Array.from(statsByPartyId.values()).reduce((s, st) => s + (st.remaining > 0 ? st.remaining : 0), 0);
+            return {
+              label: 'Total Payable',
+              value: hideAmounts ? '****' : formatMoney(totalPayableVal),
+              numVal: totalPayableVal,
+              color: 'var(--danger, #dc2626)',
+            };
+          })(),
+          (() => {
+            const totalAdvanceVal = Array.from(statsByPartyId.values()).reduce((s, st) => s + (st.remaining < 0 ? Math.abs(st.remaining) : 0), 0);
+            return {
+              label: 'Total Advance',
+              value: hideAmounts ? '****' : formatMoney(totalAdvanceVal),
+              numVal: totalAdvanceVal,
+              color: 'var(--success, #10b981)',
+            };
+          })(),
         ].map((c) => (
           <div key={c.label} className="stat-card">
             <div className="stat-label">{c.label}</div>
-            <div style={{ fontSize: 20, fontWeight: 700, color: c.color }}>{c.value}</div>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' }}>
+              <div style={{ fontSize: 20, fontWeight: 700, color: c.color }}>{c.value}</div>
+              {!hideAmounts && c.numVal != null && formatLakhCrore(c.numVal) && (
+                <span
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 700,
+                    padding: '1.5px 6px',
+                    borderRadius: 6,
+                    background: 'var(--primary-bg, rgba(255, 255, 255, 0.08))',
+                    color: 'var(--text-secondary, #c2b6b1)',
+                    border: '1px solid var(--border)',
+                    letterSpacing: '0.01em',
+                  }}
+                >
+                  {formatLakhCrore(c.numVal)}
+                </span>
+              )}
+            </div>
           </div>
         ))}
       </div>
@@ -1110,7 +1137,7 @@ export default function Parties() {
           title={`${transactionParty.name} — Ledger`}
           onClose={() => setTransactionParty(null)}
         >
-          <div style={{ maxHeight: 'min(70vh, 560px)', overflowY: 'auto' }}>
+          <div className="party-ledger-modal-body">
             {(() => {
               const pid = String(transactionParty.id ?? transactionParty._id ?? '');
               const partyPayments = rangedPayments.filter((p) =>
@@ -1221,13 +1248,38 @@ export default function Parties() {
                     </div>
                     <div
                       style={{
-                        fontSize: 26,
-                        fontWeight: 800,
-                        color: netBalance >= 0 ? 'var(--danger, #b91c1c)' : 'var(--success, #047857)',
+                        display: 'flex',
+                        alignItems: 'baseline',
+                        gap: 8,
+                        flexWrap: 'wrap',
                         marginTop: 4,
                       }}
                     >
-                      {formatMoney(netBalance)}
+                      <span
+                        style={{
+                          fontSize: 26,
+                          fontWeight: 800,
+                          color: netBalance >= 0 ? 'var(--danger, #b91c1c)' : 'var(--success, #047857)',
+                        }}
+                      >
+                        {formatMoney(netBalance)}
+                      </span>
+                      {formatLakhCrore(netBalance) && (
+                        <span
+                          style={{
+                            fontSize: 11.5,
+                            fontWeight: 700,
+                            padding: '1.5px 6px',
+                            borderRadius: 6,
+                            background: 'var(--primary-bg, rgba(255, 255, 255, 0.08))',
+                            color: 'var(--text-secondary, #c2b6b1)',
+                            border: '1px solid var(--border)',
+                            letterSpacing: '0.01em',
+                          }}
+                        >
+                          {formatLakhCrore(netBalance)}
+                        </span>
+                      )}
                     </div>
                     <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4 }}>
                       {netBalance > 0
@@ -1238,23 +1290,8 @@ export default function Parties() {
                     </div>
                   </div>
 
-                  <div
-                    style={{
-                      display: 'grid',
-                      gridTemplateColumns:
-                        'minmax(140px, 1.3fr) minmax(88px, 1fr) minmax(88px, 1fr) 52px',
-                      gap: 8,
-                      padding: '8px 10px',
-                      background: 'var(--primary-bg, #f8fafc)',
-                      borderRadius: 8,
-                      marginBottom: 6,
-                      fontSize: 11,
-                      fontWeight: 700,
-                      color: 'var(--text-secondary)',
-                      borderBottom: '1px solid var(--border)',
-                      alignItems: 'end',
-                    }}
-                  >
+                  {/* Desktop Table Header */}
+                  <div className="party-ledger-desktop-header">
                     <div>Date</div>
                     <div style={{ color: 'var(--danger, #b91c1c)', textAlign: 'center' }}>
                       Paid out
@@ -1267,7 +1304,7 @@ export default function Parties() {
                     <div style={{ textAlign: 'center' }}>Slip</div>
                   </div>
 
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                     {displayRows.map((t) => {
                       const when =
                         t.whenDate && !Number.isNaN(new Date(t.whenDate).getTime())
@@ -1294,85 +1331,101 @@ export default function Parties() {
                       }
 
                       return (
-                        <div
-                          key={t.rowKey}
-                          style={{
-                            display: 'grid',
-                            gridTemplateColumns:
-                              'minmax(140px, 1.3fr) minmax(88px, 1fr) minmax(88px, 1fr) 52px',
-                            gap: 8,
-                            alignItems: 'stretch',
-                            padding: '10px 10px',
-                            borderBottom: '1px solid var(--primary-bg, #f3f4f6)',
-                            fontSize: 13,
-                          }}
-                        >
-                          <div>
-                            <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
-                              {formattedDate}
+                        <div key={t.rowKey} className="party-ledger-row-wrapper">
+                          {/* Desktop Layout */}
+                          <div className="party-ledger-row-desktop">
+                            <div>
+                              <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
+                                {formattedDate}
+                              </div>
+                              <div
+                                style={{
+                                  fontSize: 11,
+                                  color: 'var(--text-muted)',
+                                  marginTop: 4,
+                                  lineHeight: 1.35,
+                                }}
+                              >
+                                {subtitle}
+                              </div>
+                              <div className="party-ledger-bal-pill">
+                                Bal. {formatMoney(t.balanceAfter)}
+                              </div>
                             </div>
                             <div
                               style={{
-                                fontSize: 11,
-                                color: 'var(--text-muted)',
-                                marginTop: 4,
-                                lineHeight: 1.35,
+                                textAlign: 'center',
+                                fontWeight: 800,
+                                alignSelf: 'center',
+                                fontVariantNumeric: 'tabular-nums',
+                                color: diye ? 'var(--danger, #b91c1c)' : 'var(--text-muted)',
                               }}
                             >
-                              {subtitle}
+                              {diye ? formatMoney(diye) : '—'}
                             </div>
                             <div
                               style={{
-                                display: 'inline-block',
-                                marginTop: 8,
-                                fontSize: 11,
-                                fontWeight: 700,
-                                padding: '3px 8px',
-                                borderRadius: 999,
-                                background: 'var(--danger-bg, #fce7f3)',
-                                color: 'var(--danger, #be185d)',
-                                border: '1px solid #FBCFE8',
+                                textAlign: 'center',
+                                fontWeight: 800,
+                                alignSelf: 'center',
+                                fontVariantNumeric: 'tabular-nums',
+                                color: liye ? 'var(--success, #047857)' : 'var(--text-muted)',
                               }}
                             >
-                              Bal. {formatMoney(t.balanceAfter)}
+                              {liye ? formatMoney(liye) : '—'}
+                            </div>
+                            <div
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                              }}
+                            >
+                              {t.payment ? (
+                                <PaymentSlipCell payment={t.payment} isParty={false} />
+                              ) : t.lot ? (
+                                <PaymentSlipCell lot={t.lot} partyEdit={t.partyEdit} />
+                              ) : (
+                                <span style={{ color: 'var(--text-muted)' }}>—</span>
+                              )}
                             </div>
                           </div>
-                          <div
-                            style={{
-                              textAlign: 'center',
-                              fontWeight: 800,
-                              alignSelf: 'center',
-                              fontVariantNumeric: 'tabular-nums',
-                              color: diye ? 'var(--danger, #b91c1c)' : 'var(--text-muted)',
-                            }}
-                          >
-                            {diye ? formatMoney(diye) : '—'}
-                          </div>
-                          <div
-                            style={{
-                              textAlign: 'center',
-                              fontWeight: 800,
-                              alignSelf: 'center',
-                              fontVariantNumeric: 'tabular-nums',
-                              color: liye ? 'var(--success, #047857)' : 'var(--text-muted)',
-                            }}
-                          >
-                            {liye ? formatMoney(liye) : '—'}
-                          </div>
-                          <div
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                            }}
-                          >
-                            {t.payment ? (
-                              <PaymentSlipCell payment={t.payment} isParty={false} />
-                            ) : t.lot ? (
-                              <PaymentSlipCell lot={t.lot} partyEdit={t.partyEdit} />
-                            ) : (
-                              <span style={{ color: 'var(--text-muted)' }}>—</span>
-                            )}
+
+                          {/* Mobile Layout (Full-width, auto-adjusting, no horizontal scroll) */}
+                          <div className="party-ledger-row-mobile">
+                            <div className="party-ledger-mob-top">
+                              <span className="party-ledger-mob-date">{formattedDate}</span>
+                              <div className="party-ledger-mob-amount-wrap">
+                                {diye ? (
+                                  <span className="party-ledger-mob-amount paid" title="Paid out to party">
+                                    −{formatMoney(diye)}
+                                  </span>
+                                ) : liye ? (
+                                  <span className="party-ledger-mob-amount in" title="Work billed / received">
+                                    +{formatMoney(liye)}
+                                  </span>
+                                ) : (
+                                  <span className="party-ledger-mob-amount neutral">—</span>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="party-ledger-mob-subtitle">{subtitle}</div>
+
+                            <div className="party-ledger-mob-bottom">
+                              <span className="party-ledger-bal-pill">
+                                Bal. {formatMoney(t.balanceAfter)}
+                              </span>
+                              {(t.payment || t.lot) && (
+                                <div className="party-ledger-mob-slip">
+                                  {t.payment ? (
+                                    <PaymentSlipCell payment={t.payment} isParty={false} />
+                                  ) : (
+                                    <PaymentSlipCell lot={t.lot} partyEdit={t.partyEdit} />
+                                  )}
+                                </div>
+                              )}
+                            </div>
                           </div>
                         </div>
                       );

@@ -84,4 +84,49 @@ export function numberToWords(value) {
   return result;
 }
 
+/**
+ * Formats large amounts into Pakistani Lakh & Crore notation.
+ * Returns concise text like "5.20 Crore", "42.03 Lakh", "50k", or empty string if below threshold.
+ * 
+ * @param {number|string} value - The amount to format
+ * @param {number} minThreshold - Minimum value to start formatting (default 100,000 for 1 Lakh)
+ * @returns {string} - Formatted string like "5.20 Crore" or ""
+ */
+export function formatLakhCrore(value, minThreshold = 100000) {
+  const num = Number(value);
+  if (!Number.isFinite(num) || num === 0) return '';
+  const abs = Math.abs(num);
+  const sign = num < 0 ? '-' : '';
+
+  if (abs < minThreshold) return '';
+
+  // 1 Arab = 1,00,00,00,000 (1 Billion)
+  if (abs >= 1000000000) {
+    const v = abs / 1000000000;
+    return `${sign}${v.toFixed(2)} Arab`;
+  }
+
+  // 1 Crore = 1,00,00,000 (10 Million)
+  if (abs >= 10000000) {
+    const v = abs / 10000000;
+    const formatted = v >= 100 ? v.toFixed(1) : v.toFixed(2);
+    return `${sign}${formatted} Crore`;
+  }
+
+  // 1 Lakh = 1,00,000 (100 Thousand)
+  if (abs >= 100000) {
+    const v = abs / 100000;
+    const formatted = v >= 100 ? v.toFixed(1) : v.toFixed(2);
+    return `${sign}${formatted} Lakh`;
+  }
+
+  // Thousand (if threshold is set lower, e.g. 10k)
+  if (abs >= 1000) {
+    const v = abs / 1000;
+    return `${sign}${v.toFixed(1)}k`;
+  }
+
+  return '';
+}
+
 export default numberToWords;

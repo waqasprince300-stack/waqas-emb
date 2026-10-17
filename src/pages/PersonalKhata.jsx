@@ -28,6 +28,7 @@ import {
   runningBalances,
   buildContactShareSnapshot,
 } from '../utils/personalKhataStorage';
+import { formatLakhCrore } from '../utils/numberToWords';
 import { buildContactLedgerPdf, downloadContactLedgerPdf } from '../utils/personalKhataPdf';
 import { buildKhataShareUrl } from '../utils/personalKhataShare';
 import {
@@ -1172,8 +1173,25 @@ export default function PersonalKhata({ standalone = false } = {}) {
               <div>
                 <div
                   className={`pk-balance-amt ${net >= 0 ? 'pk-balance-amt--in' : 'pk-balance-amt--out'}`}
+                  style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' }}
                 >
-                  {fmtMoney(net)}
+                  <span>{fmtMoney(net)}</span>
+                  {formatLakhCrore(net) && (
+                    <span
+                      style={{
+                        fontSize: 11.5,
+                        fontWeight: 700,
+                        padding: '1.5px 6px',
+                        borderRadius: 6,
+                        background: 'var(--primary-bg, rgba(255, 255, 255, 0.08))',
+                        color: 'var(--text-secondary, #c2b6b1)',
+                        border: '1px solid var(--border)',
+                        letterSpacing: '0.01em',
+                      }}
+                    >
+                      {formatLakhCrore(net)}
+                    </span>
+                  )}
                 </div>
                 <div className="pk-balance-lbl">
                   {net > 0 ? 'They owe you' : net < 0 ? 'You owe them' : 'Settled up'}
@@ -1454,11 +1472,47 @@ export default function PersonalKhata({ standalone = false } = {}) {
           <div className="pk-stats">
             <div className="pk-stat">
               <span className="pk-stat-label">You will get</span>
-              <span className="pk-stat-amt">{fmtMoney(totals.receivable)}</span>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' }}>
+                <span className="pk-stat-amt">{fmtMoney(totals.receivable)}</span>
+                {formatLakhCrore(totals.receivable) && (
+                  <span
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 700,
+                      padding: '1.5px 6px',
+                      borderRadius: 6,
+                      background: 'var(--primary-bg, rgba(255, 255, 255, 0.08))',
+                      color: 'var(--text-secondary, #c2b6b1)',
+                      border: '1px solid var(--border)',
+                      letterSpacing: '0.01em',
+                    }}
+                  >
+                    {formatLakhCrore(totals.receivable)}
+                  </span>
+                )}
+              </div>
             </div>
             <div className="pk-stat">
               <span className="pk-stat-label">You will give</span>
-              <span className="pk-stat-amt">{fmtMoney(totals.payable)}</span>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' }}>
+                <span className="pk-stat-amt">{fmtMoney(totals.payable)}</span>
+                {formatLakhCrore(totals.payable) && (
+                  <span
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 700,
+                      padding: '1.5px 6px',
+                      borderRadius: 6,
+                      background: 'var(--primary-bg, rgba(255, 255, 255, 0.08))',
+                      color: 'var(--text-secondary, #c2b6b1)',
+                      border: '1px solid var(--border)',
+                      letterSpacing: '0.01em',
+                    }}
+                  >
+                    {formatLakhCrore(totals.payable)}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
 

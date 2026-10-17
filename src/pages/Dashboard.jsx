@@ -34,6 +34,7 @@ import { partyFacingLotStatusLabel, lotStatusBadgeKey } from '../utils/partyFaci
 import { getAdminLedgerOrBusinessBill, getBusinessBillAmount } from '../utils/partyBillPrivacy';
 import { normalizeFabric } from '../utils/ghausiaHelpers';
 import { apiService } from '../services/api';
+import { formatLakhCrore } from '../utils/numberToWords';
 
 function lotRelevantDate(l) {
   const st = String(l?.status || '').toLowerCase().trim();
@@ -236,6 +237,7 @@ export default function Dashboard() {
       {
         label: 'Paid to you',
         display: `₨${paidTotal.toLocaleString()}`,
+        lakhCrore: formatLakhCrore(paidTotal),
         color: 'var(--success, #166534)',
         sub: 'Payments from the business',
       },
@@ -692,8 +694,26 @@ export default function Dashboard() {
               {partyMiniStatsCards.map((c) => (
                 <div key={c.label} className="stat-card-modern" style={{ '--card-accent': c.color }}>
                   <div className="stat-label">{c.label}</div>
-                  <div className="stat-value" style={{ color: c.color }}>
-                    {'display' in c ? c.display : c.value}
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' }}>
+                    <div className="stat-value" style={{ color: c.color }}>
+                      {'display' in c ? c.display : c.value}
+                    </div>
+                    {c.lakhCrore && (
+                      <span
+                        style={{
+                          fontSize: 11,
+                          fontWeight: 700,
+                          padding: '1.5px 6px',
+                          borderRadius: 6,
+                          background: 'var(--primary-bg, rgba(255, 255, 255, 0.08))',
+                          color: 'var(--text-secondary, #c2b6b1)',
+                          border: '1px solid var(--border)',
+                          letterSpacing: '0.01em',
+                        }}
+                      >
+                        {c.lakhCrore}
+                      </span>
+                    )}
                   </div>
                   <div className="stat-sub">{c.sub}</div>
                 </div>
@@ -707,68 +727,91 @@ export default function Dashboard() {
         <>
           <section style={{ marginBottom: 28 }} className={hideAmounts ? 'dash-pipeline-mobile-hidden' : ''}>
             <div className="section-title" style={{ textTransform: 'uppercase', letterSpacing: '0.05em', fontSize: 13, fontWeight: 700, color: 'var(--text-secondary, #64748b)', marginBottom: 12 }}>Production Pipeline</div>
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))',
-                gap: 12,
-              }}
-            >
+            <div className="dash-pipeline-grid">
               <div className="stat-card-modern" style={{ '--card-accent': 'var(--purple, #8b5cf6)' }}>
-                <div className="stat-label" style={{ textTransform: 'uppercase' }}>Total Lots</div>
-                <div className="stat-value" style={{ color: 'var(--purple, #8b5cf6)' }}>{scopedLots.length}</div>
-                <div className="stat-sub">All assigned lots</div>
+                <div className="stat-label" style={{ textTransform: 'uppercase' }} title="Total Lots">Total Lots</div>
+                <div className="stat-value" style={{ color: 'var(--purple, #8b5cf6)', fontSize: 24 }}>{scopedLots.length}</div>
+                <div className="stat-sub" title="All assigned lots">All assigned lots</div>
               </div>
               <div className="stat-card-modern" style={{ '--card-accent': 'var(--warning, #f59e0b)' }}>
-                <div className="stat-label" style={{ textTransform: 'uppercase' }}>Pending</div>
-                <div className="stat-value" style={{ color: 'var(--warning, #f59e0b)' }}>{pendingCount}</div>
-                <div className="stat-sub">Awaiting dispatch</div>
+                <div className="stat-label" style={{ textTransform: 'uppercase' }} title="Pending">Pending</div>
+                <div className="stat-value" style={{ color: 'var(--warning, #f59e0b)', fontSize: 24 }}>{pendingCount}</div>
+                <div className="stat-sub" title="Awaiting dispatch">Awaiting dispatch</div>
               </div>
               <div className="stat-card-modern" style={{ '--card-accent': 'var(--primary-light, #0ea5e9)' }}>
-                <div className="stat-label" style={{ textTransform: 'uppercase' }}>Dispatched</div>
-                <div className="stat-value" style={{ color: 'var(--primary-light, #0ea5e9)' }}>{dispatchedCount}</div>
-                <div className="stat-sub">Currently with party</div>
+                <div className="stat-label" style={{ textTransform: 'uppercase' }} title="Dispatched">Dispatched</div>
+                <div className="stat-value" style={{ color: 'var(--primary-light, #0ea5e9)', fontSize: 24 }}>{dispatchedCount}</div>
+                <div className="stat-sub" title="Currently with party">Currently with party</div>
               </div>
               <div className="stat-card-modern" style={{ '--card-accent': 'var(--warning, #eab308)' }}>
-                <div className="stat-label" style={{ textTransform: 'uppercase' }}>Awaiting Approval</div>
-                <div className="stat-value" style={{ color: 'var(--warning, #eab308)' }}>{pendingApprovalCount}</div>
-                <div className="stat-sub">Party submitted completion</div>
+                <div className="stat-label" style={{ textTransform: 'uppercase' }} title="Awaiting Approval">Awaiting Approval</div>
+                <div className="stat-value" style={{ color: 'var(--warning, #eab308)', fontSize: 24 }}>{pendingApprovalCount}</div>
+                <div className="stat-sub" title="Party submitted completion">Party submitted completion</div>
               </div>
               <div className="stat-card-modern" style={{ '--card-accent': 'var(--danger, #ef4444)' }}>
-                <div className="stat-label" style={{ textTransform: 'uppercase' }}>Rejected</div>
-                <div className="stat-value" style={{ color: 'var(--danger, #ef4444)' }}>{rejectedCount}</div>
-                <div className="stat-sub">Needs rework</div>
+                <div className="stat-label" style={{ textTransform: 'uppercase' }} title="Rejected">Rejected</div>
+                <div className="stat-value" style={{ color: 'var(--danger, #ef4444)', fontSize: 24 }}>{rejectedCount}</div>
+                <div className="stat-sub" title="Needs rework">Needs rework</div>
               </div>
               <div className="stat-card-modern" style={{ '--card-accent': 'var(--success, #14b8a6)' }}>
-                <div className="stat-label" style={{ textTransform: 'uppercase' }}>Received Back</div>
-                <div className="stat-value" style={{ color: 'var(--success, #14b8a6)' }}>{receivedBackCount}</div>
-                <div className="stat-sub">Ready to bill owner</div>
+                <div className="stat-label" style={{ textTransform: 'uppercase' }} title="Received Back">Received Back</div>
+                <div className="stat-value" style={{ color: 'var(--success, #14b8a6)', fontSize: 24 }}>{receivedBackCount}</div>
+                <div className="stat-sub" title="Ready to bill owner">Ready to bill owner</div>
               </div>
               <div className="stat-card-modern" style={{ '--card-accent': 'var(--success, #22c55e)' }}>
-                <div className="stat-label" style={{ textTransform: 'uppercase' }}>Completed</div>
-                <div className="stat-value" style={{ color: 'var(--success, #22c55e)' }}>{completedCount}</div>
-                <div className="stat-sub">Fully done</div>
+                <div className="stat-label" style={{ textTransform: 'uppercase' }} title="Completed">Completed</div>
+                <div className="stat-value" style={{ color: 'var(--success, #22c55e)', fontSize: 24 }}>{completedCount}</div>
+                <div className="stat-sub" title="Fully done">Fully done</div>
               </div>
               <div className="stat-card-modern" style={{ '--card-accent': 'var(--danger, #ec4899)' }}>
-                <div className="stat-label" style={{ textTransform: 'uppercase' }}>Average TAT</div>
-                <div className="stat-value" style={{ color: 'var(--danger, #ec4899)' }}>{avgTatDisplay}</div>
-                <div className="stat-sub">Dispatch to Received Back</div>
+                <div className="stat-label" style={{ textTransform: 'uppercase' }} title="Average TAT">Average TAT</div>
+                <div className="stat-value" style={{ color: 'var(--danger, #ec4899)', fontSize: 18 }}>{avgTatDisplay}</div>
+                <div className="stat-sub" title="Dispatch to Received Back">Dispatch to Received Back</div>
               </div>
               <div className="stat-card-modern" style={{ '--card-accent': 'var(--primary-light, #0ea5e9)' }}>
-                <div className="stat-label" style={{ textTransform: 'uppercase' }}>WIP Value</div>
-                <div
-                  className="stat-value"
-                  style={{
-                    color: 'var(--primary-light, #0ea5e9)',
-                    fontSize: hideAmounts ? 24 : (wipValue >= 100000 ? 18 : 22),
-                    whiteSpace: 'nowrap',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis'
-                  }}
-                >
-                  {hideAmounts ? '***' : formatRupee(wipValue)}
+                <div className="stat-label" style={{ textTransform: 'uppercase' }} title="WIP Value">WIP Value</div>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 5, flexWrap: 'wrap' }}>
+                  <div
+                    className="stat-value"
+                    title={hideAmounts ? 'Amounts hidden' : formatRupee(wipValue)}
+                    style={{
+                      color: 'var(--primary-light, #0ea5e9)',
+                      fontSize: hideAmounts
+                        ? 22
+                        : wipValue >= 10000000
+                          ? 14
+                          : wipValue >= 1000000
+                            ? 15
+                            : wipValue >= 100000
+                              ? 16
+                              : 20,
+                      letterSpacing: '-0.03em',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                    }}
+                  >
+                    {hideAmounts ? '***' : formatRupee(wipValue)}
+                  </div>
+                  {!hideAmounts && formatLakhCrore(wipValue) && (
+                    <span
+                      style={{
+                        fontSize: 10.5,
+                        fontWeight: 700,
+                        padding: '1px 5px',
+                        borderRadius: 5,
+                        background: 'var(--primary-bg, rgba(255, 255, 255, 0.08))',
+                        color: 'var(--text-secondary, #c2b6b1)',
+                        border: '1px solid var(--border)',
+                        letterSpacing: '0.01em',
+                        lineHeight: 1.2,
+                      }}
+                    >
+                      {formatLakhCrore(wipValue)}
+                    </span>
+                  )}
                 </div>
-                <div className="stat-sub">Value of active work</div>
+                <div className="stat-sub" title="Value of active work">Value of active work</div>
               </div>
             </div>
           </section>
@@ -778,7 +821,7 @@ export default function Dashboard() {
             <div
               style={{
                 display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))',
                 gap: 16,
               }}
             >
@@ -827,8 +870,26 @@ export default function Dashboard() {
                       </span>
                     )}
                   </div>
-                  <div className="stat-value" style={{ color: c.color, fontSize: 24, whiteSpace: 'nowrap' }}>
-                    {hideAmounts ? '****' : (c.signed ? formatSignedRupee(c.value) : formatRupee(c.value))}
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' }}>
+                    <div className="stat-value" style={{ color: c.color, fontSize: 24, whiteSpace: 'nowrap' }}>
+                      {hideAmounts ? '****' : (c.signed ? formatSignedRupee(c.value) : formatRupee(c.value))}
+                    </div>
+                    {!hideAmounts && formatLakhCrore(c.value) && (
+                      <span
+                        style={{
+                          fontSize: 11,
+                          fontWeight: 700,
+                          padding: '1.5px 6px',
+                          borderRadius: 6,
+                          background: 'var(--primary-bg, rgba(255, 255, 255, 0.08))',
+                          color: 'var(--text-secondary, #c2b6b1)',
+                          border: '1px solid var(--border)',
+                          letterSpacing: '0.01em',
+                        }}
+                      >
+                        {formatLakhCrore(c.value)}
+                      </span>
+                    )}
                   </div>
                   {c.note && <div className="stat-sub">{c.note}</div>}
                 </div>
@@ -1107,9 +1168,27 @@ export default function Dashboard() {
             <div className="card dash-desktop-only">
               <div className="card-header">
                 <span className="card-title">Billable to Owner</span>
-                <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--primary-light, #0369a1)' }}>
-                  {hideAmounts ? '****' : `₨${billableTotal.toLocaleString()}`}
-                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--primary-light, #0369a1)' }}>
+                    {hideAmounts ? '****' : `₨${billableTotal.toLocaleString()}`}
+                  </span>
+                  {!hideAmounts && formatLakhCrore(billableTotal) && (
+                    <span
+                      style={{
+                        fontSize: 10.5,
+                        fontWeight: 700,
+                        padding: '1px 5px',
+                        borderRadius: 5,
+                        background: 'var(--primary-bg, rgba(255, 255, 255, 0.08))',
+                        color: 'var(--text-secondary, #c2b6b1)',
+                        border: '1px solid var(--border)',
+                        letterSpacing: '0.01em',
+                      }}
+                    >
+                      {formatLakhCrore(billableTotal)}
+                    </span>
+                  )}
+                </div>
               </div>
               <div className="card-body" style={{ padding: billable.length ? 0 : 22 }}>
                 {billable.length === 0 ? (

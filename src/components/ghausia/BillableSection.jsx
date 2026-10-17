@@ -1,5 +1,8 @@
 import React from 'react';
 import Loader from '../Loader';
+import { formatDisplayDate } from '../../utils/dateFilters';
+import { getBusinessBillAmount } from '../../utils/partyBillPrivacy';
+import { formatLakhCrore } from '../../utils/numberToWords';
 
 export default function BillableSection({
   billable,
@@ -81,9 +84,26 @@ export default function BillableSection({
               marginBottom: 12,
             }}
           >
-            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
-              Billable to Owner — <span style={{ color: 'var(--primary)' }}>{billable.length} lots</span> · Total: ₨
-              {billableTotal.toLocaleString()}
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+              <span>
+                Billable to Owner — <span style={{ color: 'var(--primary)' }}>{billable.length} lots</span> · Total: ₨{billableTotal.toLocaleString()}
+              </span>
+              {formatLakhCrore(billableTotal) && (
+                <span
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 700,
+                    padding: '1.5px 6px',
+                    borderRadius: 6,
+                    background: 'var(--primary-bg, rgba(255, 255, 255, 0.08))',
+                    color: 'var(--text-secondary, #c2b6b1)',
+                    border: '1px solid var(--border)',
+                    letterSpacing: '0.01em',
+                  }}
+                >
+                  {formatLakhCrore(billableTotal)}
+                </span>
+              )}
             </div>
             <input
               type="text"
@@ -112,6 +132,18 @@ export default function BillableSection({
               <div style={{ marginTop: 8 }}>
                 {billablePageItems.map((l) => {
                   const isHighlighted = highlightedBillableLotId === l.id;
+                  const totalPieces = Number(l.pieces != null && l.pieces !== '' ? l.pieces : (l.quantity || 0));
+                  const billAmt = getBusinessBillAmount(l) || Number(l.billAmount || 0);
+                  let perPieceRate = 0;
+                  if (l.rate && Number(l.rate) > 0) {
+                    perPieceRate = Number(l.rate);
+                  } else if (totalPieces > 0 && billAmt > 0) {
+                    perPieceRate = billAmt / totalPieces;
+                  }
+                  const approveDate = l.completionApprovedAt || l.receivedBackDate || l.updatedAt;
+                  const settled = getOwnerSettledAmount ? getOwnerSettledAmount(l) : 0;
+                  const unpaidBal = Math.max(0, billAmt - settled);
+
                   return (
                     <div
                       key={l.id}
@@ -140,16 +172,115 @@ export default function BillableSection({
                         transition: 'background 0.2s',
                       }}
                     >
-                    <span className="billable-row-title" style={{ flex: '1 1 auto', color: 'var(--text-primary)' }}>
-                      <strong>{l.lotNumber || l.lotNo} / {l.designNo}</strong> —{' '}
-                      <span style={{ color: 'var(--text-secondary)' }}>{l.partyName || '—'}</span>
-                    </span>
+                    <div className="billable-row-title" style={{ display: 'flex', alignItems: 'center', gap: '8px 12px', flexWrap: 'wrap', flex: '1 1 auto', minWidth: 0, color: 'var(--text-primary)' }}>
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                        <strong style={{ fontSize: 13, color: 'var(--text-primary)' }}>
+                          {l.lotNumber || l.lotNo} / {l.designNo}
+                        </strong>
+                        <span style={{ color: 'var(--text-muted, #71717a)' }}>—</span>
+                        <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>
+                          {l.partyName || '—'}
+                        </span>
+                      </div>
+
+                      {/* Info Badges: Total Pieces, Rate / Pc, Approve Date */}
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                        {/* Total Pieces */}
+                        <span
+                          title="Total Pieces"
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 4,
+                            fontSize: 11,
+                            fontWeight: 600,
+                            padding: '2px 7px',
+                            borderRadius: 6,
+                            background: 'var(--primary-bg, rgba(255, 255, 255, 0.08))',
+                            color: 'var(--primary-light, #f5b989)',
+                            border: '1px solid var(--border)',
+                            letterSpacing: '0.01em',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          <span style={{ opacity: 0.75 }}>Pcs:</span>
+                          <strong>{totalPieces > 0 ? totalPieces.toLocaleString() : '0'}</strong>
+                        </span>
+
+                        {/* Per Piece Rate */}
+                        <span
+                          title="Per Piece Rate"
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 4,
+                            fontSize: 11,
+                            fontWeight: 600,
+                            padding: '2px 7px',
+                            borderRadius: 6,
+                            background: 'var(--primary-bg, rgba(255, 255, 255, 0.08))',
+                            color: 'var(--success, #81c995)',
+                            border: '1px solid var(--border)',
+                            letterSpacing: '0.01em',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          <span style={{ opacity: 0.75 }}>Rate:</span>
+                          <strong>
+                            {perPieceRate > 0
+                              ? `₨${perPieceRate % 1 === 0 ? Math.round(perPieceRate).toLocaleString() : (Math.round(perPieceRate * 100) / 100).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}/pc`
+                              : '—'}
+                          </strong>
+                        </span>
+
+                        {/* Approve Date */}
+                        {approveDate && (
+                          <span
+                            title="Approved Date"
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 4,
+                              fontSize: 11,
+                              fontWeight: 600,
+                              padding: '2px 7px',
+                              borderRadius: 6,
+                              background: 'var(--primary-bg, rgba(255, 255, 255, 0.08))',
+                              color: 'var(--text-secondary, #c2b6b1)',
+                              border: '1px solid var(--border)',
+                              letterSpacing: '0.01em',
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            <span style={{ opacity: 0.75 }}>Approved:</span>
+                            <span>{formatDisplayDate(approveDate)}</span>
+                          </span>
+                        )}
+                      </div>
+                    </div>
                   <div className="billable-row-right" style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
                     {(() => {
-                      const settled = getOwnerSettledAmount(l);
                       return partyEdits[l.id]?.amountChangeNote ? (
                         <div style={{ textAlign: 'right', color: 'var(--text-primary)' }}>
-                          <strong>{renderOwnerUnpaidBalance(l)}</strong>
+                          <div style={{ display: 'flex', alignItems: 'baseline', gap: 5, justifyContent: 'flex-end' }}>
+                            <strong style={{ fontSize: 13 }}>{renderOwnerUnpaidBalance(l)}</strong>
+                            {formatLakhCrore(unpaidBal) && (
+                              <span
+                                style={{
+                                  fontSize: 10.5,
+                                  fontWeight: 700,
+                                  padding: '1px 5px',
+                                  borderRadius: 5,
+                                  background: 'var(--primary-bg, rgba(255, 255, 255, 0.08))',
+                                  color: 'var(--text-secondary, #c2b6b1)',
+                                  border: '1px solid var(--border)',
+                                  letterSpacing: '0.01em',
+                                }}
+                              >
+                                {formatLakhCrore(unpaidBal)}
+                              </span>
+                            )}
+                          </div>
                           {settled > 0 && (
                             <div style={{ fontSize: 10, color: 'var(--success, #16a34a)', marginTop: 2 }}>
                               Owner already billed: ₨{settled.toLocaleString()}
@@ -168,9 +299,27 @@ export default function BillableSection({
                         </div>
                       ) : (
                         <div style={{ textAlign: 'right' }}>
-                          <strong style={{ color: 'var(--text-primary)' }}>
-                            {renderOwnerUnpaidBalance(l)}
-                          </strong>
+                          <div style={{ display: 'flex', alignItems: 'baseline', gap: 5, justifyContent: 'flex-end' }}>
+                            <strong style={{ color: 'var(--text-primary)', fontSize: 13 }}>
+                              {renderOwnerUnpaidBalance(l)}
+                            </strong>
+                            {formatLakhCrore(unpaidBal) && (
+                              <span
+                                style={{
+                                  fontSize: 10.5,
+                                  fontWeight: 700,
+                                  padding: '1px 5px',
+                                  borderRadius: 5,
+                                  background: 'var(--primary-bg, rgba(255, 255, 255, 0.08))',
+                                  color: 'var(--text-secondary, #c2b6b1)',
+                                  border: '1px solid var(--border)',
+                                  letterSpacing: '0.01em',
+                                }}
+                              >
+                                {formatLakhCrore(unpaidBal)}
+                              </span>
+                            )}
+                          </div>
                           {settled > 0 && (
                             <div style={{ fontSize: 10, color: 'var(--success, #16a34a)', marginTop: 2 }}>
                               Owner already billed: ₨{settled.toLocaleString()}

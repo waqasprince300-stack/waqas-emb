@@ -118,6 +118,9 @@ class ApiService {
               errBody.message || errBody.error || (typeof errBody === 'string' ? errBody : '');
             if (errBody.error && errBody.error !== detail)
               detail = `${detail} ${errBody.error}`.trim();
+            if (Array.isArray(errBody.details) && errBody.details.length > 0) {
+              detail = `${detail}: ${errBody.details.join(', ')}`.trim();
+            }
           } catch {
             errBody = null;
           }

@@ -25,7 +25,7 @@ import {
 
 import { normalizeLotKey, lotDisplayRef } from '../utils/lotKeyHelpers';
 import useDebounce from '../hooks/useDebounce';
-import { numberToWords } from '../utils/numberToWords';
+import { numberToWords, formatLakhCrore } from '../utils/numberToWords';
 
 /** Admin-approved / billable lot for party statement (mirrors Party Ledger “completed” side). */
 function isLotPartyBillableStatus(status) {
@@ -881,13 +881,29 @@ export default function Payments() {
                 >
                   {c.label}
                 </div>
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' }}>
                   {c.icon && !c.isCount && (
                     <span style={{ fontSize: 18, fontWeight: 700, color: c.color }}>{c.icon}</span>
                   )}
                   <span style={{ fontSize: 'clamp(12px, 4vw, 22px)', fontWeight: 700, color: c.color, whiteSpace: 'nowrap', letterSpacing: '-0.02em' }}>
                     {c.isCount ? c.value : `₨${Number(c.value).toLocaleString()}`}
                   </span>
+                  {!c.isCount && formatLakhCrore(c.value) && (
+                    <span
+                      style={{
+                        fontSize: 11,
+                        fontWeight: 700,
+                        padding: '1.5px 6px',
+                        borderRadius: 6,
+                        background: 'var(--primary-bg, rgba(255, 255, 255, 0.08))',
+                        color: 'var(--text-secondary, #c2b6b1)',
+                        border: '1px solid var(--border)',
+                        letterSpacing: '0.01em',
+                      }}
+                    >
+                      {formatLakhCrore(c.value)}
+                    </span>
+                  )}
                 </div>
                 {c.note && (
                   <div
@@ -961,13 +977,29 @@ export default function Payments() {
                 >
                   {c.label}
                 </div>
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' }}>
                   {c.icon && !c.isCount && (
                     <span style={{ fontSize: 18, fontWeight: 700, color: c.color }}>{c.icon}</span>
                   )}
                   <span style={{ fontSize: 'clamp(12px, 4vw, 22px)', fontWeight: 700, color: c.color, whiteSpace: 'nowrap', letterSpacing: '-0.02em' }}>
                     {c.isCount ? c.value : `₨${c.value.toLocaleString()}`}
                   </span>
+                  {!c.isCount && formatLakhCrore(c.value) && (
+                    <span
+                      style={{
+                        fontSize: 11,
+                        fontWeight: 700,
+                        padding: '1.5px 6px',
+                        borderRadius: 6,
+                        background: 'var(--primary-bg, rgba(255, 255, 255, 0.08))',
+                        color: 'var(--text-secondary, #c2b6b1)',
+                        border: '1px solid var(--border)',
+                        letterSpacing: '0.01em',
+                      }}
+                    >
+                      {formatLakhCrore(c.value)}
+                    </span>
+                  )}
                 </div>
                 {c.note && (
                   <div
@@ -1005,13 +1037,12 @@ export default function Payments() {
           ]}
         />
         {isAdmin && businessOwners.length > 0 && (
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }} className="pl-toolbar-filter">
+          <>
             <select
-              className="form-select pl-toolbar-filter--owner"
+              className="form-select pl-toolbar-filter pl-toolbar-filter--owner"
               value={ownerNameFilter}
               onChange={(e) => setOwnerNameFilter(e.target.value)}
               aria-label="Filter by owner name"
-              style={{ flex: 1, width: '100%' }}
             >
               <option value="All">All owners</option>
               {businessOwnersSorted.map((o) => {
@@ -1025,14 +1056,29 @@ export default function Payments() {
             </select>
             {ownerNameFilter !== 'All' && (
               <button
-                className="btn btn-secondary hide-print"
-                style={{ fontSize: 13, padding: '4px 12px', whiteSpace: 'nowrap', border: '1px solid var(--border)', background: 'var(--card-bg)' }}
+                className="btn btn-secondary hide-print pl-toolbar-filter pl-toolbar-filter--ledger"
                 onClick={() => setShowOwnerLedger(true)}
+                title="View Owner Ledger"
               >
-                View Ledger
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  style={{ flexShrink: 0 }}
+                >
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                  <polyline points="14 2 14 8 20 8" />
+                  <line x1="16" y1="13" x2="8" y2="13" />
+                  <line x1="16" y1="17" x2="8" y2="17" />
+                  <polyline points="10 9 9 9 8 9" />
+                </svg>
+                <span>View Ledger</span>
               </button>
             )}
-          </div>
+          </>
         )}
         <DateRangeSelect
           value={dateRange}
