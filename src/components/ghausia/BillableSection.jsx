@@ -175,12 +175,34 @@ export default function BillableSection({
                     <div className="billable-row-title" style={{ display: 'flex', alignItems: 'center', gap: '8px 12px', flexWrap: 'wrap', flex: '1 1 auto', minWidth: 0, color: 'var(--text-primary)' }}>
                       <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
                         <strong style={{ fontSize: 13, color: 'var(--text-primary)' }}>
-                          {l.lotNumber || l.lotNo} / {l.designNo}
+                          {(l.lotNumber || l.lotNo) ? (
+                            `${l.lotNumber || l.lotNo} / ${l.designNo || '—'}`
+                          ) : (
+                            <>
+                              <span style={{ color: 'var(--text-muted, #94a3b8)', fontStyle: 'italic', fontWeight: 500 }}>(No Lot)</span>
+                              {l.designNo ? ` / ${l.designNo}` : ''}
+                            </>
+                          )}
                         </strong>
                         <span style={{ color: 'var(--text-muted, #71717a)' }}>—</span>
                         <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>
                           {l.partyName || '—'}
                         </span>
+                        {l.isRework && (
+                          <span
+                            style={{
+                              fontSize: 11,
+                              fontWeight: 700,
+                              padding: '2px 8px',
+                              background: 'var(--primary-bg, #fffbeb)',
+                              color: 'var(--primary, #b45309)',
+                              border: '1px solid var(--border, #fde68a)',
+                              borderRadius: 4,
+                            }}
+                          >
+                            Rework
+                          </span>
+                        )}
                       </div>
 
                       {/* Info Badges: Total Pieces, Rate / Pc, Approve Date */}
@@ -262,10 +284,18 @@ export default function BillableSection({
                     {(() => {
                       return partyEdits[l.id]?.amountChangeNote ? (
                         <div style={{ textAlign: 'right', color: 'var(--text-primary)' }}>
-                          <div style={{ display: 'flex', alignItems: 'baseline', gap: 5, justifyContent: 'flex-end' }}>
-                            <strong style={{ fontSize: 13 }}>{renderOwnerUnpaidBalance(l)}</strong>
+                          <div
+                            className="billable-amount-wrap"
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 6,
+                              justifyContent: 'flex-end',
+                            }}
+                          >
                             {formatLakhCrore(unpaidBal) && (
                               <span
+                                className="billable-lakh-badge"
                                 style={{
                                   fontSize: 10.5,
                                   fontWeight: 700,
@@ -275,11 +305,26 @@ export default function BillableSection({
                                   color: 'var(--text-secondary, #c2b6b1)',
                                   border: '1px solid var(--border)',
                                   letterSpacing: '0.01em',
+                                  whiteSpace: 'nowrap',
                                 }}
                               >
                                 {formatLakhCrore(unpaidBal)}
                               </span>
                             )}
+                            <strong
+                              className="billable-amount-val"
+                              style={{
+                                color: 'var(--text-primary)',
+                                fontSize: 13,
+                                minWidth: 95,
+                                textAlign: 'right',
+                                fontVariantNumeric: 'tabular-nums',
+                                whiteSpace: 'nowrap',
+                                display: 'inline-block',
+                              }}
+                            >
+                              {renderOwnerUnpaidBalance(l)}
+                            </strong>
                           </div>
                           {settled > 0 && (
                             <div style={{ fontSize: 10, color: 'var(--success, #16a34a)', marginTop: 2 }}>
@@ -299,12 +344,18 @@ export default function BillableSection({
                         </div>
                       ) : (
                         <div style={{ textAlign: 'right' }}>
-                          <div style={{ display: 'flex', alignItems: 'baseline', gap: 5, justifyContent: 'flex-end' }}>
-                            <strong style={{ color: 'var(--text-primary)', fontSize: 13 }}>
-                              {renderOwnerUnpaidBalance(l)}
-                            </strong>
+                          <div
+                            className="billable-amount-wrap"
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 6,
+                              justifyContent: 'flex-end',
+                            }}
+                          >
                             {formatLakhCrore(unpaidBal) && (
                               <span
+                                className="billable-lakh-badge"
                                 style={{
                                   fontSize: 10.5,
                                   fontWeight: 700,
@@ -314,11 +365,26 @@ export default function BillableSection({
                                   color: 'var(--text-secondary, #c2b6b1)',
                                   border: '1px solid var(--border)',
                                   letterSpacing: '0.01em',
+                                  whiteSpace: 'nowrap',
                                 }}
                               >
                                 {formatLakhCrore(unpaidBal)}
                               </span>
                             )}
+                            <strong
+                              className="billable-amount-val"
+                              style={{
+                                color: 'var(--text-primary)',
+                                fontSize: 13,
+                                minWidth: 95,
+                                textAlign: 'right',
+                                fontVariantNumeric: 'tabular-nums',
+                                whiteSpace: 'nowrap',
+                                display: 'inline-block',
+                              }}
+                            >
+                              {renderOwnerUnpaidBalance(l)}
+                            </strong>
                           </div>
                           {settled > 0 && (
                             <div style={{ fontSize: 10, color: 'var(--success, #16a34a)', marginTop: 2 }}>

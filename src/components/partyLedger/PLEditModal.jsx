@@ -120,9 +120,12 @@ export default function PLEditModal({
 }) {
   if (!editingId || !editingLot) return null;
 
+  const isSubmittingForApproval =
+    editForm.status === 'Completed' && ledgerEditKind !== 'pendingReview';
+
   return (
     <Modal
-      title={`Edit \u2014 ${editingLot.lotNo || editingLot.lotNumber} / ${editingLot.designNo}`}
+      title={`Edit \u2014 ${(editingLot.lotNo || editingLot.lotNumber) ? `${editingLot.lotNo || editingLot.lotNumber} / ` : '(No Lot) / '}${editingLot.designNo || '—'}`}
       onClose={onClose}
       onFormSubmit={() => {
         void handleSave();
@@ -145,8 +148,10 @@ export default function PLEditModal({
           >
             {ledgerSaving ? (
               <>
-                <Loader /> Saving...
+                <Loader /> {isSubmittingForApproval ? 'Sending for Approval...' : 'Saving...'}
               </>
+            ) : isSubmittingForApproval ? (
+              'Send for Approval'
             ) : (
               'Save Changes'
             )}

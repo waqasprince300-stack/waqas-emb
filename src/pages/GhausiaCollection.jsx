@@ -44,6 +44,7 @@ import {
   messageFromLotSaveError,
   hasPositiveBillAmount,
   checkIsCombinedDupatta,
+  matchLotSearch,
 } from '../utils/ghausiaHelpers';
 
 // Sub-components
@@ -260,15 +261,27 @@ export default function GhausiaCollection() {
       ...(fromBillable ? { completedFromBillable: false } : {}),
     };
     
-    const normKey = normalizeLotNumberKey(lot.lotNumber || lot.lotNo);
-    const existingOwnerPayments = payments.filter(
-      (p) => normalizeLotNumberKey(p.linkedLot) === normKey && String(p.party || '').trim().toLowerCase() === 'owner'
-    );
+    const rawLotNum = String(lot.lotNumber || lot.lotNo || '').trim();
+    const normKey = rawLotNum ? normalizeLotNumberKey(rawLotNum) : null;
+    const isReworkLot = Boolean(lot.isRework);
+    const existingOwnerPayments = normKey
+      ? payments.filter((p) => {
+          if (!p.linkedLot) return false;
+          if (String(p.party || '').trim().toLowerCase() !== 'owner') return false;
+          const paymentLinkedKey = normalizeLotNumberKey(
+            String(p.linkedLot).replace(/\s*\(rework\)\s*/i, '')
+          );
+          if (paymentLinkedKey !== normKey) return false;
+          const paymentIsRework =
+            /rework/i.test(p.linkedLot || '') || /rework/i.test(p.note || '');
+          return paymentIsRework === isReworkLot;
+        })
+      : [];
     const isReEditedLot = fromBillable && !!partyEdits[lot.id]?.amountChangeNote;
     const paymentAmount = Number(billAmount) || 0;
     const paymentType = 'Paid';
 
-    const linkedLot = String(lot.lotNumber || lot.lotNo || '').trim();
+    const linkedLot = isReworkLot ? `${rawLotNum} (Rework)` : rawLotNum;
     const partyName =
       (lot.partyName && String(lot.partyName).trim()) ||
       (lot.partyId ? getPartyName(lot.partyId) : '') ||
@@ -285,8 +298,12 @@ export default function GhausiaCollection() {
         date: today,
         linkedLot,
         note: fromBillable
-          ? (isReEditedLot ? `Billable lot settled (difference) — Party: ${partyName || '—'}; Design: ${designNo}` : `Defective lot settled — Party: ${partyName || '—'}`)
-          : `Lot completed — Party: ${partyName || '—'}; Design: ${designNo}; Type: ${lot.itemType || lot.fabric || '—'}`,
+          ? (isReworkLot
+              ? `Rework lot settled — Party: ${partyName || '—'}; Design: ${designNo}`
+              : (isReEditedLot ? `Billable lot settled (difference) — Party: ${partyName || '—'}; Design: ${designNo}` : `Defective lot settled — Party: ${partyName || '—'}`))
+          : (isReworkLot
+              ? `Rework lot completed — Party: ${partyName || '—'}; Design: ${designNo}`
+              : `Lot completed — Party: ${partyName || '—'}; Design: ${designNo}; Type: ${lot.itemType || lot.fabric || '—'}`),
         businessOwnerId: lotBizId(lot),
       };
     }
@@ -421,35 +438,16 @@ export default function GhausiaCollection() {
     }
   };
 
+  const partyMap = useMemo(
+    () => new Map((parties || []).map((p) => [String(p?.id), String(p?.name || '').toLowerCase()])),
+    [parties]
+  );
+
   // ─── Filtered & Paginated Lots ───
   const filtered = useMemo(() => {
-    const partyMap = new Map(parties.map(p => [String(p.id), (p.name || '').toLowerCase()]));
     const list = effectiveCollectionLots.filter((l) => {
       if (highlightedBillableLotId && String(l.id) !== String(highlightedBillableLotId)) return false;
-      const q = debouncedSearch.toLowerCase();
-      const lotLabel = (l.lotNumber || l.lotNo || '').toLowerCase();
-      const designNo = String(l.designNo || '').toLowerCase();
-      const fabric = String(l.fabric || '').toLowerCase();
-      const description = String(l.description || '').toLowerCase();
-      const partyName = partyMap.get(String(l.partyId)) || '';
-
-      let matchQ = true;
-      if (q) {
-        if (searchField === 'all') {
-          matchQ = lotLabel.includes(q) || designNo.includes(q) || fabric.includes(q) || description.includes(q) || partyName.includes(q);
-        } else if (searchField === 'lotNo') {
-          matchQ = lotLabel.includes(q);
-        } else if (searchField === 'designNo') {
-          matchQ = designNo.includes(q);
-        } else if (searchField === 'fabric') {
-          matchQ = fabric.includes(q);
-        } else if (searchField === 'description') {
-          matchQ = description.includes(q);
-        } else if (searchField === 'partyName') {
-          matchQ = partyName.includes(q);
-        }
-      }
-      if (!matchQ) return false;
+      if (!matchLotSearch(l, debouncedSearch, searchField, partyMap)) return false;
       if (partyFilter !== 'All' && String(l.partyId || '') !== String(partyFilter)) return false;
       if (stuckLotIdsFilter.length > 0 && !stuckLotIdsFilter.includes(String(l.id))) return false;
       if (
@@ -478,7 +476,7 @@ export default function GhausiaCollection() {
     effectiveCollectionLots,
     debouncedSearch,
     searchField,
-    parties,
+    partyMap,
     partyFilter,
     dateRange,
     customRange,
@@ -562,6 +560,92 @@ export default function GhausiaCollection() {
       ? 'Pending, dispatched, and received back (not completed)'
       : `${othersTabStatusLabel} lots in the current filters`;
 
+  // Search-aware tab counts so tab badge numbers match search queries
+  const searchOthersCount = useMemo(() => {
+    if (!debouncedSearch.trim()) return othersTabCount;
+    let lots = visibleLots;
+    if (highlightedBillableLotId) {
+      lots = lots.filter(l => String(l.id) === String(highlightedBillableLotId));
+    }
+    if (statusFilter !== 'All') {
+      lots = lots.filter(l => l.status === statusFilter);
+    } else {
+      lots = lots.filter(l => l.status !== 'completed');
+    }
+    return lots.filter(l => matchLotSearch(l, debouncedSearch, searchField, partyMap)).length;
+  }, [visibleLots, highlightedBillableLotId, statusFilter, debouncedSearch, searchField, partyMap, othersTabCount]);
+
+  const searchCompletedCount = useMemo(() => {
+    if (!debouncedSearch.trim()) return completedLotsCount;
+    let lots = visibleLots.filter(l => l.status === 'completed');
+    if (highlightedBillableLotId) {
+      lots = lots.filter(l => String(l.id) === String(highlightedBillableLotId));
+    }
+    return lots.filter(l => matchLotSearch(l, debouncedSearch, searchField, partyMap)).length;
+  }, [visibleLots, highlightedBillableLotId, debouncedSearch, searchField, partyMap, completedLotsCount]);
+
+  const displayOthersTabCount = debouncedSearch.trim() ? searchOthersCount : othersTabCount;
+  const displayCompletedLotsCount = debouncedSearch.trim() ? searchCompletedCount : completedLotsCount;
+
+  // Selected billable lot object
+  const highlightedLot = useMemo(() => {
+    if (!highlightedBillableLotId) return null;
+    return effectiveCollectionLots.find(l => String(l.id) === String(highlightedBillableLotId)) || null;
+  }, [highlightedBillableLotId, effectiveCollectionLots]);
+
+  // Check if matches exist without highlighted billable lot filter
+  const matchesWithoutHighlight = useMemo(() => {
+    if (!highlightedBillableLotId || !debouncedSearch.trim()) return 0;
+    return effectiveCollectionLots.filter(l => {
+      if (lotTableTab === 'completed' && l.status !== 'completed') return false;
+      if (lotTableTab === 'others' && l.status === 'completed') return false;
+      return matchLotSearch(l, debouncedSearch, searchField, partyMap);
+    }).length;
+  }, [highlightedBillableLotId, debouncedSearch, searchField, partyMap, effectiveCollectionLots, lotTableTab]);
+
+  // Check if search query matches lots in the other tab
+  const otherTabMatchCount = useMemo(() => {
+    if (!debouncedSearch.trim()) return 0;
+    const targetStatus = lotTableTab === 'others' ? 'completed' : 'others';
+    return effectiveCollectionLots.filter(l => {
+      if (targetStatus === 'completed' && l.status !== 'completed') return false;
+      if (targetStatus === 'others' && l.status === 'completed') return false;
+      return matchLotSearch(l, debouncedSearch, searchField, partyMap);
+    }).length;
+  }, [debouncedSearch, searchField, partyMap, effectiveCollectionLots, lotTableTab]);
+
+  // Filter clear callbacks
+  const handleClearSearch = useCallback(() => {
+    setSearch('');
+    setSearchField('all');
+  }, []);
+
+  const handleClearHighlightedLot = useCallback(() => {
+    setHighlightedBillableLotId(null);
+  }, []);
+
+  const handleClearPartyFilter = useCallback(() => {
+    setPartyFilter('All');
+  }, []);
+
+  const handleClearStatusFilter = useCallback(() => {
+    setStatusFilter('All');
+  }, []);
+
+  const handleClearDateRange = useCallback(() => {
+    setDateRange('all');
+  }, []);
+
+  const handleResetAllFilters = useCallback(() => {
+    setSearch('');
+    setSearchField('all');
+    setPartyFilter('All');
+    setStatusFilter('All');
+    setDateRange('all');
+    setStuckLotIdsFilter([]);
+    setHighlightedBillableLotId(null);
+  }, []);
+
   // ─── Billable Lots ───
   const billable = useMemo(
     () =>
@@ -575,10 +659,21 @@ export default function GhausiaCollection() {
 
   const getOwnerSettledAmount = useCallback(
     (lot) => {
-      const normKey = normalizeLotNumberKey(lot.lotNumber || lot.lotNo);
-      const existingOwnerPayments = payments.filter(
-        (p) => normalizeLotNumberKey(p.linkedLot) === normKey && String(p.party || '').trim().toLowerCase() === 'owner'
-      );
+      const rawLotNum = String(lot?.lotNumber || lot?.lotNo || '').trim();
+      if (!rawLotNum) return 0;
+      const normKey = normalizeLotNumberKey(rawLotNum);
+      const isReworkLot = Boolean(lot?.isRework);
+      const existingOwnerPayments = payments.filter((p) => {
+        if (!p.linkedLot) return false;
+        if (String(p.party || '').trim().toLowerCase() !== 'owner') return false;
+        const paymentLinkedKey = normalizeLotNumberKey(
+          String(p.linkedLot).replace(/\s*\(rework\)\s*/i, '')
+        );
+        if (paymentLinkedKey !== normKey) return false;
+        const paymentIsRework =
+          /rework/i.test(p.linkedLot || '') || /rework/i.test(p.note || '');
+        return paymentIsRework === isReworkLot;
+      });
       const existingPaidToOwner = existingOwnerPayments
         .filter((p) => p.type === 'Paid')
         .reduce((s, p) => s + p.amount, 0);
@@ -1339,6 +1434,73 @@ export default function GhausiaCollection() {
         partyEdits={partyEdits}
       />
 
+      {/* Active Billable Filter Banner */}
+      {highlightedLot && (
+        <div
+          className="billable-filter-banner animate-fade-in"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 12,
+            padding: '10px 14px',
+            marginBottom: 14,
+            background: 'color-mix(in srgb, var(--primary, #3b82f6) 12%, var(--card-bg, #231b17))',
+            border: '1px solid var(--primary, #3b82f6)',
+            borderRadius: 8,
+            flexWrap: 'wrap',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--text-primary)' }}>
+            <span style={{ fontSize: 16 }}>📌</span>
+            <span>
+              <strong>Billable Lot Selected:</strong> Table is filtered to show only Lot{' '}
+              <strong style={{ color: 'var(--primary, #3b82f6)' }}>
+                {(highlightedLot.lotNumber || highlightedLot.lotNo)
+                  ? `#${highlightedLot.lotNumber || highlightedLot.lotNo} / ${highlightedLot.designNo || '—'}`
+                  : `(No Lot) / ${highlightedLot.designNo || '—'}`}
+              </strong>{' '}
+              {highlightedLot.isRework && (
+                <span
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 700,
+                    padding: '2px 8px',
+                    background: 'var(--primary-bg, #fffbeb)',
+                    color: 'var(--primary, #b45309)',
+                    border: '1px solid var(--border, #fde68a)',
+                    borderRadius: 4,
+                    marginRight: 6,
+                  }}
+                >
+                  Rework
+                </span>
+              )}
+              ({highlightedLot.partyName || 'Own Factory'}).
+            </span>
+          </div>
+          <button
+            type="button"
+            className="btn btn-sm btn-ghost"
+            onClick={() => setHighlightedBillableLotId(null)}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '5px 12px',
+              fontSize: 12,
+              fontWeight: 600,
+              color: 'var(--primary, #3b82f6)',
+              borderColor: 'var(--primary, #3b82f6)',
+              background: 'transparent',
+              cursor: 'pointer',
+            }}
+          >
+            ✕ Show All Lots (Deselect)
+          </button>
+        </div>
+      )}
+
       {/* Toolbar */}
       <div className="toolbar pl-toolbar">
         <SearchBar
@@ -1418,12 +1580,21 @@ export default function GhausiaCollection() {
       >
         <div className="segmented-tabs">
           {[
-            { id: 'others', label: othersTabStatusLabel, count: othersTabCount, hint: othersTabHint },
+            {
+              id: 'others',
+              label: othersTabStatusLabel,
+              count: displayOthersTabCount,
+              hint: debouncedSearch.trim()
+                ? `${displayOthersTabCount} matching lots (of ${othersTabCount} in category)`
+                : othersTabHint,
+            },
             {
               id: 'completed',
               label: 'Completed',
-              count: completedLotsCount,
-              hint: 'Lots marked completed',
+              count: displayCompletedLotsCount,
+              hint: debouncedSearch.trim()
+                ? `${displayCompletedLotsCount} matching lots (of ${completedLotsCount} completed)`
+                : 'Lots marked completed',
             },
           ].map((tab) => (
             <button
@@ -1483,6 +1654,22 @@ export default function GhausiaCollection() {
         filtered={filtered}
         paginatedLots={paginatedLots}
         search={search}
+        searchField={searchField}
+        partyFilter={partyFilter}
+        statusFilter={statusFilter}
+        dateRange={dateRange}
+        highlightedBillableLotId={highlightedBillableLotId}
+        highlightedLot={highlightedLot}
+        totalUnfilteredLots={lotTableTab === 'completed' ? completedLotsCount : othersTabCount}
+        matchesWithoutHighlight={matchesWithoutHighlight}
+        otherTabMatchCount={otherTabMatchCount}
+        onClearSearch={handleClearSearch}
+        onClearHighlightedLot={handleClearHighlightedLot}
+        onClearPartyFilter={handleClearPartyFilter}
+        onClearStatusFilter={handleClearStatusFilter}
+        onClearDateRange={handleClearDateRange}
+        onResetAllFilters={handleResetAllFilters}
+        onSwitchTab={(targetTab) => { setLotTableTab(targetTab); setStuckLotIdsFilter([]); }}
         lotTableTab={lotTableTab}
         parties={parties}
         businessOwners={businessOwners}
@@ -1501,6 +1688,23 @@ export default function GhausiaCollection() {
         filtered={filtered}
         paginatedLots={paginatedLots}
         viewMode={viewMode}
+        search={search}
+        searchField={searchField}
+        partyFilter={partyFilter}
+        statusFilter={statusFilter}
+        dateRange={dateRange}
+        highlightedBillableLotId={highlightedBillableLotId}
+        highlightedLot={highlightedLot}
+        totalUnfilteredLots={lotTableTab === 'completed' ? completedLotsCount : othersTabCount}
+        matchesWithoutHighlight={matchesWithoutHighlight}
+        otherTabMatchCount={otherTabMatchCount}
+        onClearSearch={handleClearSearch}
+        onClearHighlightedLot={handleClearHighlightedLot}
+        onClearPartyFilter={handleClearPartyFilter}
+        onClearStatusFilter={handleClearStatusFilter}
+        onClearDateRange={handleClearDateRange}
+        onResetAllFilters={handleResetAllFilters}
+        onSwitchTab={(targetTab) => { setLotTableTab(targetTab); setStuckLotIdsFilter([]); }}
         lotTableTab={lotTableTab}
         parties={parties}
         businessOwners={businessOwners}

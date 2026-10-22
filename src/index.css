@@ -4072,6 +4072,16 @@ tbody tr:last-child td {
     width: 100%;
     justify-content: flex-end;
   }
+  .billable-amount-val {
+    min-width: auto !important;
+  }
+}
+
+.billable-amount-val {
+  min-width: 95px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 @media (max-width: 768px) {

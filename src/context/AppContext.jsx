@@ -670,6 +670,7 @@ export function AppProvider({ children }) {
         action === 'bill_revision_approved' ||
         action === 'bill_revision_rejected' ||
         action === 'payment_recorded' ||
+        action === 'lot_dispatched' ||
         action === 'lot_assigned' ||
         action === 'lot_approved' ||
         action === 'payment_updated' ||
@@ -679,6 +680,7 @@ export function AppProvider({ children }) {
           action,
           lotId: lotId || (payload.paymentId != null ? String(payload.paymentId) : ''),
           linkPath: payload.linkPath || (action === 'payment_recorded' ? '/payments' : ''),
+          partyId: payload.partyId != null ? String(payload.partyId) : '',
           at: payload.at || Date.now(),
         });
         void refreshNotifications();

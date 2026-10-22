@@ -1,8 +1,7 @@
 import React from 'react';
-import { HighlightText } from '../UI';
+import { HighlightText, ActionBtn } from '../UI';
 import LotStatusSelect from '../LotStatusSelect';
-import PartyPickerSelect from '../PartyPickerSelect';
-import { ActionBtn, EmptyState } from '../UI';
+import LotEmptyState from './LotEmptyState';
 import { formatDisplayDate } from '../../utils/dateFilters';
 import { workspaceDisplayTitleForLot } from '../../utils/businessWorkspace';
 import { STATUS_OPTIONS } from '../../utils/ghausiaHelpers';
@@ -11,6 +10,22 @@ export default function LotTableDesktop({
   filtered,
   paginatedLots,
   search,
+  searchField = 'all',
+  partyFilter = 'All',
+  statusFilter = 'All',
+  dateRange = 'all',
+  highlightedBillableLotId = null,
+  highlightedLot = null,
+  totalUnfilteredLots = 0,
+  matchesWithoutHighlight = 0,
+  otherTabMatchCount = 0,
+  onClearSearch,
+  onClearHighlightedLot,
+  onClearPartyFilter,
+  onClearStatusFilter,
+  onClearDateRange,
+  onResetAllFilters,
+  onSwitchTab,
   lotTableTab,
   parties,
   businessOwners,
@@ -47,7 +62,27 @@ export default function LotTableDesktop({
             {filtered.length === 0 ? (
               <tr>
                 <td colSpan={12}>
-                  <EmptyState message="No lots found" />
+                  <LotEmptyState
+                    search={search}
+                    searchField={searchField}
+                    partyFilter={partyFilter}
+                    parties={parties}
+                    statusFilter={statusFilter}
+                    dateRange={dateRange}
+                    highlightedBillableLotId={highlightedBillableLotId}
+                    highlightedLot={highlightedLot}
+                    lotTableTab={lotTableTab}
+                    totalUnfilteredLots={totalUnfilteredLots}
+                    matchesWithoutHighlight={matchesWithoutHighlight}
+                    otherTabMatchCount={otherTabMatchCount}
+                    onClearSearch={onClearSearch}
+                    onClearHighlightedLot={onClearHighlightedLot}
+                    onClearPartyFilter={onClearPartyFilter}
+                    onClearStatusFilter={onClearStatusFilter}
+                    onClearDateRange={onClearDateRange}
+                    onResetAllFilters={onResetAllFilters}
+                    onSwitchTab={onSwitchTab}
+                  />
                 </td>
               </tr>
             ) : (

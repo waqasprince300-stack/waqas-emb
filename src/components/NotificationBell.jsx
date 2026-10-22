@@ -25,7 +25,10 @@ function resolveLinkPath(n) {
   if (
     type === 'lot_rejected' ||
     type === 'bill_revision_approved' ||
-    type === 'bill_revision_rejected'
+    type === 'bill_revision_rejected' ||
+    type === 'lot_dispatched' ||
+    type === 'lot_assigned' ||
+    type === 'lot_approved'
   ) {
     return `/party-ledger?lotId=${encodeURIComponent(lotId)}`;
   }
@@ -262,7 +265,7 @@ export default function NotificationBell() {
  * Must render inside BrowserRouter.
  */
 export function LotNotificationListener() {
-  const { isAdmin, isParty } = useAuth();
+  const { isAdmin, isParty, user } = useAuth();
   const { pendingLotNotice, clearPendingLotNotice, refreshNotifications } = useApp();
   const navigate = useNavigate();
   const shownRef = useRef('');
@@ -273,12 +276,20 @@ export function LotNotificationListener() {
     if (shownRef.current === key) return;
 
     const action = String(pendingLotNotice.action || '');
+    const noticePartyId = String(pendingLotNotice.partyId || '').trim();
+    const userPartyId = String(user?.partyId || '').trim();
+    const partyMatches = !noticePartyId || !userPartyId || noticePartyId === userPartyId;
+
     const forParty =
       (action === 'lot_rejected' ||
         action === 'bill_revision_approved' ||
         action === 'bill_revision_rejected' ||
-        action === 'payment_recorded') &&
-      isParty;
+        action === 'payment_recorded' ||
+        action === 'lot_dispatched' ||
+        action === 'lot_assigned' ||
+        action === 'lot_approved') &&
+      isParty &&
+      partyMatches;
     const forAdmin =
       (action === 'lot_pending_review' || action === 'bill_revision_request') && isAdmin;
     if (!forParty && !forAdmin) {
@@ -290,34 +301,50 @@ export function LotNotificationListener() {
     void refreshNotifications?.();
 
     const title =
-      action === 'lot_rejected'
-        ? 'Lot rejected'
-        : action === 'bill_revision_request'
-          ? 'Bill change request'
-          : action === 'bill_revision_approved'
-            ? 'Bill change approved'
-            : action === 'bill_revision_rejected'
-              ? 'Bill change rejected'
-              : action === 'payment_recorded'
-                ? 'New payment'
-                : 'Lot awaiting your review';
+      action === 'lot_dispatched'
+        ? 'New lot dispatched'
+        : action === 'lot_assigned'
+          ? 'New lot assigned'
+          : action === 'lot_approved'
+            ? 'Lot approved'
+            : action === 'lot_rejected'
+              ? 'Lot rejected'
+              : action === 'bill_revision_request'
+                ? 'Bill change request'
+                : action === 'bill_revision_approved'
+                  ? 'Bill change approved'
+                  : action === 'bill_revision_rejected'
+                    ? 'Bill change rejected'
+                    : action === 'payment_recorded'
+                      ? 'New payment'
+                      : 'Lot awaiting your review';
     const text =
-      action === 'lot_rejected'
-        ? isParty
-          ? 'A lot was rejected. Open it from My Lots to fix and resubmit.'
-          : 'A lot was rejected. Open it from Party Ledger to fix and resubmit.'
-        : action === 'bill_revision_request'
-          ? 'A party requested a bill change. Open Party Ledger to review that lot.'
-          : action === 'bill_revision_approved'
-            ? 'The business approved your bill change. Open My Lots to see the updated amount.'
-            : action === 'bill_revision_rejected'
-              ? 'The business rejected your bill change. Open My Lots to review.'
-              : action === 'payment_recorded'
-                ? 'The business recorded a payment for your account. Open My Payments to review.'
-                : 'A party submitted a lot for completion approval.';
+      action === 'lot_dispatched'
+        ? 'The business dispatched a new lot to you. Open My Lots to view details and start work.'
+        : action === 'lot_assigned'
+          ? 'A lot has been assigned to you. Open My Lots to view details.'
+          : action === 'lot_approved'
+            ? 'The business approved your completed lot. Open My Lots to view.'
+            : action === 'lot_rejected'
+              ? isParty
+                ? 'A lot was rejected. Open it from My Lots to fix and resubmit.'
+                : 'A lot was rejected. Open it from Party Ledger to fix and resubmit.'
+              : action === 'bill_revision_request'
+                ? 'A party requested a bill change. Open Party Ledger to review that lot.'
+                : action === 'bill_revision_approved'
+                  ? 'The business approved your bill change. Open My Lots to see the updated amount.'
+                  : action === 'bill_revision_rejected'
+                    ? 'The business rejected your bill change. Open My Lots to review.'
+                    : action === 'payment_recorded'
+                      ? 'The business recorded a payment for your account. Open My Payments to review.'
+                      : 'A party submitted a lot for completion approval.';
     const linkPath =
       String(pendingLotNotice.linkPath || '').trim() ||
-      (action === 'payment_recorded' ? '/payments' : '');
+      (action === 'payment_recorded'
+        ? '/payments'
+        : pendingLotNotice.lotId
+          ? `/party-ledger?lotId=${encodeURIComponent(pendingLotNotice.lotId)}`
+          : '');
 
     Swal.fire({
       toast: true,
@@ -325,7 +352,10 @@ export function LotNotificationListener() {
       icon:
         action === 'lot_rejected' || action === 'bill_revision_rejected'
           ? 'warning'
-          : action === 'bill_revision_approved' || action === 'payment_recorded'
+          : action === 'bill_revision_approved' ||
+              action === 'payment_recorded' ||
+              action === 'lot_dispatched' ||
+              action === 'lot_approved'
             ? 'success'
             : 'info',
       title,
@@ -342,7 +372,7 @@ export function LotNotificationListener() {
         navigate(linkPath);
       }
     });
-  }, [pendingLotNotice, isAdmin, isParty, navigate, clearPendingLotNotice, refreshNotifications]);
+  }, [pendingLotNotice, isAdmin, isParty, user?.partyId, navigate, clearPendingLotNotice, refreshNotifications]);
 
   return null;
 }

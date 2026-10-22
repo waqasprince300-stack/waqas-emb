@@ -1731,7 +1731,7 @@ export default function Payments() {
                 <option value="">None</option>
                 {linkedLotOptions.map((l) => (
                   <option key={l.id} value={l.lotNo || l.lotNumber}>
-                    {l.lotNo || l.lotNumber} / {l.designNo}
+                    {(l.lotNo || l.lotNumber) ? `${l.lotNo || l.lotNumber} / ${l.designNo || '—'}` : `(No Lot) / ${l.designNo || '—'}`}
                     {form.type === 'Received' ? ` — ${l.status}` : ''}
                   </option>
                 ))}

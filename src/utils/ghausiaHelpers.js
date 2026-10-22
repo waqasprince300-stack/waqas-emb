@@ -109,3 +109,36 @@ export function resolveItemTypeFields(raw) {
   
   return { itemType: '__custom', customFabric: mapped };
 }
+
+export function matchLotSearch(lot, query, searchField = 'all', partyMap = null) {
+  if (!lot) return false;
+  if (!query || !String(query).trim()) return true;
+  const q = String(query).trim().toLowerCase();
+  const lotLabel = String(lot.lotNumber || lot.lotNo || '').toLowerCase();
+  const designNo = String(lot.designNo || '').toLowerCase();
+  const fabric = String(lot.fabric || '').toLowerCase();
+  const description = String(lot.description || '').toLowerCase();
+  const partyResolved = partyMap && lot.partyId != null ? partyMap.get(String(lot.partyId)) : null;
+  const partyName = String(partyResolved || lot.partyName || '').toLowerCase();
+
+  if (searchField === 'all') {
+    return (
+      lotLabel.includes(q) ||
+      designNo.includes(q) ||
+      fabric.includes(q) ||
+      description.includes(q) ||
+      partyName.includes(q)
+    );
+  } else if (searchField === 'lotNo') {
+    return lotLabel.includes(q);
+  } else if (searchField === 'designNo') {
+    return designNo.includes(q);
+  } else if (searchField === 'fabric') {
+    return fabric.includes(q);
+  } else if (searchField === 'description') {
+    return description.includes(q);
+  } else if (searchField === 'partyName') {
+    return partyName.includes(q);
+  }
+  return true;
+}

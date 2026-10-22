@@ -1,7 +1,8 @@
 import React from 'react';
 import LotStatusSelect from '../LotStatusSelect';
 import PartyPickerSelect from '../PartyPickerSelect';
-import { ActionBtn, EmptyState } from '../UI';
+import { ActionBtn } from '../UI';
+import LotEmptyState from './LotEmptyState';
 import { formatDisplayDate } from '../../utils/dateFilters';
 import { workspaceDisplayTitleForLot } from '../../utils/businessWorkspace';
 import { STATUS_OPTIONS } from '../../utils/ghausiaHelpers';
@@ -10,6 +11,23 @@ export default function LotMobileViews({
   filtered,
   paginatedLots,
   viewMode,
+  search = '',
+  searchField = 'all',
+  partyFilter = 'All',
+  statusFilter = 'All',
+  dateRange = 'all',
+  highlightedBillableLotId = null,
+  highlightedLot = null,
+  totalUnfilteredLots = 0,
+  matchesWithoutHighlight = 0,
+  otherTabMatchCount = 0,
+  onClearSearch,
+  onClearHighlightedLot,
+  onClearPartyFilter,
+  onClearStatusFilter,
+  onClearDateRange,
+  onResetAllFilters,
+  onSwitchTab,
   lotTableTab,
   parties,
   businessOwners,
@@ -22,11 +40,33 @@ export default function LotMobileViews({
   setDeleteTarget,
   renderOwnerBillableAmount,
 }) {
+  const emptyStateProps = {
+    search,
+    searchField,
+    partyFilter,
+    parties,
+    statusFilter,
+    dateRange,
+    highlightedBillableLotId,
+    highlightedLot,
+    lotTableTab,
+    totalUnfilteredLots,
+    matchesWithoutHighlight,
+    otherTabMatchCount,
+    onClearSearch,
+    onClearHighlightedLot,
+    onClearPartyFilter,
+    onClearStatusFilter,
+    onClearDateRange,
+    onResetAllFilters,
+    onSwitchTab,
+  };
+
   if (viewMode === 'tile') {
     return (
       <div className="tiles-grid mobile-only-tiles">
         {filtered.length === 0 ? (
-          <EmptyState message="No lots found" />
+          <LotEmptyState {...emptyStateProps} />
         ) : (
           paginatedLots.map((l) => (
             <div key={`gh-tile-${l.id}`} className={`lot-tile-card modern-lot-card stagger-item ${l.suitComponent === 'dupatta' ? 'lot-row-dupatta' : l.suitComponent === 'main' && l.suitType === '3-piece' ? 'lot-row-main' : ''}`}>
@@ -117,7 +157,7 @@ export default function LotMobileViews({
   return (
     <div className="mobile-only-ghausia-cards">
       {filtered.length === 0 ? (
-        <EmptyState message="No lots found" />
+        <LotEmptyState {...emptyStateProps} />
       ) : (
         paginatedLots.map((l) => (
           <div key={`gh-mob-${l.id}`} className="ghausia-mobile-card modern-lot-card animate-fade-in">

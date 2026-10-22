@@ -177,7 +177,7 @@ export default function PaymentModal({
             <option value="">None</option>
             {collectionLots.map((l) => (
               <option key={l.id} value={l.lotNumber}>
-                {l.lotNumber || l.lotNo} / {l.designNo}
+                {(l.lotNumber || l.lotNo) ? `${l.lotNumber || l.lotNo} / ${l.designNo || '—'}` : `(No Lot) / ${l.designNo || '—'}`}
               </option>
             ))}
           </select>
