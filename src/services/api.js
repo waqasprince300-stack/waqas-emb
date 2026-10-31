@@ -752,6 +752,13 @@ class ApiService {
     return this.request('/notifications/read-all', { method: 'POST' });
   }
 
+  async markNotificationsReadByContext(context) {
+    return this.request('/notifications/read-by-context', {
+      method: 'POST',
+      body: JSON.stringify(context),
+    });
+  }
+
   // Admin Broadcasts
   async getActiveBroadcasts() {
     return this.request('/notifications/active-broadcasts');

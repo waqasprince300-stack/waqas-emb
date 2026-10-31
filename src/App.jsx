@@ -262,6 +262,46 @@ function RouteChangeRefresher() {
   return null;
 }
 
+/** Automatically mark notifications as read when their corresponding tab/page is opened. */
+function RouteChangeNotificationClearer() {
+  const { pathname, search } = useLocation();
+  const { isAdmin, isParty, isAuthenticated } = useAuth();
+  const { markNotificationsReadByContext } = useApp();
+
+  useEffect(() => {
+    if (!isAuthenticated || !markNotificationsReadByContext) return;
+    const params = new URLSearchParams(search);
+    const lotId = params.get('lotId') || '';
+
+    // If specific lotId in query, mark its notification as read
+    if (lotId) {
+      markNotificationsReadByContext({ lotId });
+    }
+
+    // 1. Admin opens Review Lots
+    if (isAdmin && pathname === '/review-lots') {
+      markNotificationsReadByContext({ category: 'review_lots', lotId });
+    }
+
+    // 2. Admin opens Party Ledger for bill review
+    if (isAdmin && pathname === '/party-ledger' && params.get('billReview') === '1') {
+      markNotificationsReadByContext({ category: 'bill_revision', lotId });
+    }
+
+    // 3. Party user opens Party Ledger (My Lots)
+    if (isParty && pathname === '/party-ledger') {
+      markNotificationsReadByContext({ category: 'party_ledger', lotId });
+    }
+
+    // 4. Party user opens Payments
+    if (isParty && pathname === '/payments') {
+      markNotificationsReadByContext({ category: 'payments' });
+    }
+  }, [pathname, search, isAdmin, isParty, isAuthenticated, markNotificationsReadByContext]);
+
+  return null;
+}
+
 /** Subtle, non-blocking indicator shown while a background data refresh is in flight. */
 function BootstrapErrorBanner() {
   const { bootstrapLoadError, refreshData, initialDataLoading } = useApp();
@@ -354,6 +394,7 @@ function AppRoutes() {
     <SuperAdminShell>
       <MarqueeBanner />
       <RouteChangeRefresher />
+      <RouteChangeNotificationClearer />
       <BootstrapErrorBanner />
       <BackgroundRefreshIndicator />
       <LotNotificationListener />

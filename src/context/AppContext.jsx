@@ -100,10 +100,13 @@ export function AppProvider({ children }) {
 
   const {
     notifications,
+    setNotifications,
     notificationUnreadCount,
+    setNotificationUnreadCount,
     refreshNotifications,
     markNotificationRead,
     markAllNotificationsRead,
+    markNotificationsReadByContext,
     clearPendingLotNotice,
     pendingLotNotice,
     setPendingLotNotice,
@@ -193,10 +196,10 @@ export function AppProvider({ children }) {
           ...(incomingReceipt ? { receipt: incomingReceipt, hasReceipt: true } : {}),
           ...(incomingLotImages !== undefined
             ? {
-                lotImages: incomingLotImages,
-                lotImagesCount,
-                hasLotImages: incomingLotImages.length > 0,
-              }
+              lotImages: incomingLotImages,
+              lotImagesCount,
+              hasLotImages: incomingLotImages.length > 0,
+            }
             : {}),
         };
       });
@@ -625,29 +628,44 @@ export function AppProvider({ children }) {
 
     let timer = null;
     const onVisible = () => {
-      if (document.visibilityState === 'visible' && hasLoadedOnceRef.current) {
-        if (Date.now() - lastAnyRefreshRef.current < NAV_REFRESH_MIN_INTERVAL_MS) return;
-        if (timer) clearTimeout(timer);
-        timer = setTimeout(() => {
-          lastAnyRefreshRef.current = Date.now();
-          void runLightBootstrapRefresh();
-        }, 150);
+      if (document.visibilityState === 'visible') {
+        void refreshNotifications();
+        if (hasLoadedOnceRef.current) {
+          if (Date.now() - lastAnyRefreshRef.current < NAV_REFRESH_MIN_INTERVAL_MS) return;
+          if (timer) clearTimeout(timer);
+          timer = setTimeout(() => {
+            lastAnyRefreshRef.current = Date.now();
+            void runLightBootstrapRefresh();
+          }, 150);
+        }
       }
     };
 
+    const onFocus = () => {
+      void refreshNotifications();
+    };
+
     document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onFocus);
     return () => {
       document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onFocus);
       if (timer) clearTimeout(timer);
     };
-  }, [isAuthenticated, user?.role, runLightBootstrapRefresh]);
+  }, [isAuthenticated, user?.role, runLightBootstrapRefresh, refreshNotifications]);
 
   // Realtime Socket Effect
   useEffect(() => {
     if (!isAuthenticated) return undefined;
     if (user?.role !== 'admin' && user?.role !== 'party') return undefined;
 
-    connectRealtime();
+    const realtimeSock = connectRealtime();
+    const onSockConnect = () => {
+      void refreshNotifications();
+    };
+    if (realtimeSock) {
+      realtimeSock.on('connect', onSockConnect);
+    }
     let timer = null;
     const pendingLotIds = new Set();
     const handleChange = (payload) => {
@@ -656,10 +674,85 @@ export function AppProvider({ children }) {
       if (lotId) pendingLotIds.add(lotId);
 
       const action = payload && payload.action != null ? String(payload.action) : '';
-      if (action === 'notification_read' || action === 'notification_read_all') {
-        if (!payload.targetUserId || payload.targetUserId === String(user?._id)) {
-          void refreshNotifications();
+      const currentUserId = String(user?._id || user?.id || '');
+      const isTargetMe = !payload?.targetUserId || String(payload.targetUserId) === currentUserId;
+
+      if (action === 'notification_read_all' && isTargetMe) {
+        const now = new Date().toISOString();
+        setNotifications((prev) => prev.map((n) => (n.readAt ? n : { ...n, readAt: now })));
+        setNotificationUnreadCount(0);
+        clearPendingLotNotice?.();
+        void refreshNotifications();
+        return;
+      }
+
+      if (action === 'notification_read' && isTargetMe) {
+        const notifId = payload.notificationId ? String(payload.notificationId) : '';
+        const now = new Date().toISOString();
+        if (notifId) {
+          setNotifications((prev) =>
+            prev.map((n) =>
+              String(n.id || n._id) === notifId
+                ? { ...n, readAt: n.readAt || now }
+                : n
+            )
+          );
         }
+        setNotificationUnreadCount((c) => Math.max(0, c - 1));
+        void refreshNotifications();
+        return;
+      }
+
+      if (action === 'notifications_marked_read' && isTargetMe) {
+        const now = new Date().toISOString();
+        const targetLotId = payload.lotId ? String(payload.lotId).trim() : '';
+        const category = payload.category ? String(payload.category) : '';
+        const notifType = payload.type ? String(payload.type) : '';
+        const notifTypes = Array.isArray(payload.types) ? payload.types : [];
+
+        let matchedCount = 0;
+        setNotifications((prev) =>
+          prev.map((n) => {
+            if (n.readAt) return n;
+            let match = false;
+            if (targetLotId && String(n.lotId || '').trim() === targetLotId) match = true;
+            if (notifType && String(n.type || '') === notifType) match = true;
+            if (notifTypes.length > 0 && notifTypes.includes(String(n.type || ''))) match = true;
+            if (category === 'review_lots' && String(n.type || '') === 'lot_pending_review') match = true;
+            if (
+              category === 'party_ledger' &&
+              [
+                'lot_rejected',
+                'lot_approved',
+                'lot_dispatched',
+                'lot_assigned',
+                'lot_updated',
+                'lot_deleted',
+                'bill_revision_approved',
+                'bill_revision_rejected',
+              ].includes(String(n.type || ''))
+            ) {
+              match = true;
+            }
+            if (category === 'bill_revision' && String(n.type || '') === 'bill_revision_request') match = true;
+            if (
+              category === 'payments' &&
+              ['payment_recorded', 'payment_updated', 'payment_deleted'].includes(String(n.type || ''))
+            ) {
+              match = true;
+            }
+
+            if (match) {
+              matchedCount++;
+              return { ...n, readAt: now };
+            }
+            return n;
+          })
+        );
+        if (matchedCount > 0) {
+          setNotificationUnreadCount((c) => Math.max(0, c - matchedCount));
+        }
+        void refreshNotifications();
         return;
       }
 
@@ -720,6 +813,13 @@ export function AppProvider({ children }) {
     const unsubscribe = onDataChanged(handleChange);
     return () => {
       unsubscribe();
+      if (realtimeSock) {
+        try {
+          realtimeSock.off('connect', onSockConnect);
+        } catch (_err) {
+          /* ignore */
+        }
+      }
       if (timer) clearTimeout(timer);
     };
   }, [
@@ -844,19 +944,19 @@ export function AppProvider({ children }) {
     async (id, patch, opts = {}) => {
       const { businessOwnerId } = opts;
       const response = await trackWrite(apiService.updateGhausiaLot(id, patch, businessOwnerId));
-      
+
       const isArr = Array.isArray(response);
       const updatedLots = isArr ? response.map(normalizeLotData) : [normalizeLotData(response)];
-      
+
       const applyUpdates = (arr) => {
         let next = [...arr];
         for (const lot of updatedLots) {
           const lotIdStr = String(lot.id);
           const idx = next.findIndex(x => String(x.id) === lotIdStr);
           if (idx !== -1) {
-             next[idx] = lot;
+            next[idx] = lot;
           } else {
-             next.push(lot);
+            next.push(lot);
           }
         }
         return next;
@@ -883,11 +983,11 @@ export function AppProvider({ children }) {
       const { businessOwnerId } = opts;
       const response = await trackWrite(apiService.deleteGhausiaLot(id, businessOwnerId));
       const idStr = String(id);
-      
+
       const deletedLinkedIdStr = response && response.deletedLinkedId ? String(response.deletedLinkedId) : null;
       const updatedLinkedLotRaw = response && response.updatedLinkedLot ? response.updatedLinkedLot : null;
       const updatedLinkedLot = updatedLinkedLotRaw ? normalizeLotData(updatedLinkedLotRaw) : null;
-      
+
       const applyUpdates = (arr) => {
         let next = arr.filter((x) => String(x.id) !== idStr);
         if (deletedLinkedIdStr) {
@@ -1095,6 +1195,7 @@ export function AppProvider({ children }) {
       refreshNotifications,
       markNotificationRead,
       markAllNotificationsRead,
+      markNotificationsReadByContext,
       pendingLotNotice,
       clearPendingLotNotice,
       activeAnnouncement,
@@ -1147,6 +1248,7 @@ export function AppProvider({ children }) {
       refreshNotifications,
       markNotificationRead,
       markAllNotificationsRead,
+      markNotificationsReadByContext,
       pendingLotNotice,
       clearPendingLotNotice,
       activeAnnouncement,

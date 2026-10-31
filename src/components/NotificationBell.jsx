@@ -271,7 +271,12 @@ export function LotNotificationListener() {
   const shownRef = useRef('');
 
   useEffect(() => {
-    if (!pendingLotNotice) return;
+    if (!pendingLotNotice) {
+      if (typeof Swal !== 'undefined' && Swal.isVisible()) {
+        Swal.close();
+      }
+      return;
+    }
     const key = `${pendingLotNotice.action}:${pendingLotNotice.lotId}:${pendingLotNotice.at || ''}`;
     if (shownRef.current === key) return;
 

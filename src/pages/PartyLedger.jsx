@@ -178,9 +178,16 @@ export default function PartyLedger() {
     initialDataLoading,
     patchLotImages,
     patchLotReceipt,
+    markNotificationsReadByContext,
   } = useApp();
 
   const { isAdmin, isParty, user } = useAuth();
+
+  useEffect(() => {
+    if (isParty && markNotificationsReadByContext) {
+      markNotificationsReadByContext({ category: 'party_ledger' });
+    }
+  }, [isParty, markNotificationsReadByContext]);
 
   /** Admin: merged lots/edits/payments across all workspaces; party login: scoped cross-collection rows */
   const ledgerLots = isParty ? partyCrossLots : reportingLots;

@@ -74,6 +74,7 @@ export default function ReviewLots() {
     rejectLotCompletion,
     refreshData,
     initialDataLoading,
+    markNotificationsReadByContext,
   } = useApp();
 
   const [search, setSearch] = useState('');
@@ -82,6 +83,12 @@ export default function ReviewLots() {
   const [rejectModal, setRejectModal] = useState(null);
   const [rejectReason, setRejectReason] = useState('');
   const [receiptPreview, setReceiptPreview] = useState(null);
+
+  useEffect(() => {
+    if (markNotificationsReadByContext) {
+      markNotificationsReadByContext({ category: 'review_lots' });
+    }
+  }, [markNotificationsReadByContext]);
 
 
   const businessName = (bizId) =>

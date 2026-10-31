@@ -138,8 +138,15 @@ export default function Payments() {
     partyCrossLots,
     partyCrossPartyEdits,
     reportingPartyEdits,
+    markNotificationsReadByContext,
   } = useApp();
   const { isAdmin, isParty, user } = useAuth();
+
+  useEffect(() => {
+    if (isParty && markNotificationsReadByContext) {
+      markNotificationsReadByContext({ category: 'payments' });
+    }
+  }, [isParty, markNotificationsReadByContext]);
   const PAGE_SIZE = 10;
   const [modal, setModal] = useState(false);
   const [showOwnerLedger, setShowOwnerLedger] = useState(false);
