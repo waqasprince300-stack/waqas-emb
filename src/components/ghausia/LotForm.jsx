@@ -126,6 +126,19 @@ function LotForm({
   const [manualLotNumbersRaw, setManualLotNumbersRaw] = useState('');
   const [bulkCount, setBulkCount] = useState(5);
 
+  const updateBulkCount = (delta) => {
+    setBulkCount((prev) => {
+      const cur = Number(prev) || 2;
+      return Math.max(2, Math.min(100, cur + delta));
+    });
+    setErrors((errs) => (errs.bulkCount ? { ...errs, bulkCount: null } : errs));
+  };
+
+  const setPresetBulkCount = (val) => {
+    setBulkCount(val);
+    setErrors((errs) => (errs.bulkCount ? { ...errs, bulkCount: null } : errs));
+  };
+
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
   const selectHead = (headCount) => {
@@ -496,33 +509,163 @@ function LotForm({
           </label>
           {lotCreationMode === 'bulk_serial' ? (
             <>
-              <input
-                type="number"
-                min={2}
-                max={100}
-                value={bulkCount}
-                onChange={(e) => setBulkCount(e.target.value)}
-                title="How many lots"
+              {/* Stepper with - and + */}
+              <div
                 style={{
-                  width: 48,
-                  padding: '2px 5px',
-                  fontSize: 12,
+                  display: 'inline-flex',
+                  alignItems: 'center',
                   borderRadius: 6,
-                  border: errors.bulkCount ? '1px solid var(--danger, #dc2626)' : '1px solid var(--border, #e2e8f0)',
-                  textAlign: 'center',
+                  border: errors.bulkCount
+                    ? '1px solid var(--danger, #dc2626)'
+                    : '1px solid var(--border, #cbd5e1)',
+                  background: 'var(--card-bg, #fff)',
+                  overflow: 'hidden',
+                  height: 26,
+                  verticalAlign: 'middle',
                 }}
-              />
+              >
+                <button
+                  type="button"
+                  onClick={() => updateBulkCount(-1)}
+                  disabled={Number(bulkCount) <= 2}
+                  title="Kam karein (-1)"
+                  style={{
+                    width: 26,
+                    height: 26,
+                    border: 'none',
+                    borderRight: '1px solid var(--border, #e2e8f0)',
+                    background: 'var(--primary-bg, #f8fafc)',
+                    color: Number(bulkCount) <= 2 ? 'var(--text-muted, #94a3b8)' : 'var(--text-primary, #0f172a)',
+                    fontSize: 15,
+                    fontWeight: 700,
+                    cursor: Number(bulkCount) <= 2 ? 'not-allowed' : 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    userSelect: 'none',
+                    padding: 0,
+                    lineHeight: 1,
+                  }}
+                >
+                  −
+                </button>
+                <input
+                  type="number"
+                  min={2}
+                  max={100}
+                  value={bulkCount}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    if (v === '') setBulkCount('');
+                    else {
+                      const n = parseInt(v, 10);
+                      if (!isNaN(n)) setBulkCount(Math.min(100, n));
+                    }
+                  }}
+                  onBlur={() => {
+                    const n = Number(bulkCount);
+                    if (!n || n < 2) setBulkCount(2);
+                    else if (n > 100) setBulkCount(100);
+                  }}
+                  title="Lots tadad (2 - 100)"
+                  style={{
+                    width: 36,
+                    height: 26,
+                    border: 'none',
+                    background: 'var(--card-bg, #fff)',
+                    color: 'var(--text-primary, #0f172a)',
+                    fontSize: 12,
+                    fontWeight: 800,
+                    textAlign: 'center',
+                    outline: 'none',
+                    padding: 0,
+                    MozAppearance: 'textfield',
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => updateBulkCount(1)}
+                  disabled={Number(bulkCount) >= 100}
+                  title="Ziada karein (+1)"
+                  style={{
+                    width: 26,
+                    height: 26,
+                    border: 'none',
+                    borderLeft: '1px solid var(--border, #e2e8f0)',
+                    background: 'var(--primary-bg, #f8fafc)',
+                    color: Number(bulkCount) >= 100 ? 'var(--text-muted, #94a3b8)' : 'var(--text-primary, #0f172a)',
+                    fontSize: 15,
+                    fontWeight: 700,
+                    cursor: Number(bulkCount) >= 100 ? 'not-allowed' : 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    userSelect: 'none',
+                    padding: 0,
+                    lineHeight: 1,
+                  }}
+                >
+                  +
+                </button>
+              </div>
+
+              {/* Quick Preset Pills */}
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                {[2, 3, 5, 10, 20].map((preset) => {
+                  const isSelected = Number(bulkCount) === preset;
+                  return (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() => setPresetBulkCount(preset)}
+                      title={`${preset} lots set karein`}
+                      style={{
+                        padding: '3px 8px',
+                        borderRadius: 6,
+                        border: isSelected
+                          ? '1px solid var(--purple, #4f46e5)'
+                          : '1px solid var(--border, #e2e8f0)',
+                        background: isSelected
+                          ? 'var(--primary-bg, #eef2ff)'
+                          : 'var(--card-bg, #fff)',
+                        color: isSelected
+                          ? 'var(--primary, #3730a3)'
+                          : 'var(--text-secondary, #475569)',
+                        fontWeight: isSelected ? 800 : 600,
+                        fontSize: 12,
+                        cursor: 'pointer',
+                        lineHeight: 1.3,
+                        userSelect: 'none',
+                        transition: 'all 0.15s',
+                      }}
+                    >
+                      {preset}
+                    </button>
+                  );
+                })}
+              </div>
+
               {bulkLotNumbers && bulkLotNumbers.length > 1 ? (
                 <span
+                  title={bulkLotNumbers.join(', ')}
                   style={{
-                    color: 'var(--text-muted, #94a3b8)',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 4,
+                    color: 'var(--primary, #3730a3)',
+                    background: 'var(--primary-bg, #eef2ff)',
+                    border: '1px solid var(--border, #c7d2fe)',
                     fontSize: 11,
-                    maxWidth: 180,
+                    fontWeight: 600,
+                    padding: '2px 8px',
+                    borderRadius: 6,
+                    maxWidth: 220,
                     overflow: 'hidden',
                     textOverflow: 'ellipsis',
                     whiteSpace: 'nowrap',
                   }}
                 >
+                  <strong style={{ color: 'var(--purple, #4f46e5)' }}>{bulkLotNumbers.length}:</strong>{' '}
                   {previewSerialLotNumbers(bulkLotNumbers, 3)}
                 </span>
               ) : null}
@@ -746,6 +889,11 @@ function LotForm({
                 autoComplete="off"
                 disabled={!isNewLot && initial?.suitComponent === 'dupatta' && initial?.linkedLotId}
               />
+              {isNewLot && lotCreationMode === 'bulk_serial' && bulkLotNumbers && bulkLotNumbers.length > 1 && (
+                <span style={{ fontSize: 11, color: 'var(--purple, #4f46e5)', display: 'block', marginTop: 4, fontWeight: 600 }}>
+                  ✓ {bulkLotNumbers.length} lots banenge: {bulkLotNumbers.join(', ')}
+                </span>
+              )}
               {!isNewLot && initial?.suitComponent === 'dupatta' && initial?.linkedLotId && (
                 <span style={{ fontSize: 11, color: 'var(--text-muted, #64748b)', display: 'block', marginTop: 4 }}>
                   Edit from the Main Lot to change the suit&apos;s Lot Number.
