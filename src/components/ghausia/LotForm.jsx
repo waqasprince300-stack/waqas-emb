@@ -550,16 +550,25 @@ function LotForm({
                   −
                 </button>
                 <input
-                  type="number"
-                  min={2}
-                  max={100}
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
                   value={bulkCount}
                   onChange={(e) => {
-                    const v = e.target.value;
+                    const v = e.target.value.replace(/\D/g, '');
                     if (v === '') setBulkCount('');
                     else {
                       const n = parseInt(v, 10);
                       if (!isNaN(n)) setBulkCount(Math.min(100, n));
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'ArrowUp') {
+                      e.preventDefault();
+                      updateBulkCount(1);
+                    } else if (e.key === 'ArrowDown') {
+                      e.preventDefault();
+                      updateBulkCount(-1);
                     }
                   }}
                   onBlur={() => {
@@ -574,12 +583,11 @@ function LotForm({
                     border: 'none',
                     background: 'var(--card-bg, #fff)',
                     color: 'var(--text-primary, #0f172a)',
-                    fontSize: 12,
+                    fontSize: 13,
                     fontWeight: 800,
                     textAlign: 'center',
                     outline: 'none',
                     padding: 0,
-                    MozAppearance: 'textfield',
                   }}
                 />
                 <button
