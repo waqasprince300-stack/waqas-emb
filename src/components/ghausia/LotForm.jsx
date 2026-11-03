@@ -752,18 +752,87 @@ function LotForm({
           )}
         </>
       ) : null}
-      {!isNewLot && workspaceOwnerOptions && workspaceOwnerOptions.length > 1 && (
-        <>
-          <span style={{ color: 'var(--border, #e2e8f0)', userSelect: 'none' }}>|</span>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginLeft: 'auto', flexWrap: 'wrap' }}>
-            {moveToBusinessOwnerId && targetWorkspaceOwner && (
-              <span style={{ fontSize: 11, color: 'var(--warning, #b45309)', fontWeight: 600 }}>
-                ⚠ Yeh lot &ldquo;{targetWorkspaceOwner.name}&rdquo; workspace mein shift ho jayegi.
-              </span>
-            )}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+      {/* Linked Lot Navigation button aligned to far right */}
+      {!isNewLot && form.linkedLotId && (
+        <button
+          type="button"
+          className="btn btn-ghost btn-sm"
+          style={{
+            marginLeft: 'auto',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+            color: 'var(--purple, #4f46e5)',
+            fontWeight: 600,
+            background: 'var(--primary-bg, #eef2ff)',
+            height: 26,
+            padding: '2px 10px',
+            fontSize: 12,
+            borderRadius: 6,
+            whiteSpace: 'nowrap',
+          }}
+          onClick={() => onJumpToLinkedLot && onJumpToLinkedLot(form.linkedLotId)}
+        >
+          {form.suitComponent === 'dupatta' ? '🔗 View Main Lot' : '🔗 View Dupatta'}
+        </button>
+      )}
+    </div>
+  );
+
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        void handleSave();
+      }}
+    >
+      {compactToolbar}
+
+      {/* Suit Type & Rework Controls + Transfer Workspace */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
+        {(!initial || initial.suitComponent !== 'dupatta') && (
+          <div style={{ display: 'flex', gap: '8px' }}>
+            {['2-piece', '3-piece', 'dupatta-only'].map(type => (
+              <button
+                key={type}
+                type="button"
+                onClick={() => set('suitType', type)}
+                style={{
+                  flex: 1,
+                  padding: '8px 4px',
+                  borderRadius: '8px',
+                  border: form.suitType === type ? '2px solid var(--purple, #4f46e5)' : '1px solid var(--border, #e2e8f0)',
+                  backgroundColor: form.suitType === type ? 'var(--primary-bg, #eef2ff)' : 'transparent',
+                  color: form.suitType === type ? 'var(--primary, #3730a3)' : 'var(--text-secondary, #475569)',
+                  fontWeight: form.suitType === type ? '600' : '400',
+                  cursor: 'pointer',
+                  fontSize: '13px',
+                  transition: 'all 0.2s'
+                }}
+              >
+                {type === '2-piece' ? '2-Piece' : type === '3-piece' ? '3-Piece' : 'Dupatta Only'}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Bottom row: Rework checkbox on left, Transfer Workspace on right */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', minHeight: 28 }}>
+          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--text-secondary, #475569)', fontWeight: 600, cursor: 'pointer', userSelect: 'none' }}>
+            <input
+              type="checkbox"
+              checked={form.isRework}
+              onChange={(e) => set('isRework', e.target.checked)}
+              style={{ width: 16, height: 16, accentColor: 'var(--warning, #b45309)' }}
+              disabled={!isNewLot && initial?.suitComponent === 'dupatta' && initial?.linkedLotId}
+            />
+            Mark as Rework / Claim
+          </label>
+
+          {!isNewLot && workspaceOwnerOptions && workspaceOwnerOptions.length > 1 && (
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginLeft: 'auto' }}>
               <span
-                style={{ fontWeight: 600, color: 'var(--text-secondary, #475569)', fontSize: 11 }}
+                style={{ fontWeight: 600, color: 'var(--text-secondary, #475569)', fontSize: 11, whiteSpace: 'nowrap' }}
                 title="Is lot ko kisi doosray Business Account / Workspace mein shift karein"
               >
                 Transfer Workspace:
@@ -776,8 +845,8 @@ function LotForm({
                 style={{
                   padding: '2px 24px 2px 8px',
                   fontSize: 11,
-                  height: 26,
-                  minHeight: 26,
+                  height: 28,
+                  minHeight: 28,
                   fontWeight: 600,
                   maxWidth: 220,
                   ...(moveToBusinessOwnerId
@@ -807,72 +876,14 @@ function LotForm({
                   ))}
               </select>
             </div>
-          </div>
-        </>
-      )}
-    </div>
-  );
-
-  return (
-    <form
-      onSubmit={(e) => {
-        e.preventDefault();
-        void handleSave();
-      }}
-    >
-      {compactToolbar}
-
-      {/* Linked Lot Navigation */}
-      {!isNewLot && form.linkedLotId && (
-        <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'flex-end' }}>
-          <button
-            type="button"
-            className="btn btn-ghost btn-sm"
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--purple, #4f46e5)', fontWeight: 600, background: 'var(--primary-bg, #eef2ff)' }}
-            onClick={() => onJumpToLinkedLot && onJumpToLinkedLot(form.linkedLotId)}
-          >
-            {form.suitComponent === 'dupatta' ? '🔗 View Main Lot' : '🔗 View Dupatta'}
-          </button>
+          )}
         </div>
-      )}
-      
-      {/* Suit Type & Rework Controls */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 16 }}>
-        {(!initial || initial.suitComponent !== 'dupatta') && (
-          <div style={{ display: 'flex', gap: '8px' }}>
-            {['2-piece', '3-piece', 'dupatta-only'].map(type => (
-              <button
-                key={type}
-                type="button"
-                onClick={() => set('suitType', type)}
-                style={{
-                  flex: 1,
-                  padding: '8px 4px',
-                  borderRadius: '8px',
-                  border: form.suitType === type ? '2px solid var(--purple, #4f46e5)' : '1px solid var(--border, #e2e8f0)',
-                  backgroundColor: form.suitType === type ? 'var(--primary-bg, #eef2ff)' : 'transparent',
-                  color: form.suitType === type ? 'var(--primary, #3730a3)' : 'var(--text-secondary, #475569)',
-                  fontWeight: form.suitType === type ? '600' : '400',
-                  cursor: 'pointer',
-                  fontSize: '13px',
-                  transition: 'all 0.2s'
-                }}
-              >
-                {type === '2-piece' ? '2-Piece' : type === '3-piece' ? '3-Piece' : 'Dupatta Only'}
-              </button>
-            ))}
+
+        {moveToBusinessOwnerId && targetWorkspaceOwner && (
+          <div style={{ fontSize: 11, color: 'var(--warning, #b45309)', fontWeight: 600, textAlign: 'right', marginTop: -4 }}>
+            ⚠ Yeh lot &ldquo;{targetWorkspaceOwner.name}&rdquo; workspace mein shift ho jayegi.
           </div>
         )}
-        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--text-secondary, #475569)', fontWeight: 600, cursor: 'pointer' }}>
-          <input
-            type="checkbox"
-            checked={form.isRework}
-            onChange={(e) => set('isRework', e.target.checked)}
-            style={{ width: 16, height: 16, accentColor: 'var(--warning, #b45309)' }}
-            disabled={!isNewLot && initial?.suitComponent === 'dupatta' && initial?.linkedLotId}
-          />
-          Mark as Rework / Claim
-        </label>
       </div>
 
       {pickWorkspaceForNewLot && (
