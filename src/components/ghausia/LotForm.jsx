@@ -139,6 +139,21 @@ function LotForm({
     setErrors((errs) => (errs.bulkCount ? { ...errs, bulkCount: null } : errs));
   };
 
+  const currentWorkspaceOwner = useMemo(() => {
+    const id =
+      initial?.businessOwnerId != null && initial.businessOwnerId !== ''
+        ? String(initial.businessOwnerId)
+        : String(form.saveBusinessOwnerId || '');
+    return (workspaceOwnerOptions || []).find((o) => String(o.id || o._id) === id);
+  }, [workspaceOwnerOptions, initial?.businessOwnerId, form.saveBusinessOwnerId]);
+
+  const targetWorkspaceOwner = useMemo(() => {
+    if (!moveToBusinessOwnerId) return null;
+    return (workspaceOwnerOptions || []).find(
+      (o) => String(o.id || o._id) === String(moveToBusinessOwnerId)
+    );
+  }, [workspaceOwnerOptions, moveToBusinessOwnerId]);
+
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
   const selectHead = (headCount) => {
@@ -740,34 +755,57 @@ function LotForm({
       {!isNewLot && workspaceOwnerOptions && workspaceOwnerOptions.length > 1 && (
         <>
           <span style={{ color: 'var(--border, #e2e8f0)', userSelect: 'none' }}>|</span>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginLeft: 'auto' }}>
-            {moveToBusinessOwnerId && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginLeft: 'auto', flexWrap: 'wrap' }}>
+            {moveToBusinessOwnerId && targetWorkspaceOwner && (
               <span style={{ fontSize: 11, color: 'var(--warning, #b45309)', fontWeight: 600 }}>
-                ⚠ Is lot ko nayi workspace mein move kar diya jayega.
+                ⚠ Yeh lot &ldquo;{targetWorkspaceOwner.name}&rdquo; workspace mein shift ho jayegi.
               </span>
             )}
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span style={{ fontWeight: 600, color: 'var(--text-secondary, #475569)', fontSize: 11 }}>Move to:</span>
-            <select
-              className="form-select"
-              value={moveToBusinessOwnerId}
-              onChange={(e) => setMoveToBusinessOwnerId(e.target.value)}
-              style={{
-                padding: '2px 24px 2px 8px',
-                fontSize: 11,
-                height: 26,
-                minHeight: 26,
-                fontWeight: 600,
-                ...(moveToBusinessOwnerId ? { borderColor: 'var(--warning, #f59e0b)', background: 'var(--warning-bg, #fffbeb)', color: 'var(--warning, #b45309)' } : {})
-              }}
-            >
-              <option value="">Current</option>
-              {(workspaceOwnerOptions || []).filter((o) => String(o.id || o._id) !== String(initial?.businessOwnerId || '')).map((o) => (
-                <option key={o.id || o._id} value={String(o.id || o._id)}>
-                  {o.name}
+              <span
+                style={{ fontWeight: 600, color: 'var(--text-secondary, #475569)', fontSize: 11 }}
+                title="Is lot ko kisi doosray Business Account / Workspace mein shift karein"
+              >
+                Transfer Workspace:
+              </span>
+              <select
+                className="form-select"
+                value={moveToBusinessOwnerId}
+                onChange={(e) => setMoveToBusinessOwnerId(e.target.value)}
+                title="Agar yeh lot kisi doosri workspace / factory khata mein shift karni ho"
+                style={{
+                  padding: '2px 24px 2px 8px',
+                  fontSize: 11,
+                  height: 26,
+                  minHeight: 26,
+                  fontWeight: 600,
+                  maxWidth: 220,
+                  ...(moveToBusinessOwnerId
+                    ? {
+                        borderColor: 'var(--warning, #f59e0b)',
+                        background: 'var(--warning-bg, #fffbeb)',
+                        color: 'var(--warning, #b45309)',
+                      }
+                    : {}),
+                }}
+              >
+                <option value="">
+                  {currentWorkspaceOwner?.name
+                    ? `Current (${currentWorkspaceOwner.name})`
+                    : 'Current Workspace'}
                 </option>
-              ))}
-            </select>
+                {(workspaceOwnerOptions || [])
+                  .filter(
+                    (o) =>
+                      String(o.id || o._id) !==
+                      String(initial?.businessOwnerId || form.saveBusinessOwnerId || '')
+                  )
+                  .map((o) => (
+                    <option key={o.id || o._id} value={String(o.id || o._id)}>
+                      Shift to: {o.name}
+                    </option>
+                  ))}
+              </select>
             </div>
           </div>
         </>
