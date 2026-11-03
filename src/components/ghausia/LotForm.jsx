@@ -756,7 +756,7 @@ function LotForm({
       {!isNewLot && form.linkedLotId && (
         <button
           type="button"
-          className="btn btn-ghost btn-sm"
+          className="btn btn-ghost btn-sm lot-view-linked-btn"
           style={{
             marginLeft: 'auto',
             display: 'inline-flex',
@@ -817,7 +817,7 @@ function LotForm({
         )}
 
         {/* Bottom row: Rework checkbox on left, Transfer Workspace on right */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', minHeight: 28 }}>
+        <div className="lot-rework-row" style={{ minHeight: 28 }}>
           <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--text-secondary, #475569)', fontWeight: 600, cursor: 'pointer', userSelect: 'none' }}>
             <input
               type="checkbox"
@@ -830,7 +830,7 @@ function LotForm({
           </label>
 
           {!isNewLot && workspaceOwnerOptions && workspaceOwnerOptions.length > 1 && (
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginLeft: 'auto' }}>
+            <div className="lot-transfer-workspace">
               <span
                 style={{ fontWeight: 600, color: 'var(--text-secondary, #475569)', fontSize: 11, whiteSpace: 'nowrap' }}
                 title="Is lot ko kisi doosray Business Account / Workspace mein shift karein"
@@ -838,7 +838,7 @@ function LotForm({
                 Transfer Workspace:
               </span>
               <select
-                className="form-select"
+                className="form-select lot-transfer-select"
                 value={moveToBusinessOwnerId}
                 onChange={(e) => setMoveToBusinessOwnerId(e.target.value)}
                 title="Agar yeh lot kisi doosri workspace / factory khata mein shift karni ho"
