@@ -155,11 +155,18 @@ async function compressState(data) {
   let modified = false;
   const newEntries = Array.isArray(data.entries) ? [...data.entries] : [];
   for (let i = 0; i < newEntries.length; i++) {
-    const e = newEntries[i];
+    const raw = newEntries[i];
+    if (!raw) continue;
+    let e = { ...raw };
+    if (e.billImage && approxBytesFromDataUrl(e.billImage) > PK_IMAGE_TARGET_BYTES) {
+      e.billImage = await compressImageDataUrl(e.billImage, PK_IMAGE_TARGET_BYTES);
+      modified = true;
+    }
     if (e.imageUrl && approxBytesFromDataUrl(e.imageUrl) > PK_IMAGE_TARGET_BYTES) {
       e.imageUrl = await compressImageDataUrl(e.imageUrl, PK_IMAGE_TARGET_BYTES);
       modified = true;
     }
+    newEntries[i] = e;
   }
   return { ...data, entries: newEntries, _modified: modified };
 }
@@ -228,14 +235,24 @@ export default function PersonalKhata({ standalone = false } = {}) {
         console.warn('Local storage cache save failed:', e);
       }
 
-      // Immediate server sync for logged-in accounts
+            // Immediate server sync for logged-in accounts
       if (khataStorageScope) {
         try {
           const compressed = await compressState(nextState);
           await apiService.savePersonalKhata(compressed);
+          try {
+            localStorage.removeItem(`pk_pending_sync_${khataStorageScope}`);
+          } catch {
+            /* ignore */
+          }
           setSyncStatus('saved');
         } catch (err) {
           console.error('Personal Khata cloud save failed:', err);
+          try {
+            localStorage.setItem(`pk_pending_sync_${khataStorageScope}`, '1');
+          } catch {
+            /* ignore */
+          }
           setSyncStatus('error');
           Swal.fire({
             toast: true,
@@ -377,10 +394,26 @@ export default function PersonalKhata({ standalone = false } = {}) {
       applyState(cached);
     }
 
-    // Logged-in Personal Khata: server is the single source of truth
+        // Logged-in Personal Khata: server is the single source of truth, but don't overwrite if local changes are pending!
     (async () => {
       try {
         setSyncStatus('saving');
+        const hasPendingSync =
+          localStorage.getItem(`pk_pending_sync_${khataStorageScope}`) === '1';
+        if (hasPendingSync) {
+          try {
+            const localCached = loadKhataState(khataStorageScope);
+            const compressed = await compressState(localCached);
+            await apiService.savePersonalKhata(compressed);
+            localStorage.removeItem(`pk_pending_sync_${khataStorageScope}`);
+            setSyncStatus('saved');
+            return;
+          } catch (syncErr) {
+            console.warn('Could not push pending local changes to server:', syncErr);
+            setSyncStatus('error');
+            return;
+          }
+        }
         const remote = await apiService.getPersonalKhata();
         const state = normalizeKhataState(remote);
         try {
@@ -410,8 +443,22 @@ export default function PersonalKhata({ standalone = false } = {}) {
       if (document.visibilityState !== 'visible') return;
       if (entryModal || contactModal || bizModalOpen) return;
       if (isSavingRef.current || Date.now() - lastLocalEditAtRef.current < 3000) return;
-      void (async () => {
+            void (async () => {
         try {
+          const hasPendingSync =
+            localStorage.getItem(`pk_pending_sync_${khataStorageScope}`) === '1';
+          if (hasPendingSync) {
+            try {
+              const localCached = stateRef.current;
+              const compressed = await compressState(localCached);
+              await apiService.savePersonalKhata(compressed);
+              localStorage.removeItem(`pk_pending_sync_${khataStorageScope}`);
+              setSyncStatus('saved');
+              return;
+            } catch {
+              return;
+            }
+          }
           const remote = await apiService.getPersonalKhata();
           const state = normalizeKhataState(remote);
           saveKhataState(state, khataStorageScope);
@@ -557,11 +604,20 @@ export default function PersonalKhata({ standalone = false } = {}) {
           : net < 0
             ? 'pk-contact-amt-val--out'
             : 'pk-contact-amt-val--zero';
-      return (
-        <Link
+            return (
+        <div
           key={c.id}
-          to={`/personal-khata/contact/${c.id}`}
+          role="button"
+          tabIndex={0}
+          onClick={() => navigate(`/personal-khata/contact/${c.id}`)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              navigate(`/personal-khata/contact/${c.id}`);
+            }
+          }}
           className={`pk-contact${activeId === c.id ? ' pk-contact--active' : ''}`}
+          style={{ cursor: 'pointer' }}
         >
           <span className={`pk-contact-accent ${accent}`} aria-hidden />
           <div className="pk-av" style={{ background: avatarColor(c.name) }}>
@@ -581,15 +637,15 @@ export default function PersonalKhata({ standalone = false } = {}) {
             type="button"
             className="pk-contact-del"
             onClick={(ev) => {
-              ev.preventDefault();
               ev.stopPropagation();
               deleteContact(c.id);
             }}
-            title="Delete"
+            title="Delete contact"
+            aria-label={`Delete ${c.name}`}
           >
             <Trash2 size={16} />
           </button>
-        </Link>
+        </div>
       );
     });
   };
@@ -744,18 +800,10 @@ export default function PersonalKhata({ standalone = false } = {}) {
       Swal.fire({ icon: 'warning', title: 'Amount', text: 'Enter a valid amount.' });
       return;
     }
-    const description = [formCategory ? `[${formCategory}]` : '', formDesc.trim()]
-      .filter(Boolean)
-      .join(' ')
-      .trim();
-    if (!description) {
-      Swal.fire({
-        icon: 'warning',
-        title: 'Note required',
-        text: 'Add a short note explaining this payment.',
-      });
-      return;
-    }
+        const noteText = formDesc.trim();
+    const description =
+      [formCategory ? `[${formCategory}]` : '', noteText].filter(Boolean).join(' ').trim() ||
+      (type === 'received' ? 'Cash In / Received' : 'Cash Out / Given');
     const ts = nowIso();
     const row = {
       id: newId(),
@@ -1243,21 +1291,12 @@ export default function PersonalKhata({ standalone = false } = {}) {
                           <ImageIcon size={13} strokeWidth={2.5} aria-hidden /> Bill
                         </button>
                       ) : null}
-                      <button
+                                            <button
                         type="button"
                         aria-label="Delete entry"
+                        title="Delete entry"
                         onClick={() => deleteEntry(e.id)}
-                        style={{
-                          marginLeft: 'auto',
-                          border: 'none',
-                          background: 'var(--primary-bg, #f8fafc)',
-                          color: 'var(--text-muted, #94a3b8)',
-                          cursor: 'pointer',
-                          padding: 6,
-                          borderRadius: 8,
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                        }}
+                        className="pk-tx-del-btn"
                       >
                         <Trash2 size={15} />
                       </button>
@@ -1454,18 +1493,17 @@ export default function PersonalKhata({ standalone = false } = {}) {
               >
                 <Plus size={16} />
               </button>
-              <button
-                type="button"
-                className="pk-biz-pill-btn pk-biz-pill-btn--danger"
-                aria-label="Delete business"
-                title={
-                  businesses.length <= 1 ? 'At least one business required' : 'Delete this business'
-                }
-                disabled={businesses.length <= 1}
-                onClick={() => void deleteActiveBusiness()}
-              >
-                <Trash2 size={14} />
-              </button>
+                            {businesses.length > 1 && (
+                <button
+                  type="button"
+                  className="pk-biz-pill-btn pk-biz-pill-btn--danger"
+                  aria-label="Delete business"
+                  title="Delete this business"
+                  onClick={() => void deleteActiveBusiness()}
+                >
+                  <Trash2 size={14} />
+                </button>
+              )}
             </div>
           </div>
 

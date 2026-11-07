@@ -11,7 +11,7 @@
   --pk-text: var(--text-primary, #0f172a);
   --pk-muted: var(--text-muted, #64748b);
   --pk-line: var(--border, #e2e8f0);
-  --pk-card: var(--text-primary-inv, #fff)fff;
+  --pk-card: var(--card-bg, #ffffff);
   --pk-radius: 16px;
   --pk-font: 'Segoe UI', ui-sans-serif, system-ui, -apple-system, Roboto, sans-serif;
   max-width: 520px;
@@ -122,12 +122,15 @@
 }
 
 .pk-biz-pill-btn--danger {
-  color: var(--danger, #b91c1c);
+  color: #ef4444;
   background: rgba(254, 226, 226, 0.95);
+  border: 1px solid rgba(239, 68, 68, 0.3);
 }
 
 .pk-biz-pill-btn--danger:hover:not(:disabled) {
-  background: var(--danger-bg, #fecaca);
+  background: #fee2e2;
+  color: #dc2626;
+  border-color: #ef4444;
 }
 
 .pk-stats {
@@ -336,20 +339,48 @@
 }
 
 .pk-contact-del {
-  border: none;
-  background: transparent;
-  color: var(--border, #cbd5e1);
+  border: 1px solid rgba(239, 68, 68, 0.28);
+  background: rgba(239, 68, 68, 0.12);
+  color: #f87171;
   cursor: pointer;
-  padding: 6px;
+  padding: 7px;
   border-radius: 8px;
   display: flex;
   align-items: center;
+  justify-content: center;
   flex-shrink: 0;
+  min-width: 34px;
+  min-height: 34px;
+  transition: all 0.18s ease;
 }
 
-.pk-contact-del:hover {
-  color: var(--danger, #ef4444);
-  background: var(--danger-bg, #fef2f2);
+.pk-contact-del:hover,
+.pk-contact-del:active {
+  color: #ffffff;
+  background: #ef4444;
+  border-color: #ef4444;
+}
+
+.pk-tx-del-btn {
+  margin-left: auto;
+  border: 1px solid rgba(239, 68, 68, 0.22);
+  background: rgba(239, 68, 68, 0.1);
+  color: #f87171;
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.18s ease;
+}
+
+.pk-tx-del-btn:hover,
+.pk-tx-del-btn:active {
+  background: #ef4444;
+  color: #fff;
+  border-color: #ef4444;
 }
 
 .pk-empty {
