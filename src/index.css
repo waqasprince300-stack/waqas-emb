@@ -2753,7 +2753,8 @@ tbody tr:last-child td {
   width: 160px;
 }
 
-.pl-toolbar .pl-toolbar-filter--type {
+.pl-toolbar .pl-toolbar-filter--type,
+.pl-toolbar .pl-toolbar-filter--component {
   width: 160px;
 }
 
@@ -5000,4 +5001,235 @@ tr.stagger-item {
 
 .sidebar-logout-btn:active {
   transform: translateY(0);
+}
+
+/* ========================================================================== */
+/* Official Kaghazi Bill Pad — 100% Jet Black on Pure White High Contrast     */
+/* ========================================================================== */
+.owner-bill-modal-overlay .modal-box {
+  max-width: 1120px !important;
+  width: 96% !important;
+}
+
+.official-bill-landscape-sheet {
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  align-items: stretch;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.official-bill-container {
+  background: #ffffff !important;
+  color: #000000 !important;
+  font-family: Arial, "Helvetica Neue", Helvetica, sans-serif !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15) !important;
+  width: 100% !important;
+  max-width: 540px !important;
+  min-height: auto !important;
+  margin: 0 auto !important;
+  box-sizing: border-box !important;
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: space-between !important;
+  border: 2px solid #000000 !important;
+}
+
+.official-bill-container,
+.official-bill-container * {
+  color: #000000 !important;
+  -webkit-font-smoothing: antialiased;
+}
+
+.official-bill-container table {
+  background: #ffffff !important;
+  border-collapse: collapse !important;
+  width: 100% !important;
+  border: 2px solid #000000 !important;
+}
+
+.official-bill-container thead th {
+  background: #000000 !important;
+  color: #ffffff !important;
+  border: 1.5px solid #000000 !important;
+  font-weight: 900 !important;
+  text-transform: uppercase !important;
+  font-size: 11.5px !important;
+  padding: 5px 4px !important;
+}
+
+.official-bill-container tbody td {
+  color: #000000 !important;
+  border: 1.5px solid #000000 !important;
+  background: #ffffff !important;
+  font-weight: 700 !important;
+  font-size: 11.5px !important;
+  padding: 4px 6px !important;
+}
+
+.official-bill-container .bill-total-highlight,
+.official-bill-container .bill-total-highlight * {
+  background: #000000 !important;
+  color: #ffffff !important;
+  border-color: #000000 !important;
+}
+
+@media print {
+  @page {
+    size: auto;
+    margin: 4mm 6mm;
+  }
+
+  * {
+    box-sizing: border-box !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    text-rendering: geometricPrecision !important;
+    image-rendering: -webkit-optimize-contrast !important;
+    -webkit-font-smoothing: antialiased !important;
+  }
+
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    font-family: Arial, "Helvetica Neue", Helvetica, sans-serif !important;
+  }
+
+  /* When printing an official bill, completely hide #root (background app) */
+  body.printing-official-bill #root,
+  body:has(.official-bill-landscape-sheet) #root,
+  body:has(.official-bill-container) #root {
+    display: none !important;
+  }
+
+  /* Hide regular modals & clutter */
+  .modal-overlay:not(.owner-bill-modal-overlay):not(:has(.official-bill-container)):not(:has(.official-bill-landscape-sheet)),
+  .modal-backdrop,
+  .hide-print,
+  nav,
+  aside,
+  header {
+    display: none !important;
+  }
+
+  /* Ensure the bill modal overlay behaves like a clean page container */
+  .owner-bill-modal-overlay,
+  .modal-overlay:has(.official-bill-landscape-sheet),
+  .modal-overlay:has(.official-bill-container) {
+    display: block !important;
+    position: static !important;
+    inset: auto !important;
+    background: transparent !important;
+    backdrop-filter: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+    height: auto !important;
+    overflow: visible !important;
+    z-index: auto !important;
+  }
+
+  .owner-bill-modal-overlay .modal-box,
+  .modal-overlay:has(.official-bill-landscape-sheet) .modal-box,
+  .modal-overlay:has(.official-bill-container) .modal-box {
+    display: block !important;
+    position: static !important;
+    background: transparent !important;
+    border: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    max-width: 100% !important;
+    max-height: none !important;
+    width: 100% !important;
+    height: auto !important;
+    overflow: visible !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    animation: none !important;
+  }
+
+  .owner-bill-modal-overlay .modal-header,
+  .owner-bill-modal-overlay .modal-close,
+  .owner-bill-modal-overlay .modal-footer,
+  .modal-overlay:has(.official-bill-landscape-sheet) .modal-header,
+  .modal-overlay:has(.official-bill-landscape-sheet) .modal-close,
+  .modal-overlay:has(.official-bill-landscape-sheet) .modal-footer,
+  .modal-overlay:has(.official-bill-container) .modal-header,
+  .modal-overlay:has(.official-bill-container) .modal-close,
+  .modal-overlay:has(.official-bill-container) .modal-footer {
+    display: none !important;
+  }
+
+  .owner-bill-modal-overlay .modal-body,
+  .modal-overlay:has(.official-bill-landscape-sheet) .modal-body,
+  .modal-overlay:has(.official-bill-container) .modal-body {
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: visible !important;
+    max-height: none !important;
+  }
+
+  .official-bill-landscape-sheet {
+    display: flex !important;
+    flex-direction: row !important;
+    justify-content: center !important;
+    align-items: stretch !important;
+    width: 100% !important;
+    max-width: 136mm !important;
+    height: 100% !important;
+    max-height: 200mm !important;
+    margin: 0 auto !important;
+    box-sizing: border-box !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  .official-bill-container {
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: space-between !important;
+    box-shadow: none !important;
+    border: 2px solid #000000 !important;
+    border-radius: 0 !important;
+    box-sizing: border-box !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    width: 100% !important;
+    max-width: 136mm !important;
+    height: 100% !important;
+    padding: 10px 12px !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .official-bill-container thead tr,
+  .official-bill-container thead th {
+    background-color: #000000 !important;
+    color: #ffffff !important;
+    border: 1.5px solid #000000 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .official-bill-container tbody td {
+    border: 1.5px solid #000000 !important;
+    background-color: #ffffff !important;
+    color: #000000 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .official-bill-container .bill-total-highlight,
+  .official-bill-container .bill-total-highlight * {
+    background-color: #000000 !important;
+    color: #ffffff !important;
+    border: 2px solid #000000 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
 }

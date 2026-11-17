@@ -55,6 +55,8 @@ import LotTableDesktop from '../components/ghausia/LotTableDesktop';
 import LotMobileViews from '../components/ghausia/LotMobileViews';
 import PaymentModal from '../components/ghausia/PaymentModal';
 import CompleteBillModal from '../components/ghausia/CompleteBillModal';
+import OwnerBillModal from '../components/ledger/OwnerBillModal';
+import OwnerBillsListModal from '../components/ledger/OwnerBillsListModal';
 import useDebounce from '../hooks/useDebounce';
 
 export default function GhausiaCollection() {
@@ -79,6 +81,9 @@ export default function GhausiaCollection() {
     activeBusinessOwnerId,
     businessOwners,
     viewAllWorkspaces,
+    refreshData,
+    markLotsBilledLocally,
+    revertLotsBilledLocally,
   } = useApp();
 
   const collectionLots = useMemo(
@@ -109,6 +114,7 @@ export default function GhausiaCollection() {
   const [statusFilter, setStatusFilter] = useState('All');
   const [stuckLotIdsFilter, setStuckLotIdsFilter] = useState([]);
   const [partyFilter, setPartyFilter] = useState('All');
+  const [componentFilter, setComponentFilter] = useState('All');
   const [dateRange, setDateRange] = useState('all');
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
@@ -163,6 +169,10 @@ export default function GhausiaCollection() {
     }
     if (params.get('status')) {
       setStatusFilter(params.get('status'));
+    }
+    const compParam = params.get('component') || params.get('componentType') || params.get('type');
+    if (compParam && ['main', 'dupatta'].includes(compParam.toLowerCase())) {
+      setComponentFilter(compParam.toLowerCase());
     }
     const q = params.get('search') || params.get('lotNo') || params.get('lotNumber');
     if (q) {
@@ -447,6 +457,8 @@ export default function GhausiaCollection() {
   const filtered = useMemo(() => {
     const list = effectiveCollectionLots.filter((l) => {
       if (highlightedBillableLotId && String(l.id) !== String(highlightedBillableLotId)) return false;
+      if (componentFilter === 'dupatta' && l.suitComponent !== 'dupatta') return false;
+      if (componentFilter === 'main' && l.suitComponent === 'dupatta') return false;
       if (!matchLotSearch(l, debouncedSearch, searchField, partyMap)) return false;
       if (partyFilter !== 'All' && String(l.partyId || '') !== String(partyFilter)) return false;
       if (stuckLotIdsFilter.length > 0 && !stuckLotIdsFilter.includes(String(l.id))) return false;
@@ -467,8 +479,9 @@ export default function GhausiaCollection() {
         )
       )
         return false;
-      if (lotTableTab === 'completed') return l.status === 'completed';
-      if (l.status === 'completed') return false;
+      const isCompleted = l.status === 'completed' || Boolean(l.ownerBillId) || Boolean(l.billedInBillNo);
+      if (lotTableTab === 'completed') return isCompleted;
+      if (isCompleted) return false;
       return statusFilter === 'All' || l.status === statusFilter;
     });
     return [...list].sort((a, b) => compareRowsByUpdatedNewestFirst(a, b, 'lot'));
@@ -477,6 +490,7 @@ export default function GhausiaCollection() {
     debouncedSearch,
     searchField,
     partyMap,
+    componentFilter,
     partyFilter,
     dateRange,
     customRange,
@@ -492,7 +506,7 @@ export default function GhausiaCollection() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [debouncedSearch, searchField, partyFilter, dateRange, customRange, statusFilter, stuckLotIdsFilter, lotTableTab, viewAllWorkspaces]);
+  }, [debouncedSearch, searchField, componentFilter, partyFilter, dateRange, customRange, statusFilter, stuckLotIdsFilter, lotTableTab, viewAllWorkspaces]);
 
   useEffect(() => {
     if (currentPage > totalPages) {
@@ -503,6 +517,8 @@ export default function GhausiaCollection() {
   const visibleLots = useMemo(
     () =>
       effectiveCollectionLots.filter((l) => {
+        if (componentFilter === 'dupatta' && l.suitComponent !== 'dupatta') return false;
+        if (componentFilter === 'main' && l.suitComponent === 'dupatta') return false;
         if (partyFilter !== 'All' && String(l.partyId || '') !== String(partyFilter)) return false;
         if (stuckLotIdsFilter.length > 0 && !stuckLotIdsFilter.includes(String(l.id))) return false;
         return isWithinDateRange(
@@ -520,7 +536,7 @@ export default function GhausiaCollection() {
           customRange
         );
       }),
-    [effectiveCollectionLots, partyFilter, dateRange, customRange, stuckLotIdsFilter]
+    [effectiveCollectionLots, componentFilter, partyFilter, dateRange, customRange, stuckLotIdsFilter]
   );
 
   const completedLotsCount = useMemo(
@@ -597,22 +613,27 @@ export default function GhausiaCollection() {
   const matchesWithoutHighlight = useMemo(() => {
     if (!highlightedBillableLotId || !debouncedSearch.trim()) return 0;
     return effectiveCollectionLots.filter(l => {
+      if (componentFilter === 'dupatta' && l.suitComponent !== 'dupatta') return false;
+      if (componentFilter === 'main' && l.suitComponent === 'dupatta') return false;
       if (lotTableTab === 'completed' && l.status !== 'completed') return false;
       if (lotTableTab === 'others' && l.status === 'completed') return false;
       return matchLotSearch(l, debouncedSearch, searchField, partyMap);
     }).length;
-  }, [highlightedBillableLotId, debouncedSearch, searchField, partyMap, effectiveCollectionLots, lotTableTab]);
+  }, [highlightedBillableLotId, debouncedSearch, searchField, partyMap, effectiveCollectionLots, lotTableTab, componentFilter]);
 
   // Check if search query matches lots in the other tab
   const otherTabMatchCount = useMemo(() => {
     if (!debouncedSearch.trim()) return 0;
     const targetStatus = lotTableTab === 'others' ? 'completed' : 'others';
     return effectiveCollectionLots.filter(l => {
-      if (targetStatus === 'completed' && l.status !== 'completed') return false;
-      if (targetStatus === 'others' && l.status === 'completed') return false;
+      if (componentFilter === 'dupatta' && l.suitComponent !== 'dupatta') return false;
+      if (componentFilter === 'main' && l.suitComponent === 'dupatta') return false;
+      const isCompleted = l.status === 'completed' || Boolean(l.ownerBillId) || Boolean(l.billedInBillNo);
+      if (targetStatus === 'completed' && !isCompleted) return false;
+      if (targetStatus === 'others' && isCompleted) return false;
       return matchLotSearch(l, debouncedSearch, searchField, partyMap);
     }).length;
-  }, [debouncedSearch, searchField, partyMap, effectiveCollectionLots, lotTableTab]);
+  }, [debouncedSearch, searchField, partyMap, effectiveCollectionLots, lotTableTab, componentFilter]);
 
   // Filter clear callbacks
   const handleClearSearch = useCallback(() => {
@@ -628,6 +649,10 @@ export default function GhausiaCollection() {
     setPartyFilter('All');
   }, []);
 
+  const handleClearComponentFilter = useCallback(() => {
+    setComponentFilter('All');
+  }, []);
+
   const handleClearStatusFilter = useCallback(() => {
     setStatusFilter('All');
   }, []);
@@ -640,6 +665,7 @@ export default function GhausiaCollection() {
     setSearch('');
     setSearchField('all');
     setPartyFilter('All');
+    setComponentFilter('All');
     setStatusFilter('All');
     setDateRange('all');
     setStuckLotIdsFilter([]);
@@ -649,11 +675,58 @@ export default function GhausiaCollection() {
   // ─── Billable Lots ───
   const billable = useMemo(
     () =>
-      [...visibleLots.filter((l) => l.status === 'received back')].sort((a, b) =>
-        compareRowsByUpdatedNewestFirst(a, b, 'lot')
-      ),
+      [
+        ...visibleLots.filter(
+          (l) =>
+            l.status === 'received back' &&
+            !l.ownerBillId &&
+            !l.billedInBillNo &&
+            l.status !== 'completed'
+        ),
+      ].sort((a, b) => compareRowsByUpdatedNewestFirst(a, b, 'lot')),
     [visibleLots]
   );
+
+  // ─── Owner Bill & Settle Integration State ───
+  const [showOwnerBillModal, setShowOwnerBillModal] = useState(false);
+  const [showBillsHistoryModal, setShowBillsHistoryModal] = useState(false);
+  const [selectedBillToView, setSelectedBillToView] = useState(null);
+
+  const activeBillOwnerId = useMemo(() => {
+    if (!viewAllWorkspaces && activeBusinessOwnerId) {
+      return String(activeBusinessOwnerId);
+    }
+    if (billable.length > 0 && billable[0].businessOwnerId) {
+      return String(billable[0].businessOwnerId);
+    }
+    if (businessOwners && businessOwners.length > 0) {
+      return String(businessOwners[0].id || businessOwners[0]._id);
+    }
+    return '';
+  }, [viewAllWorkspaces, activeBusinessOwnerId, billable, businessOwners]);
+
+  const activeBillOwnerName = useMemo(() => {
+    if (!viewAllWorkspaces && activeWorkspace?.name && activeWorkspace.name !== 'All workspaces') {
+      return activeWorkspace.name;
+    }
+    const matched = businessOwners?.find(
+      (o) => String(o.id || o._id) === String(activeBillOwnerId)
+    );
+    return matched?.name || (billable[0]?.businessOwnerId ? 'Owner' : 'Owner');
+  }, [viewAllWorkspaces, activeWorkspace, businessOwners, activeBillOwnerId, billable]);
+
+  const ownerPaymentsForBill = useMemo(() => {
+    return payments.filter((p) => {
+      const isReceived = p.type === 'Received';
+      if (!isReceived) return false;
+      const isOwnerParty = String(p.party || '').trim().toLowerCase() === 'owner';
+      const matchesBiz =
+        !activeBillOwnerId ||
+        !p.businessOwnerId ||
+        String(p.businessOwnerId) === String(activeBillOwnerId);
+      return isOwnerParty || matchesBiz;
+    });
+  }, [payments, activeBillOwnerId]);
 
   const getOwnerBillableAmount = (lot) => getBusinessBillAmount(lot);
 
@@ -739,17 +812,44 @@ export default function GhausiaCollection() {
   useEffect(() => {
     if (billablePage > billablePageCount) setBillablePage(billablePageCount);
   }, [billablePage, billablePageCount]);
-  const ownerIn = effectivePayments
-    .filter((p) => p.type === 'Received' && String(p.party || '').trim().toLowerCase() === 'owner')
-    .reduce((s, p) => s + p.amount, 0);
-  const ownerPaidToOwner = effectivePayments
-    .filter((p) => p.type === 'Paid' && p.party === 'Owner')
-    .reduce((s, p) => s + p.amount, 0);
+  const ownerIn = useMemo(() => {
+    const bizNameLower = String(activeWorkspace?.name || '').trim().toLowerCase();
+    const activeOwnerIdStr = activeBusinessOwnerId ? String(activeBusinessOwnerId) : '';
+    return effectivePayments
+      .filter((p) => {
+        if (p.type !== 'Received') return false;
+        const partyLower = String(p.party || '').trim().toLowerCase();
+        const matchesParty = partyLower === 'owner' || partyLower === '' || (bizNameLower && partyLower === bizNameLower);
+        if (!matchesParty) return false;
+        if (viewAllWorkspaces) return true;
+        const pWid = String(p.businessOwnerId?._id || p.businessOwnerId || p.ownerWorkspaceId || '');
+        return !pWid || !activeOwnerIdStr || pWid === activeOwnerIdStr;
+      })
+      .reduce((s, p) => s + Number(p.amount || 0), 0);
+  }, [effectivePayments, activeWorkspace, activeBusinessOwnerId, viewAllWorkspaces]);
+
+  const ownerPaidToOwner = useMemo(() => {
+    const bizNameLower = String(activeWorkspace?.name || '').trim().toLowerCase();
+    const activeOwnerIdStr = activeBusinessOwnerId ? String(activeBusinessOwnerId) : '';
+    return effectivePayments
+      .filter((p) => {
+        if (p.type !== 'Paid') return false;
+        if (String(p.note || '').trim().startsWith('Billable lot settled')) return false;
+        const partyLower = String(p.party || '').trim().toLowerCase();
+        const matchesParty = partyLower === 'owner' || (bizNameLower && partyLower === bizNameLower);
+        if (!matchesParty) return false;
+        if (viewAllWorkspaces) return true;
+        const pWid = String(p.businessOwnerId?._id || p.businessOwnerId || p.ownerWorkspaceId || '');
+        return !pWid || !activeOwnerIdStr || pWid === activeOwnerIdStr;
+      })
+      .reduce((s, p) => s + Number(p.amount || 0), 0);
+  }, [effectivePayments, activeWorkspace, activeBusinessOwnerId, viewAllWorkspaces]);
+
   const billableSettledTotal = useMemo(
     () =>
       effectiveCollectionLots
-        .filter((l) => l.status === 'completed' && l.completedFromBillable)
-        .reduce((s, l) => s + Number(l.billAmount || 0), 0),
+        .filter((l) => l.status === 'completed' || Boolean(l.ownerBillId) || Boolean(l.billedInBillNo))
+        .reduce((s, l) => s + Number(getBusinessBillAmount(l) || l.billAmount || 0), 0),
     [effectiveCollectionLots]
   );
   const ownerReceivedNet = ownerIn - ownerPaidToOwner - billableSettledTotal;
@@ -1432,6 +1532,13 @@ export default function GhausiaCollection() {
         getOwnerSettledAmount={getOwnerSettledAmount}
         renderOwnerUnpaidBalance={renderOwnerUnpaidBalance}
         partyEdits={partyEdits}
+        onOpenBillModal={() => {
+          setSelectedBillToView(null);
+          setShowOwnerBillModal(true);
+        }}
+        onOpenBillHistory={() => {
+          setShowBillsHistoryModal(true);
+        }}
       />
 
       {/* Active Billable Filter Banner */}
@@ -1541,6 +1648,17 @@ export default function GhausiaCollection() {
               {p.name}
             </option>
           ))}
+        </select>
+
+        <select
+          className="form-select pl-toolbar-filter pl-toolbar-filter--type"
+          value={componentFilter}
+          onChange={(e) => setComponentFilter(e.target.value)}
+          aria-label="Filter by lot type"
+        >
+          <option value="All">All Types</option>
+          <option value="main">Main Lots Only</option>
+          <option value="dupatta">Dupatta Lots Only</option>
         </select>
         
         {lotTableTab === 'others' ? (
@@ -1655,6 +1773,7 @@ export default function GhausiaCollection() {
         paginatedLots={paginatedLots}
         search={search}
         searchField={searchField}
+        componentFilter={componentFilter}
         partyFilter={partyFilter}
         statusFilter={statusFilter}
         dateRange={dateRange}
@@ -1665,6 +1784,7 @@ export default function GhausiaCollection() {
         otherTabMatchCount={otherTabMatchCount}
         onClearSearch={handleClearSearch}
         onClearHighlightedLot={handleClearHighlightedLot}
+        onClearComponentFilter={handleClearComponentFilter}
         onClearPartyFilter={handleClearPartyFilter}
         onClearStatusFilter={handleClearStatusFilter}
         onClearDateRange={handleClearDateRange}
@@ -1690,6 +1810,7 @@ export default function GhausiaCollection() {
         viewMode={viewMode}
         search={search}
         searchField={searchField}
+        componentFilter={componentFilter}
         partyFilter={partyFilter}
         statusFilter={statusFilter}
         dateRange={dateRange}
@@ -1700,6 +1821,7 @@ export default function GhausiaCollection() {
         otherTabMatchCount={otherTabMatchCount}
         onClearSearch={handleClearSearch}
         onClearHighlightedLot={handleClearHighlightedLot}
+        onClearComponentFilter={handleClearComponentFilter}
         onClearPartyFilter={handleClearPartyFilter}
         onClearStatusFilter={handleClearStatusFilter}
         onClearDateRange={handleClearDateRange}
@@ -1829,6 +1951,48 @@ export default function GhausiaCollection() {
           onConfirm={handleDelete}
           onCancel={() => setDeleteTarget(null)}
           confirming={deleteLoading}
+        />
+      )}
+
+      {/* Owner Bill / Parchi Modal */}
+      {showOwnerBillModal && (
+        <OwnerBillModal
+          ownerId={activeBillOwnerId}
+          ownerName={activeBillOwnerName}
+          candidateLots={billable}
+          candidatePayments={ownerPaymentsForBill}
+          existingBill={selectedBillToView}
+          onClose={() => {
+            setShowOwnerBillModal(false);
+            setSelectedBillToView(null);
+          }}
+          onSaved={(savedBill) => {
+            const billedLots = savedBill?.lots || [];
+            markLotsBilledLocally(billedLots, savedBill);
+            refreshData({ force: true });
+          }}
+        />
+      )}
+
+      {/* Owner Past Bills History Modal */}
+      {showBillsHistoryModal && (
+        <OwnerBillsListModal
+          ownerId={activeBillOwnerId}
+          ownerName={activeBillOwnerName}
+          onClose={() => setShowBillsHistoryModal(false)}
+          onSelectBill={(b) => {
+            setSelectedBillToView(b);
+            setShowOwnerBillModal(true);
+          }}
+          onCreateNew={() => {
+            setShowBillsHistoryModal(false);
+            setSelectedBillToView(null);
+            setShowOwnerBillModal(true);
+          }}
+          onBillDeleted={(b) => {
+            revertLotsBilledLocally(b?.id || b?._id, b?.billNo);
+            refreshData({ force: true });
+          }}
         />
       )}
     </div>

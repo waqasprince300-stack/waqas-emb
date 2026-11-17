@@ -5,6 +5,7 @@ export default function LotEmptyState({
   searchField = 'all',
   partyFilter = 'All',
   parties = [],
+  componentFilter = 'All',
   statusFilter = 'All',
   dateRange = 'all',
   highlightedBillableLotId = null,
@@ -16,6 +17,7 @@ export default function LotEmptyState({
   onClearSearch,
   onClearHighlightedLot,
   onClearPartyFilter,
+  onClearComponentFilter,
   onClearStatusFilter,
   onClearDateRange,
   onResetAllFilters,
@@ -23,6 +25,7 @@ export default function LotEmptyState({
 }) {
   const isSearchActive = Boolean(search && String(search).trim());
   const isHighlightedActive = Boolean(highlightedBillableLotId);
+  const isComponentActive = componentFilter !== 'All';
   const isPartyActive = partyFilter !== 'All';
   const isStatusActive = statusFilter !== 'All' && lotTableTab === 'others';
   const isDateActive = dateRange !== 'all';
@@ -30,6 +33,7 @@ export default function LotEmptyState({
   const hasAnyFilter =
     isSearchActive ||
     isHighlightedActive ||
+    isComponentActive ||
     isPartyActive ||
     isStatusActive ||
     isDateActive;
@@ -369,6 +373,45 @@ export default function LotEmptyState({
                   type="button"
                   onClick={onClearPartyFilter}
                   title="Remove party filter"
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: 'inherit',
+                    cursor: 'pointer',
+                    padding: 0,
+                    fontSize: 14,
+                    lineHeight: 1,
+                    display: 'flex',
+                    alignItems: 'center',
+                  }}
+                >
+                  ✕
+                </button>
+              )}
+            </span>
+          )}
+
+          {isComponentActive && (
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 5,
+                padding: '3px 8px',
+                borderRadius: 14,
+                fontSize: 12,
+                background: componentFilter === 'dupatta' ? 'rgba(168, 85, 247, 0.15)' : 'rgba(59, 130, 246, 0.15)',
+                color: componentFilter === 'dupatta' ? 'var(--primary, #a855f7)' : 'var(--primary, #3b82f6)',
+                border: `1px solid ${componentFilter === 'dupatta' ? 'rgba(168, 85, 247, 0.35)' : 'rgba(59, 130, 246, 0.35)'}`,
+                fontWeight: 600,
+              }}
+            >
+              Type: {componentFilter === 'dupatta' ? 'Dupatta Lots' : 'Main Lots'}
+              {onClearComponentFilter && (
+                <button
+                  type="button"
+                  onClick={onClearComponentFilter}
+                  title="Remove lot type filter"
                   style={{
                     background: 'none',
                     border: 'none',

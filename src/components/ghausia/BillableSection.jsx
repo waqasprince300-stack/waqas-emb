@@ -28,6 +28,8 @@ export default function BillableSection({
   getOwnerSettledAmount,
   renderOwnerUnpaidBalance,
   partyEdits,
+  onOpenBillModal,
+  onOpenBillHistory,
 }) {
   return (
     <div className="card" style={{ marginBottom: 22 }}>
@@ -38,56 +40,43 @@ export default function BillableSection({
           alignItems: 'center',
           justifyContent: 'space-between',
           gap: 10,
+          flexWrap: 'wrap',
+          padding: '12px 16px',
         }}
       >
-        <span className="card-title">
-          Billable lots to Owner
-          {billable.length > 0 && (
-            <span style={{ marginLeft: 8, fontSize: 12, fontWeight: 600, color: '#92600A' }}>
-              ({billable.length})
-            </span>
-          )}
-        </span>
-        {billable.length > 0 && (
-          <button
-            type="button"
-            className="btn btn-sm"
-            onClick={() => setBillableCollapsed((v) => !v)}
-            style={{
-              background: 'transparent',
-              border: '1px solid var(--border)',
-              color: 'var(--text-secondary)',
-            }}
-          >
-            {billableCollapsed ? 'Show' : 'Hide'}
-          </button>
-        )}
-      </div>
-      {billable.length > 0 && !billableCollapsed && (
-        <div
-          style={{
-            margin: '0',
-            background: 'var(--card-bg)',
-            border: '1px solid var(--primary)',
-            borderRadius: 10,
-            padding: 14,
-            boxShadow: '0 4px 14px rgba(0,0,0,0.05)',
-          }}
-        >
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: 10,
-              flexWrap: 'wrap',
-              marginBottom: 12,
-            }}
-          >
-            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-              <span>
-                Billable to Owner — <span style={{ color: 'var(--primary)' }}>{billable.length} lots</span> · Total: ₨{billableTotal.toLocaleString()}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <span className="card-title" style={{ margin: 0, fontSize: 15, fontWeight: 800 }}>
+            Billable lots to Owner
+            {billable.length > 0 && (
+              <span
+                style={{
+                  marginLeft: 8,
+                  fontSize: 12,
+                  fontWeight: 700,
+                  padding: '2px 8px',
+                  borderRadius: 6,
+                  background: 'rgba(59, 130, 246, 0.15)',
+                  color: '#60a5fa',
+                  border: '1px solid rgba(59, 130, 246, 0.3)',
+                }}
+              >
+                {billable.length}
               </span>
+            )}
+          </span>
+          {billable.length > 0 && (
+            <span
+              style={{
+                fontSize: 13,
+                fontWeight: 700,
+                color: 'var(--text-secondary)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+              }}
+            >
+              <span>·</span>
+              <span>Total: <strong style={{ color: 'var(--text-primary)' }}>Rs {billableTotal.toLocaleString()}</strong></span>
               {formatLakhCrore(billableTotal) && (
                 <span
                   style={{
@@ -104,6 +93,91 @@ export default function BillableSection({
                   {formatLakhCrore(billableTotal)}
                 </span>
               )}
+            </span>
+          )}
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          {onOpenBillHistory && (
+            <button
+              type="button"
+              className="btn btn-sm"
+              onClick={onOpenBillHistory}
+              title="Pichle banaye gaye bills dekhein"
+              style={{
+                background: 'rgba(255, 255, 255, 0.05)',
+                border: '1px solid var(--border)',
+                color: 'var(--text-secondary)',
+                fontWeight: 600,
+                fontSize: 12,
+                padding: '5px 12px',
+                borderRadius: 6,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 5,
+                cursor: 'pointer',
+              }}
+            >
+              <span>📋</span>
+              <span>Bill History</span>
+            </button>
+          )}
+          {billable.length > 0 && onOpenBillModal && (
+            <button
+              type="button"
+              className="btn btn-sm"
+              onClick={onOpenBillModal}
+              title="Is workspace ki billable lots ka bill banayein"
+              style={{
+                background: 'linear-gradient(135deg, #2563eb, #1d4ed8)',
+                border: '1px solid #3b82f6',
+                color: '#ffffff',
+                fontWeight: 700,
+                fontSize: 12.5,
+                padding: '6px 14px',
+                borderRadius: 6,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                boxShadow: '0 2px 10px rgba(37, 99, 235, 0.35)',
+                cursor: 'pointer',
+              }}
+            >
+              <span>🧾</span>
+              <span>Bill Banayein ({billable.length})</span>
+            </button>
+          )}
+          {billable.length > 0 && (
+            <button
+              type="button"
+              className="btn btn-sm"
+              onClick={() => setBillableCollapsed((v) => !v)}
+              style={{
+                background: 'transparent',
+                border: '1px solid var(--border)',
+                color: 'var(--text-secondary)',
+                fontSize: 12,
+              }}
+            >
+              {billableCollapsed ? 'Show' : 'Hide'}
+            </button>
+          )}
+        </div>
+      </div>
+      {billable.length > 0 && !billableCollapsed && (
+        <div style={{ padding: '12px 16px' }}>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 10,
+              flexWrap: 'wrap',
+              marginBottom: 10,
+            }}
+          >
+            <div style={{ fontSize: 12, color: 'var(--text-secondary)', fontWeight: 600 }}>
+              Showing {billableFiltered.length} of {billable.length} billable lots
             </div>
             <input
               type="text"
@@ -112,12 +186,12 @@ export default function BillableSection({
               placeholder="Search lot, design, party…"
               style={{
                 fontSize: 12.5,
-                padding: '6px 10px',
+                padding: '6px 12px',
                 borderRadius: 8,
                 border: '1px solid var(--border)',
                 background: 'var(--body-bg)',
                 color: 'var(--text-primary)',
-                minWidth: 200,
+                minWidth: 180,
                 flex: '0 1 240px',
               }}
             />

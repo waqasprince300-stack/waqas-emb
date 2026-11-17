@@ -163,10 +163,17 @@ function PartyForm({ initial, onSave, onClose, saving }) {
               const boName = bo ? bo.name : `Workspace ${ov.businessOwnerId.slice(-6)}`;
               return (
                 <div key={ov.businessOwnerId} style={{ background: 'var(--card-bg, #fff)', border: '1px solid var(--border, #e2e8f0)', borderRadius: 12, padding: 16, marginBottom: 12, boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: ov.showWorkspace ? 16 : 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: ov.showWorkspace ? 12 : 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                       <span style={{ fontSize: 18 }}>🏢</span>
-                      <span style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary, #1e293b)' }}>{boName}</span>
+                      <div>
+                        <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary, #1e293b)' }}>{boName}</div>
+                        <div style={{ fontSize: 11.5, color: 'var(--text-muted, #64748b)', marginTop: 2 }}>
+                          {ov.showWorkspace
+                            ? (ov.alias ? `Custom alias: "${ov.alias}"` : 'Custom alias enable hai')
+                            : `Global alias ("${form.workspaceAlias || boName}") use karega`}
+                        </div>
+                      </div>
                     </div>
                     <IOSSwitch checked={ov.showWorkspace} onChange={(c) => updateOverride(idx, 'showWorkspace', c)} />
                   </div>

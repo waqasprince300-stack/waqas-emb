@@ -106,8 +106,25 @@ export function businessOwnerRegistryMap(rows) {
   return m;
 }
 
-/** Embedded lot fields first, then name from `businessOwners` list (dashboard / collection tables). */
+/** Embedded lot fields first, then name from `businessOwners` list (dashboard / collection tables).
+ * Supports `opts.partyObj` to honour Party Custom Global Alias and Workspace Overrides.
+ */
 export function workspaceDisplayTitleForLot(lot, ownersRows, opts = {}) {
+  // If party viewing, prioritize party's configured aliases
+  if (opts.partyObj) {
+    const p = opts.partyObj;
+    const lotWid = normalizedBusinessOwnerId(lot?.businessOwnerId);
+    const ov = p.workspaceOverrides?.find(
+      (o) => normalizedBusinessOwnerId(o.businessOwnerId) === lotWid
+    );
+    if (ov && ov.showWorkspace && ov.alias && ov.alias.trim()) {
+      return ov.alias.trim();
+    }
+    if (p.workspaceAlias && p.workspaceAlias.trim()) {
+      return p.workspaceAlias.trim();
+    }
+  }
+
   const embedded = workspaceLabelEmbeddedInLot(lot);
   if (embedded) return embedded;
   const id = normalizedBusinessOwnerId(lot?.businessOwnerId);

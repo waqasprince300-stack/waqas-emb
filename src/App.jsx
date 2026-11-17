@@ -13,6 +13,7 @@ import IosInstallPrompt from './components/IosInstallPrompt';
 import MarqueeBanner from './components/MarqueeBanner';
 import BroadcastModal from './components/BroadcastModal';
 import PartyMotivationBanner from './components/PartyMotivationBanner';
+import PartyPushNotificationBanner from './components/PartyPushNotificationBanner';
 
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const GhausiaCollection = lazy(() => import('./pages/GhausiaCollection'));
@@ -159,6 +160,7 @@ function Layout({ children, sidebarOpen, setSidebarOpen }) {
 
       <main className={`app-main${isKhataRoute ? ' app-main--khata' : ''}`}>
         <div className="app-main-inner">
+          <PartyPushNotificationBanner />
           <PartyMotivationBanner />
           <Suspense
             fallback={

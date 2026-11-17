@@ -26,6 +26,27 @@ export function usePaymentsData({ trackWrite, userRole }) {
     [trackWrite, userRole]
   );
 
+  const updatePayment = useCallback(
+    async (id, patch, opts = {}) => {
+      const { businessOwnerId } = opts;
+      const updated = await trackWrite(
+        apiService.updatePayment(id, patch, businessOwnerId)
+      );
+      const idStr = String(id);
+      const applyUpdate = (arr) =>
+        arr.map((x) => (String(x.id || x._id) === idStr ? { ...x, ...updated } : x));
+      setPayments(applyUpdate);
+      if (userRole === 'admin') {
+        setAdminReportingPayments(applyUpdate);
+      }
+      if (userRole === 'party') {
+        setPartyCrossPayments(applyUpdate);
+      }
+      return updated;
+    },
+    [trackWrite, userRole]
+  );
+
   const deletePayment = useCallback(
     async (id, opts = {}) => {
       const { businessOwnerId } = opts;
@@ -50,6 +71,7 @@ export function usePaymentsData({ trackWrite, userRole }) {
     partyCrossPayments,
     setPartyCrossPayments,
     addPayment,
+    updatePayment,
     deletePayment,
   };
 }

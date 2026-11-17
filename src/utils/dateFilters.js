@@ -137,6 +137,102 @@ export const latestDateFrom = (item, keys) => {
   return latest;
 };
 
+/**
+ * Extract the business date for a lot (ignoring technical updatedAt).
+ * For completed/received back: receivedBackDate -> completeDate -> dispatchDate -> allotDate -> receivedDate -> createdAt
+ * For in-progress/dispatched/pending: dispatchDate -> allotDate -> receivedDate -> createdAt
+ */
+export function getLotBusinessDate(lot) {
+  if (!lot) return null;
+  const status = String(lot.status || '').toLowerCase().trim();
+  const isCompleted = status === 'completed' || status === 'received back';
+
+  if (isCompleted) {
+    return (
+      latestDateFrom(lot, [
+        'receivedBackDate',
+        'completeDate',
+        'dispatchDate',
+        'allotDate',
+        'receivedDate',
+        'createdAt',
+      ]) ||
+      parseDateValue(
+        lot.receivedBackDate ||
+        lot.completeDate ||
+        lot.dispatchDate ||
+        lot.allotDate ||
+        lot.receivedDate ||
+        lot.createdAt
+      )
+    );
+  }
+
+  return (
+    latestDateFrom(lot, [
+      'dispatchDate',
+      'allotDate',
+      'receivedDate',
+      'createdAt',
+    ]) ||
+    parseDateValue(lot.dispatchDate || lot.allotDate || lot.receivedDate || lot.createdAt)
+  );
+}
+
+/**
+ * Natural comparison for lot numbers (e.g. 7286 > 7285, 7247-D > 7247, etc.)
+ */
+export function compareLotNumbers(a, b) {
+  const numA = String(a?.lotNo || a?.lotNumber || '').trim();
+  const numB = String(b?.lotNo || b?.lotNumber || '').trim();
+
+  if (numA && numB) {
+    const cmp = numB.localeCompare(numA, undefined, { numeric: true, sensitivity: 'base' });
+    if (cmp !== 0) return cmp;
+  } else if (numB && !numA) {
+    return 1;
+  } else if (numA && !numB) {
+    return -1;
+  }
+  return 0;
+}
+
+/**
+ * Professional rule-based comparator for lots across the entire application:
+ * 1. Business date (Calendar day descending: newest day first)
+ * 2. If same day (or dates missing): Lot Number (Descending: 7286 before 7285)
+ * 3. Fallback: exact timestamp / ID
+ *
+ * NOTE: This NEVER jumps a row on edits or status changes because technical updatedAt is ignored!
+ */
+export function compareLotsBusinessOrder(a, b) {
+  const dateObjA = getLotBusinessDate(a);
+  const dateObjB = getLotBusinessDate(b);
+
+  const timeA = dateObjA ? dateObjA.getTime() : 0;
+  const timeB = dateObjB ? dateObjB.getTime() : 0;
+
+  if (timeA && timeB) {
+    const dayA = dateObjA.toISOString().slice(0, 10);
+    const dayB = dateObjB.toISOString().slice(0, 10);
+    if (dayA !== dayB) {
+      return dayB.localeCompare(dayA);
+    }
+  } else if (timeB && !timeA) {
+    return 1;
+  } else if (timeA && !timeB) {
+    return -1;
+  }
+
+  // Same calendar day or missing dates: Lot Number takes precedence!
+  const lotCmp = compareLotNumbers(a, b);
+  if (lotCmp !== 0) return lotCmp;
+
+  if (timeB !== timeA) return timeB - timeA;
+
+  return fallbackIdCompare(a, b);
+}
+
 export function rowRecencyMs(row, kind) {
   if (kind === 'payment') {
     const dateObj = parseDateValue(row?.date);
@@ -144,19 +240,16 @@ export function rowRecencyMs(row, kind) {
     return 0;
   }
 
+  if (kind === 'lot') {
+    const d = getLotBusinessDate(row);
+    if (d) return d.getTime();
+    return 0;
+  }
+
   const u = parseDateValue(row?.updatedAt)?.getTime();
   if (u != null && !Number.isNaN(u)) return u;
   const c = parseDateValue(row?.createdAt)?.getTime();
   if (c != null && !Number.isNaN(c)) return c;
-  if (kind === 'lot') {
-    const t = latestDateFrom(row, [
-      'receivedBackDate',
-      'dispatchDate',
-      'allotDate',
-      'receivedDate',
-    ]);
-    return t ? t.getTime() : 0;
-  }
   return 0;
 }
 
@@ -192,6 +285,10 @@ export function compareRowsByUpdatedNewestFirst(a, b, kind) {
       return createdB - createdA;
     }
     return fallbackIdCompare(a, b);
+  }
+
+  if (kind === 'lot') {
+    return compareLotsBusinessOrder(a, b);
   }
 
   const d = rowRecencyMs(b, kind) - rowRecencyMs(a, kind);

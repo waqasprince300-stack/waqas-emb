@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Modal, FormGroup } from '../UI';
 import { latestDateFrom, formatDisplayDateTime, DateRangeSelect, isWithinDateRange, parseDateValue } from '../../utils/dateFilters';
 import { getBusinessBillAmount } from '../../utils/partyBillPrivacy';
@@ -6,6 +6,9 @@ import { normalizedBusinessOwnerId } from '../../utils/businessWorkspace';
 import apiService from '../../services/api';
 import PaymentSlipCell from '../receipt/PaymentSlipCell';
 import { formatLakhCrore } from '../../utils/numberToWords';
+import { useApp } from '../../context/AppContext';
+import OwnerBillModal from './OwnerBillModal';
+import OwnerBillsListModal from './OwnerBillsListModal';
 
 function TallyModal({ ownerId, ownerName, onClose, onAdded }) {
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
@@ -103,9 +106,31 @@ function TallyModal({ ownerId, ownerName, onClose, onAdded }) {
 }
 
 export default function OwnerLedgerModal({ ownerId, ownerName, payments, lots, onClose, onRefresh }) {
+  const { markLotsBilledLocally, revertLotsBilledLocally } = useApp();
   const [showTallyModal, setShowTallyModal] = useState(false);
+  const [showBillModal, setShowBillModal] = useState(false);
+  const [showBillsList, setShowBillsList] = useState(false);
+  const [selectedBillToView, setSelectedBillToView] = useState(null);
+  const [billsCount, setBillsCount] = useState(0);
+
   const [dateRange, setDateRange] = useState('all');
   const [customDateRange, setCustomDateRange] = useState({ start: '', end: '' });
+
+  useEffect(() => {
+    let isMounted = true;
+    async function fetchBillsCount() {
+      try {
+        const res = await apiService.getOwnerBills(ownerId);
+        if (isMounted) setBillsCount(res?.bills?.length || 0);
+      } catch (err) {
+        // Ignore fetch errors silently
+      }
+    }
+    fetchBillsCount();
+    return () => {
+      isMounted = false;
+    };
+  }, [ownerId]);
   
   // Build raw rows
   const raw = [];
@@ -181,7 +206,7 @@ export default function OwnerLedgerModal({ ownerId, ownerName, payments, lots, o
     });
   });
 
-  // Filter lots for this owner
+  // Filter lots for this owner (already billed / settled for timeline)
   const ownerLots = lots.filter((l) => {
     const lotBizId = normalizedBusinessOwnerId(l.businessOwnerId) || normalizedBusinessOwnerId(l.ownerWorkspaceId);
     const matchesWorkspace = lotBizId === normalizedOwnerId;
@@ -190,6 +215,13 @@ export default function OwnerLedgerModal({ ownerId, ownerName, payments, lots, o
     // So we ONLY show lots that have a corresponding AutoBill payment.
     const lotNum = String(l.lotNo || l.lotNumber || '').trim();
     return matchesWorkspace && billedLotNumbers.has(lotNum);
+  });
+
+  // Billable lots for this owner (status === 'received back' and ready to be billed)
+  const billableLotsForOwner = lots.filter((l) => {
+    const lotBizId = normalizedBusinessOwnerId(l.businessOwnerId) || normalizedBusinessOwnerId(l.ownerWorkspaceId);
+    const matchesWorkspace = lotBizId === normalizedOwnerId;
+    return matchesWorkspace && String(l.status || '').toLowerCase() === 'received back';
   });
 
   ownerLots.forEach((l) => {
@@ -237,24 +269,38 @@ export default function OwnerLedgerModal({ ownerId, ownerName, payments, lots, o
   // Display newest first
   let displayRows = [...withBalance].reverse();
 
+  let openingBalance = 0;
+  let hasOpeningBalance = false;
+  let periodBilled = 0;
+  let periodReceived = 0;
+
   if (dateRange !== 'all') {
-    displayRows = displayRows.filter(row => isWithinDateRange(row.whenDate, dateRange, customDateRange));
+    const firstInRangeIndex = withBalance.findIndex((row) =>
+      isWithinDateRange(row.whenDate, dateRange, customDateRange)
+    );
+    if (firstInRangeIndex > 0) {
+      openingBalance = withBalance[firstInRangeIndex - 1].balanceAfter;
+      hasOpeningBalance = true;
+    } else if (firstInRangeIndex === -1 && withBalance.length > 0) {
+      openingBalance = withBalance[withBalance.length - 1].balanceAfter;
+      hasOpeningBalance = true;
+    }
+    displayRows = displayRows.filter((row) => isWithinDateRange(row.whenDate, dateRange, customDateRange));
+    periodBilled = displayRows.reduce((s, r) => s + Number(r.billed || 0), 0);
+    periodReceived = displayRows.reduce((s, r) => s + Number(r.received || 0), 0);
   }
+
   const netBalance = withBalance.length ? withBalance[withBalance.length - 1].balanceAfter : 0;
+  const currentNetBalance =
+    dateRange !== 'all' && displayRows.length > 0
+      ? displayRows[0].balanceAfter
+      : dateRange !== 'all' && hasOpeningBalance
+      ? openingBalance
+      : netBalance;
 
   const formatMoney = (val) => {
-    return `₨${Number(Math.abs(val)).toLocaleString()}`;
+    return `Rs ${Number(Math.abs(val)).toLocaleString()}`;
   };
-
-  if (!displayRows.length) {
-    return (
-      <Modal wide title={`${ownerName || 'Business Owner'} — Ledger`} onClose={onClose}>
-        <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
-          No transactions in this period
-        </div>
-      </Modal>
-    );
-  }
 
   return (
     <Modal wide title={`${ownerName || 'Business Owner'} — Ledger`} onClose={onClose}>
@@ -309,12 +355,12 @@ export default function OwnerLedgerModal({ ownerId, ownerName, payments, lots, o
                 style={{
                   fontSize: 26,
                   fontWeight: 800,
-                  color: netBalance >= 0 ? 'var(--danger, #b91c1c)' : 'var(--success, #047857)',
+                  color: currentNetBalance >= 0 ? 'var(--danger, #b91c1c)' : 'var(--success, #047857)',
                 }}
               >
-                {netBalance < 0 ? '-' : ''}{formatMoney(netBalance)}
+                {currentNetBalance < 0 ? '-' : ''}{formatMoney(currentNetBalance)}
               </span>
-              {formatLakhCrore(netBalance) && (
+              {formatLakhCrore(currentNetBalance) && (
                 <span
                   style={{
                     fontSize: 11.5,
@@ -327,10 +373,46 @@ export default function OwnerLedgerModal({ ownerId, ownerName, payments, lots, o
                     letterSpacing: '0.01em',
                   }}
                 >
-                  {formatLakhCrore(netBalance)}
+                  {formatLakhCrore(currentNetBalance)}
                 </span>
               )}
             </div>
+            {dateRange !== 'all' && (
+              <div
+                style={{
+                  marginTop: 10,
+                  display: 'flex',
+                  gap: 12,
+                  flexWrap: 'wrap',
+                  alignItems: 'center',
+                  background: 'rgba(255, 255, 255, 0.04)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 8,
+                  padding: '8px 12px',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5 }}>
+                  <span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>Sabqa Baqaya:</span>
+                  <span style={{ color: 'var(--warning, #f59e0b)', fontWeight: 700 }}>
+                    {openingBalance < 0 ? '-' : ''}{formatMoney(openingBalance)}
+                  </span>
+                </div>
+                <span style={{ color: 'var(--text-muted)', opacity: 0.5 }}>|</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5 }}>
+                  <span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>+ Naya Kaam:</span>
+                  <span style={{ color: 'var(--danger, #ef4444)', fontWeight: 700 }}>
+                    +{formatMoney(periodBilled)}
+                  </span>
+                </div>
+                <span style={{ color: 'var(--text-muted)', opacity: 0.5 }}>|</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5 }}>
+                  <span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>− Wasooli (Online):</span>
+                  <span style={{ color: 'var(--success, #10b981)', fontWeight: 700 }}>
+                    −{formatMoney(periodReceived)}
+                  </span>
+                </div>
+              </div>
+            )}
             <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4 }}>
               {netBalance > 0
                 ? 'Owner owes you (work billed + refunds − payments received).'
@@ -339,37 +421,76 @@ export default function OwnerLedgerModal({ ownerId, ownerName, payments, lots, o
                 : 'Settled up in this period.'}
             </div>
           </div>
-          <div>
-            <button 
-                onClick={() => setShowTallyModal(true)}
-                style={{
-                  padding: '10px 20px', 
-                  background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', 
-                  color: '#ffffff', 
-                  border: 'none', 
-                  borderRadius: 50, 
-                  cursor: 'pointer', 
-                  fontWeight: 700,
-                  fontSize: 13,
-                  letterSpacing: '0.02em',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  boxShadow: '0 4px 12px rgba(16, 185, 129, 0.3)',
-                  transition: 'transform 0.1s ease, box-shadow 0.1s ease',
-                  whiteSpace: 'nowrap',
-                }}
-                onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 6px 16px rgba(16, 185, 129, 0.4)'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(16, 185, 129, 0.3)'; }}
-                onMouseDown={(e) => { e.currentTarget.style.transform = 'translateY(1px)'; e.currentTarget.style.boxShadow = '0 2px 8px rgba(16, 185, 129, 0.3)'; }}
-                onMouseUp={(e) => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 6px 16px rgba(16, 185, 129, 0.4)'; }}
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="20 6 9 17 4 12"></polyline>
-                </svg>
-                Mark Khata Tally
-              </button>
-            </div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedBillToView(null);
+                setShowBillModal(true);
+              }}
+              style={{
+                padding: '9px 18px',
+                background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
+                color: '#ffffff',
+                border: 'none',
+                borderRadius: 50,
+                cursor: 'pointer',
+                fontWeight: 700,
+                fontSize: 13,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                boxShadow: '0 4px 12px rgba(37, 99, 235, 0.3)',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              <span>📄</span>
+              Create Bill / Parchi
+            </button>
+
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={() => setShowBillsList(true)}
+              style={{
+                borderRadius: 50,
+                padding: '8px 14px',
+                fontWeight: 600,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                whiteSpace: 'nowrap',
+              }}
+            >
+              <span>📋</span>
+              Bill History {billsCount > 0 ? `(${billsCount})` : ''}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setShowTallyModal(true)}
+              style={{
+                padding: '9px 14px',
+                background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                color: '#ffffff',
+                border: 'none',
+                borderRadius: 50,
+                cursor: 'pointer',
+                fontWeight: 700,
+                fontSize: 12.5,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                boxShadow: '0 4px 12px rgba(16, 185, 129, 0.3)',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="20 6 9 17 4 12"></polyline>
+              </svg>
+              Mark Tally
+            </button>
+          </div>
           </div>
 
           {/* Desktop Table Header */}
@@ -387,6 +508,11 @@ export default function OwnerLedgerModal({ ownerId, ownerName, payments, lots, o
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {displayRows.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)', background: 'var(--card-bg)', borderRadius: 8, border: '1px solid var(--border)' }}>
+                Is muddat mein koi transaction nahi hui.
+              </div>
+            ) : null}
             {displayRows.map((t) => {
               const when =
                 t.whenDate && !Number.isNaN(new Date(t.whenDate).getTime())
@@ -561,6 +687,25 @@ export default function OwnerLedgerModal({ ownerId, ownerName, payments, lots, o
                 </div>
               );
             })}
+            {dateRange !== 'all' && hasOpeningBalance && (
+              <div
+                style={{
+                  background: 'var(--primary-bg, #eff6ff)',
+                  border: '1px dashed var(--primary, #93c5fd)',
+                  borderRadius: 8,
+                  padding: '10px 14px',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  fontWeight: 700,
+                  fontSize: 12.5,
+                  color: 'var(--primary, #1e40af)',
+                }}
+              >
+                <span>📅 Is Tareekh Se Pehle Ka Sabqa Baqaya (Opening Balance)</span>
+                <span>{openingBalance < 0 ? '-' : ''}{formatMoney(openingBalance)}</span>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -572,6 +717,44 @@ export default function OwnerLedgerModal({ ownerId, ownerName, payments, lots, o
           onAdded={() => {
             setShowTallyModal(false);
             if (onRefresh) onRefresh();
+          }}
+        />
+      )}
+      {showBillModal && (
+        <OwnerBillModal
+          ownerId={ownerId}
+          ownerName={ownerName}
+          candidateLots={billableLotsForOwner}
+          candidatePayments={ownerPayments}
+          existingBill={selectedBillToView}
+          onClose={() => {
+            setShowBillModal(false);
+            setSelectedBillToView(null);
+          }}
+          onSaved={(savedBill) => {
+            markLotsBilledLocally?.(billableLotsForOwner, savedBill);
+            onRefresh?.();
+            apiService.getOwnerBills(ownerId).then((r) => setBillsCount(r?.bills?.length || 0)).catch(() => {});
+          }}
+        />
+      )}
+      {showBillsList && (
+        <OwnerBillsListModal
+          ownerId={ownerId}
+          ownerName={ownerName}
+          onClose={() => setShowBillsList(false)}
+          onSelectBill={(b) => {
+            setSelectedBillToView(b);
+            setShowBillModal(true);
+          }}
+          onCreateNew={() => {
+            setSelectedBillToView(null);
+            setShowBillModal(true);
+          }}
+          onBillDeleted={(b) => {
+            revertLotsBilledLocally?.(b?.id || b?._id, b?.billNo);
+            onRefresh?.();
+            apiService.getOwnerBills(ownerId).then((r) => setBillsCount(r?.bills?.length || 0)).catch(() => {});
           }}
         />
       )}

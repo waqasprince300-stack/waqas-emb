@@ -123,6 +123,7 @@ export function AppProvider({ children }) {
     partyCrossPayments,
     setPartyCrossPayments,
     addPayment,
+    updatePayment,
     deletePayment,
   } = usePaymentsData({ trackWrite, userRole: user?.role });
 
@@ -767,7 +768,12 @@ export function AppProvider({ children }) {
         action === 'lot_assigned' ||
         action === 'lot_approved' ||
         action === 'payment_updated' ||
-        action === 'payment_deleted'
+        action === 'payment_deleted' ||
+        action === 'lots_billed' ||
+        action === 'lots_unbilled' ||
+        action === 'owner_bill_created' ||
+        action === 'owner_bill_updated' ||
+        action === 'owner_bill_deleted'
       ) {
         setPendingLotNotice({
           action,
@@ -1030,6 +1036,58 @@ export function AppProvider({ children }) {
     [user?.role]
   );
 
+  const markLotsBilledLocally = useCallback((lotsBilled, billInfo) => {
+    if (!lotsBilled || lotsBilled.length === 0) return;
+    const lotIdSet = new Set(lotsBilled.map((l) => String(l.id || l._id || l.lotId || '')).filter(Boolean));
+    const lotNoSet = new Set(lotsBilled.map((l) => String(l.lotNo || l.lotNumber || '').trim()).filter(Boolean));
+
+    const applyUpdates = (arr) =>
+      arr.map((lot) => {
+        const matchId = lotIdSet.has(String(lot.id || lot._id || ''));
+        const matchNo = lotNoSet.has(String(lot.lotNo || lot.lotNumber || '').trim());
+        if (matchId || matchNo) {
+          return {
+            ...lot,
+            status: 'completed',
+            ownerBillId: billInfo?.id || billInfo?._id || lot.ownerBillId,
+            billedInBillNo: billInfo?.billNo || lot.billedInBillNo,
+            billedInBookNo: billInfo?.bookNo || lot.billedInBookNo,
+            completionApprovedAt: new Date().toISOString(),
+            receivedBackDate: lot.receivedBackDate || new Date().toISOString().slice(0, 10),
+          };
+        }
+        return lot;
+      });
+
+    setGhausiaLots(applyUpdates);
+    if (user?.role === 'admin') {
+      setAdminReportingLots(applyUpdates);
+    }
+  }, [user?.role]);
+
+  const revertLotsBilledLocally = useCallback((billId, billNo) => {
+    const applyUpdates = (arr) =>
+      arr.map((lot) => {
+        const matchBillId = billId && String(lot.ownerBillId || '') === String(billId);
+        const matchBillNo = billNo && String(lot.billedInBillNo || '') === String(billNo);
+        if (matchBillId || matchBillNo) {
+          return {
+            ...lot,
+            status: 'received back',
+            ownerBillId: null,
+            billedInBillNo: null,
+            billedInBookNo: null,
+          };
+        }
+        return lot;
+      });
+
+    setGhausiaLots(applyUpdates);
+    if (user?.role === 'admin') {
+      setAdminReportingLots(applyUpdates);
+    }
+  }, [user?.role]);
+
   const approveLotCompletion = useCallback(
     async (lotId, opts = {}) => {
       const { businessOwnerId, ownerBillingChoice, ownerBillAmount, resolvedBusinessBill, skipBillable } = opts;
@@ -1160,6 +1218,8 @@ export function AppProvider({ children }) {
       deleteLot,
       approveLotCompletion,
       rejectLotCompletion,
+      markLotsBilledLocally,
+      revertLotsBilledLocally,
       partyEdits,
       updatePartyEdit,
       patchLotReceipt,
@@ -1168,6 +1228,7 @@ export function AppProvider({ children }) {
       ledgerReceiptsVersion,
       payments,
       addPayment,
+      updatePayment,
       deletePayment,
       reportingLots,
       reportingPayments,
@@ -1213,6 +1274,8 @@ export function AppProvider({ children }) {
       deleteLot,
       approveLotCompletion,
       rejectLotCompletion,
+      markLotsBilledLocally,
+      revertLotsBilledLocally,
       partyEdits,
       updatePartyEdit,
       patchLotReceipt,
@@ -1221,6 +1284,7 @@ export function AppProvider({ children }) {
       ledgerReceiptsVersion,
       payments,
       addPayment,
+      updatePayment,
       deletePayment,
       reportingLots,
       reportingPayments,

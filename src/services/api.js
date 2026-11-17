@@ -670,16 +670,61 @@ class ApiService {
     );
   }
 
-  async updatePayment(id, data) {
-    return this.request(`/payments/${id}`, {
-      method: 'PATCH',
-      body: JSON.stringify(data),
-    });
+  async updatePayment(id, data, businessOwnerId) {
+    return this.request(
+      `/payments/${id}`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      },
+      { businessOwnerId }
+    );
   }
 
   async deletePayment(id, businessOwnerId) {
     return this.request(
       `/payments/${id}`,
+      {
+        method: 'DELETE',
+      },
+      { businessOwnerId }
+    );
+  }
+
+  // Owner Bills (Hard-form & Ledger Bill Settlement)
+  async getOwnerBills(businessOwnerId) {
+    return this.request('/ownerBills', {}, { businessOwnerId });
+  }
+
+  async getOwnerBill(id, businessOwnerId) {
+    return this.request(`/ownerBills/${id}`, {}, { businessOwnerId });
+  }
+
+  async createOwnerBill(data, businessOwnerId) {
+    return this.request(
+      '/ownerBills',
+      {
+        method: 'POST',
+        body: JSON.stringify(data),
+      },
+      { businessOwnerId }
+    );
+  }
+
+  async updateOwnerBill(id, data, businessOwnerId) {
+    return this.request(
+      `/ownerBills/${id}`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      },
+      { businessOwnerId }
+    );
+  }
+
+  async deleteOwnerBill(id, businessOwnerId) {
+    return this.request(
+      `/ownerBills/${id}`,
       {
         method: 'DELETE',
       },
@@ -782,6 +827,14 @@ class ApiService {
 
   async getAllPartyMotivation() {
     return this.request('/notifications/all-party-motivation');
+  }
+
+  // Web Push Notifications
+  async subscribePushNotification(subscription) {
+    return this.request('/notifications/subscribe', {
+      method: 'POST',
+      body: JSON.stringify(subscription),
+    });
   }
 }
 

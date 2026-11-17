@@ -10,7 +10,6 @@ import ImageUploader from '../components/ImageUploader';
 import OwnerLedgerModal from '../components/ledger/OwnerLedgerModal';
 import PaymentSlipCell from '../components/receipt/PaymentSlipCell';
 import {
-  latestDateFrom,
   compareRowsByUpdatedNewestFirst,
   formatDisplayDate,
   DateRangeSelect,
@@ -235,23 +234,40 @@ export default function Payments() {
       const amt = getPartyLedgerBillNumeric(pe);
       if (amt <= 0) continue;
 
-      const when =
-        latestDateFrom(l, [
-          'updatedAt',
-          'createdAt',
-          'receivedBackDate',
-          'dispatchDate',
-          'allotDate',
-          'receivedDate',
-        ]) || parseDateFlexible(l.allotDate || l.receivedDate);
+      // Party ki original delivery / submission date (order freeze)
+      // 1. pe.completeDate (party ne deliver karte waqt jo tareekh dali thi)
+      // 2. l.pendingReviewSubmittedAt (jis waqt party ne send for approval kiya)
+      // 3. l.receivedBackDate (lot ki delivery date)
+      // 4. Fallback to dispatchDate -> allotDate -> createdAt
+      const rawDate =
+        pe.completeDate ||
+        l.pendingReviewSubmittedAt ||
+        l.receivedBackDate ||
+        l.dispatchDate ||
+        l.allotDate ||
+        l.createdAt;
+
+      const parsedDate = parseDateFlexible(rawDate);
+      let dateStr = '';
+      if (typeof rawDate === 'string' && /^\d{4}-\d{2}-\d{2}/.test(rawDate.trim())) {
+        dateStr = rawDate.trim().slice(0, 10);
+      } else if (parsedDate instanceof Date) {
+        dateStr = parsedDate.toISOString().slice(0, 10);
+      } else {
+        dateStr = String(l.allotDate || '').slice(0, 10);
+      }
+
+      const isoDate = parsedDate instanceof Date ? parsedDate.toISOString() : undefined;
+
       rows.push({
         id: `__bill__${l.id}`,
         _synthetic: true,
         type: 'Bill',
         amount: amt,
         party: pname || 'Party',
-        date: when instanceof Date ? when.toISOString().slice(0, 10) : String(l.allotDate || ''),
-        updatedAt: when instanceof Date ? when.toISOString() : undefined,
+        date: dateStr,
+        createdAt: isoDate,
+        updatedAt: isoDate,
         note: `Work bill (${ref || 'lot'})`,
         linkedLot: ref || '',
         linkedLotId: l.id,
@@ -683,10 +699,10 @@ export default function Payments() {
     <div style={{ paddingBottom: 100 }}>
       <div className="page-header">
         <div>
-          <div className="page-title">{isParty ? 'My Payments' : 'Payments'}</div>
+          <div className="page-title">{isParty ? 'My Payments (Mera Khata)' : 'Payments'}</div>
           <div className="page-subtitle" style={{ marginTop: 4 }}>
             {isParty
-              ? 'Your completed work bills, and payments sent to you by the business'
+              ? 'Aapke mukammal kaam ke bills aur factory se mili hui payments ka saaf hisaab'
               : 'Track all money received from owner and paid to parties'}
           </div>
         </div>
@@ -822,48 +838,44 @@ export default function Payments() {
           {isParty && partyStatementSummary
             ? [
               {
-                label: 'Work billed (completed lots)',
+                label: 'Kul Kaam (Work Billed)',
                 value: partyStatementSummary.billed,
-                color: 'var(--danger, #dc2626)',
-                icon: '↑',
+                color: '#2563eb',
+                icon: '🧾',
+                note: 'Mukammal lots ka kul bill',
               },
               {
-                label: 'Received from business',
+                label: 'Wasool Shuda (Received)',
                 value: partyStatementSummary.paidFromAdmin,
-                color: 'var(--success, #15803d)',
-                icon: '↓',
-                note: 'Payments the business recorded to you',
+                color: '#16a34a',
+                icon: '💵',
+                note: 'Factory se mili hui payments',
               },
               {
-                label: 'Paid to business',
-                value: partyStatementSummary.paidToBusiness,
-                color: 'var(--danger, #b91c1c)',
-                icon: '↑',
-                note: 'Amounts you paid to the business',
-              },
-              {
-                label: 'Net due (bill − in + out)',
+                label: 'Kul Baqaya (Net Balance)',
                 value: Math.abs(partyStatementSummary.due),
                 color:
                   partyStatementSummary.due > 0
-                    ? 'var(--danger, #b91c1c)'
+                    ? '#16a34a'
                     : partyStatementSummary.due < 0
-                      ? 'var(--success, #047857)'
-                      : 'var(--text-muted, #64748b)',
+                      ? '#d97706'
+                      : '#64748b',
                 icon:
-                  partyStatementSummary.due > 0 ? '!' : partyStatementSummary.due < 0 ? '✓' : '=',
+                  partyStatementSummary.due > 0 ? '↗' : partyStatementSummary.due < 0 ? '↘' : '=',
                 note:
                   partyStatementSummary.due > 0
-                    ? 'Net amount business still owes you (billed − received from biz + paid to biz)'
+                    ? 'Aap ne factory se lena hai'
                     : partyStatementSummary.due < 0
-                      ? 'You are ahead on this netting (equal in/out cancels)'
-                      : 'Balanced net',
+                      ? 'Advance mila hua hai'
+                      : 'Hisaab barabar hai',
               },
               {
-                label: 'Total rows',
+                label: 'Kul Records',
                 value: combinedRows.length,
-                color: 'var(--primary, #1e40af)',
+                color: '#6366f1',
+                icon: '📋',
                 isCount: true,
+                note: 'Bills aur payments ki tadaad',
               },
             ].map((c) => (
               <div
@@ -1100,10 +1112,20 @@ export default function Payments() {
           value={typeFilter}
           onChange={(e) => setTypeFilter(e.target.value)}
         >
-          <option value="All">All Types</option>
-          <option>Received</option>
-          <option>Paid</option>
-          <option value="Bill">{isParty ? 'Work bill' : 'Bill'}</option>
+          {isParty ? (
+            <>
+              <option value="All">All (Sab Khata)</option>
+              <option value="Received">Wasooli (Mili Hui Payments)</option>
+              <option value="Bill">Kaam ke Bills (Work Bills)</option>
+            </>
+          ) : (
+            <>
+              <option value="All">All Types</option>
+              <option>Received</option>
+              <option>Paid</option>
+              <option value="Bill">Bill</option>
+            </>
+          )}
         </select>
         {isParty && (
           <button
@@ -1125,22 +1147,23 @@ export default function Payments() {
           <table>
             <thead>
               <tr>
-                <th>#</th>
-                <th>Date</th>
-                <th>Type</th>
+                <th style={{ width: 44 }}>#</th>
+                <th style={{ width: 110 }}>Date</th>
+                <th style={{ width: 140 }}>Type</th>
                 {!isParty && <th>Party / From</th>}
                 {isAdmin && <th>Owner Name</th>}
                 <th>Lot · Design</th>
                 <th>Note</th>
-                <th style={{ textAlign: 'right' }}>Amount (₨)</th>
-                <th>Slip</th>
-                <th>Actions</th>
+                <th style={{ textAlign: 'right', width: 130 }}>Amount (₨)</th>
+                {isParty && <th style={{ textAlign: 'right', width: 140 }}>Kul Baqaya (Balance)</th>}
+                <th style={{ width: 70, textAlign: 'center' }}>Slip</th>
+                {!isParty && <th style={{ width: 70, textAlign: 'center' }}>Actions</th>}
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={8 + (isParty ? 0 : 1) + (isAdmin ? 1 : 0)}>
+                  <td colSpan={isParty ? 8 : (isAdmin ? 10 : 9)}>
                     <EmptyState message="No payment records found" />
                   </td>
                 </tr>
@@ -1153,9 +1176,9 @@ export default function Payments() {
                   const badgeGreen = isParty ? partyReceived : p.type === 'Received';
 
                   const typeLabel = isParty
-                    ? pt === 'Bill'
-                      ? 'Work bill'
-                      : pt
+                    ? partyWorkBill
+                      ? '🧾 Kaam ka Bill'
+                      : '💵 Wasooli (Mili)'
                     : adminPaymentTypeLabel(p);
 
                   const partyLabel = isParty
@@ -1163,15 +1186,15 @@ export default function Payments() {
                     : adminPaymentPartyLabel(p, businessOwners);
 
                   const amt = Number(p.amount ?? 0);
-                  const showPlus = isParty ? pt === 'Received' || pt === 'Bill' : p.type !== 'Paid';
+                  const showPlus = isParty ? partyWorkBill : p.type !== 'Paid';
                   const amtColor = ownerBill
                     ? 'var(--warning, #d97706)'
                     : partyWorkBill
-                      ? 'var(--danger, #dc2626)'
+                      ? '#2563eb'
                       : partyReceived
-                        ? 'var(--success, #15803d)'
+                        ? '#16a34a'
                         : showPlus
-                          ? 'var(--success, #15803d)'
+                          ? '#16a34a'
                           : 'var(--danger, #dc2626)';
 
                   const { lotLabel, designLabel, isCombinedDupatta } = resolveLinkedLotDesignDisplay(
@@ -1188,15 +1211,37 @@ export default function Payments() {
                       <td>
                         <span
                           style={{
-                            background: ownerBill ? 'var(--warning-bg, #fffbeb)' : badgeGreen ? 'var(--success-bg, #f0fdf4)' : 'var(--danger-bg, #fef2f2)',
-                            color: ownerBill ? 'var(--warning, #92400e)' : badgeGreen ? 'var(--success, #166534)' : 'var(--danger, #991b1b)',
+                            background: ownerBill
+                              ? 'var(--warning-bg, #fffbeb)'
+                              : partyWorkBill
+                                ? 'rgba(37, 99, 235, 0.08)'
+                                : badgeGreen
+                                  ? 'var(--success-bg, #f0fdf4)'
+                                  : 'var(--danger-bg, #fef2f2)',
+                            color: ownerBill
+                              ? 'var(--warning, #92400e)'
+                              : partyWorkBill
+                                ? '#2563eb'
+                                : badgeGreen
+                                  ? 'var(--success, #166534)'
+                                  : 'var(--danger, #991b1b)',
                             border: `1px solid ${
-                              ownerBill ? 'var(--warning-bg, #fcd34d)' : badgeGreen ? 'var(--success-bg, #bbf7d0)' : 'var(--danger-bg, #fecaca)'
+                              ownerBill
+                                ? 'var(--warning-bg, #fcd34d)'
+                                : partyWorkBill
+                                  ? 'rgba(37, 99, 235, 0.25)'
+                                  : badgeGreen
+                                    ? 'var(--success-bg, #bbf7d0)'
+                                    : 'var(--danger-bg, #fecaca)'
                             }`,
                             borderRadius: 20,
                             padding: '3px 12px',
                             fontSize: 12,
                             fontWeight: 600,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 4,
+                            whiteSpace: 'nowrap',
                           }}
                         >
                           {typeLabel}
@@ -1259,46 +1304,71 @@ export default function Payments() {
                           fontWeight: 700,
                           fontSize: 14,
                           color: amtColor,
+                          whiteSpace: 'nowrap',
                         }}
                       >
-                        <div>{showPlus ? '+' : '-'}₨{amt.toLocaleString()}</div>
-                        {isParty && p.runningBalance !== undefined && (
-                          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2, fontWeight: 500 }}>
-                            Bal: {p.runningBalance > 0 ? 'Cr ' : p.runningBalance < 0 ? 'Dr ' : ''}₨{Math.abs(p.runningBalance).toLocaleString()}
+                        <div>{showPlus ? '+' : '−'}₨{amt.toLocaleString()}</div>
+                        {isParty && (
+                          <div style={{ fontSize: 10.5, color: partyWorkBill ? '#3b82f6' : '#10b981', fontWeight: 600, marginTop: 2 }}>
+                            {partyWorkBill ? 'Kaam Jama' : 'Raqam Mili'}
                           </div>
                         )}
                       </td>
-                      <td>
-                        <PaymentSlipCell payment={p} isParty={isParty} />
+                      {isParty && (
+                        <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                          <div style={{ fontWeight: 700, fontSize: 14, color: (p.runningBalance || 0) > 0 ? '#1e293b' : (p.runningBalance || 0) < 0 ? '#047857' : '#64748b' }}>
+                            ₨{Math.abs(p.runningBalance || 0).toLocaleString()}
+                          </div>
+                          <div style={{ marginTop: 2 }}>
+                            {(p.runningBalance || 0) > 0 ? (
+                              <span style={{ fontSize: 10.5, fontWeight: 700, color: '#16a34a', background: 'rgba(22, 163, 74, 0.08)', padding: '1px 6px', borderRadius: 4, display: 'inline-block' }}>
+                                Lena Hai
+                              </span>
+                            ) : (p.runningBalance || 0) < 0 ? (
+                              <span style={{ fontSize: 10.5, fontWeight: 700, color: '#d97706', background: 'rgba(217, 119, 6, 0.08)', padding: '1px 6px', borderRadius: 4, display: 'inline-block' }}>
+                                Advance
+                              </span>
+                            ) : (
+                              <span style={{ fontSize: 10.5, fontWeight: 700, color: '#64748b', background: 'rgba(100, 116, 139, 0.08)', padding: '1px 6px', borderRadius: 4, display: 'inline-block' }}>
+                                Barabar
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                      )}
+                      <td style={{ textAlign: 'center' }}>
+                        <PaymentSlipCell payment={p} isParty={isParty} canEdit={isAdmin && !p._synthetic} />
                       </td>
-                      <td>
-                        <button
-                          className="btn-icon"
-                          onClick={() => handleDelete(p)}
-                          title="Delete payment"
-                          disabled={!isAdmin || p._synthetic}
-                          style={
-                            !isAdmin || p._synthetic
-                              ? { opacity: 0.45, cursor: 'not-allowed' }
-                              : undefined
-                          }
-                        >
-                          <svg
-                            width="14"
-                            height="14"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke='var(--danger, #dc2626)'
-                            strokeWidth="2"
+                      {!isParty && (
+                        <td style={{ textAlign: 'center' }}>
+                          <button
+                            className="btn-icon"
+                            onClick={() => handleDelete(p)}
+                            title="Delete payment"
+                            disabled={!isAdmin || p._synthetic}
+                            style={
+                              !isAdmin || p._synthetic
+                                ? { opacity: 0.45, cursor: 'not-allowed' }
+                                : undefined
+                            }
                           >
-                            <polyline points="3 6 5 6 21 6" />
-                            <path d="M19 6l-1 14H6L5 6" />
-                            <path d="M10 11v6" />
-                            <path d="M14 11v6" />
-                            <path d="M9 6V4h6v2" />
-                          </svg>
-                        </button>
-                      </td>
+                            <svg
+                              width="14"
+                              height="14"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke='var(--danger, #dc2626)'
+                              strokeWidth="2"
+                            >
+                              <polyline points="3 6 5 6 21 6" />
+                              <path d="M19 6l-1 14H6L5 6" />
+                              <path d="M10 11v6" />
+                              <path d="M14 11v6" />
+                              <path d="M9 6V4h6v2" />
+                            </svg>
+                          </button>
+                        </td>
+                      )}
                     </tr>
                   );
                 })
@@ -1321,9 +1391,9 @@ export default function Payments() {
             const badgeGreen = isParty ? partyReceived : p.type === 'Received';
 
             const typeLabel = isParty
-              ? pt === 'Bill'
-                ? 'Work bill'
-                : pt
+              ? partyWorkBill
+                ? '🧾 Kaam ka Bill'
+                : '💵 Wasooli (Mili)'
               : adminPaymentTypeLabel(p);
 
             const partyLabel = isParty
@@ -1331,15 +1401,15 @@ export default function Payments() {
               : adminPaymentPartyLabel(p, businessOwners);
 
             const amt = Number(p.amount ?? 0);
-            const showPlus = isParty ? pt === 'Received' || pt === 'Bill' : p.type !== 'Paid';
+            const showPlus = isParty ? partyWorkBill : p.type !== 'Paid';
             const amtColor = ownerBill
               ? 'var(--warning, #d97706)'
               : partyWorkBill
-                ? 'var(--danger, #dc2626)'
+                ? '#2563eb'
                 : partyReceived
-                  ? 'var(--success, #15803d)'
+                  ? '#16a34a'
                   : showPlus
-                    ? 'var(--success, #15803d)'
+                    ? '#16a34a'
                     : 'var(--danger, #dc2626)';
 
             const { lotLabel, designLabel, isCombinedDupatta } = resolveLinkedLotDesignDisplay(
@@ -1356,15 +1426,36 @@ export default function Payments() {
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span
                       style={{
-                        background: ownerBill ? 'var(--warning-bg, #fffbeb)' : badgeGreen ? 'var(--success-bg, #f0fdf4)' : 'var(--danger-bg, #fef2f2)',
-                        color: ownerBill ? 'var(--warning, #92400e)' : badgeGreen ? 'var(--success, #166534)' : 'var(--danger, #991b1b)',
+                        background: ownerBill
+                          ? 'var(--warning-bg, #fffbeb)'
+                          : partyWorkBill
+                            ? 'rgba(37, 99, 235, 0.08)'
+                            : badgeGreen
+                              ? 'var(--success-bg, #f0fdf4)'
+                              : 'var(--danger-bg, #fef2f2)',
+                        color: ownerBill
+                          ? 'var(--warning, #92400e)'
+                          : partyWorkBill
+                            ? '#2563eb'
+                            : badgeGreen
+                              ? 'var(--success, #166534)'
+                              : 'var(--danger, #991b1b)',
                         border: `1px solid ${
-                          ownerBill ? 'var(--warning-bg, #fcd34d)' : badgeGreen ? 'var(--success-bg, #bbf7d0)' : 'var(--danger-bg, #fecaca)'
+                          ownerBill
+                            ? 'var(--warning-bg, #fcd34d)'
+                            : partyWorkBill
+                              ? 'rgba(37, 99, 235, 0.25)'
+                              : badgeGreen
+                                ? 'var(--success-bg, #bbf7d0)'
+                                : 'var(--danger-bg, #fecaca)'
                         }`,
                         borderRadius: 20,
                         padding: '2px 10px',
                         fontSize: 11,
                         fontWeight: 600,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 4,
                       }}
                     >
                       {typeLabel}
@@ -1375,11 +1466,16 @@ export default function Payments() {
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
                     <span style={{ fontSize: 15, fontWeight: 700, color: amtColor }}>
-                      {showPlus ? '+' : '-'}₨{amt.toLocaleString()}
+                      {showPlus ? '+' : '−'}₨{amt.toLocaleString()}
                     </span>
+                    {isParty && (
+                      <span style={{ fontSize: 10, color: partyWorkBill ? '#3b82f6' : '#10b981', fontWeight: 600 }}>
+                        {partyWorkBill ? 'Kaam Jama' : 'Raqam Mili'}
+                      </span>
+                    )}
                     {isParty && p.runningBalance !== undefined && (
-                      <span style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2, fontWeight: 500 }}>
-                        Bal: {p.runningBalance > 0 ? 'Cr ' : p.runningBalance < 0 ? 'Dr ' : ''}₨{Math.abs(p.runningBalance).toLocaleString()}
+                      <span style={{ fontSize: 11, color: (p.runningBalance || 0) > 0 ? '#16a34a' : (p.runningBalance || 0) < 0 ? '#d97706' : '#64748b', marginTop: 2, fontWeight: 600 }}>
+                        Baqaya: ₨{Math.abs(p.runningBalance).toLocaleString()} {(p.runningBalance || 0) > 0 ? '(Lena)' : (p.runningBalance || 0) < 0 ? '(Advance)' : ''}
                       </span>
                     )}
                   </div>
@@ -1433,7 +1529,7 @@ export default function Payments() {
                 )}
 
                 <div className="pmc-footer">
-                  <PaymentSlipCell payment={p} isParty={isParty} />
+                  <PaymentSlipCell payment={p} isParty={isParty} canEdit={isAdmin && !p._synthetic} />
                   {isAdmin && !p._synthetic && (
                     <button
                       className="btn-icon"

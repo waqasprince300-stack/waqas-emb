@@ -201,6 +201,7 @@ export default function PartyLedger() {
   const [workspaceFilter, setWorkspaceFilter] = useState('All');
   const [partyFilter, setPartyFilter] = useState('All');
   const [statusFilter, setStatusFilter] = useState('All');
+  const [componentFilter, setComponentFilter] = useState('All');
   const [dateRange, setDateRange] = useState('all');
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
@@ -245,7 +246,12 @@ export default function PartyLedger() {
 
   const currentPartyObj = useMemo(() => {
     if (!isParty) return null;
-    return parties.find((p) => samePartyId(p.id, user?.partyId)) || null;
+    return (
+      parties.find((p) => {
+        const pid = (p.id ?? p._id) || '';
+        return samePartyId(pid, user?.partyId);
+      }) || null
+    );
   }, [isParty, parties, user?.partyId]);
 
   const getWorkspaceOverrideForLot = (l) => {
@@ -261,9 +267,12 @@ export default function PartyLedger() {
 
   const showWorkspaceColForLot = (l) => {
     if (isParty) {
-      if (currentPartyObj?.showWorkspace === false) return false;
+      if (currentPartyObj?.workspaceAlias && currentPartyObj.workspaceAlias.trim()) {
+        return true;
+      }
       const ov = getWorkspaceOverrideForLot(l);
-      if (ov && ov.showWorkspace === false) return false;
+      if (ov && ov.showWorkspace && ov.alias && ov.alias.trim()) return true;
+      if (currentPartyObj?.showWorkspace === false) return false;
       return true;
     }
     return isAdmin && (workspaceFilter === 'All' || businessOwners.length > 1);
@@ -272,10 +281,12 @@ export default function PartyLedger() {
   const workspaceNameForLot = (l) => {
     if (isParty) {
       const ov = getWorkspaceOverrideForLot(l);
-      if (ov && ov.alias) return ov.alias;
-      if (currentPartyObj?.workspaceAlias) return currentPartyObj.workspaceAlias;
+      if (ov && ov.showWorkspace && ov.alias && ov.alias.trim()) return ov.alias.trim();
+      if (currentPartyObj?.workspaceAlias && currentPartyObj.workspaceAlias.trim()) {
+        return currentPartyObj.workspaceAlias.trim();
+      }
     }
-    return workspaceDisplayTitleForLot(l, businessOwners, { shortIdFallback: true });
+    return workspaceDisplayTitleForLot(l, businessOwners, { shortIdFallback: true, partyObj: currentPartyObj });
   };
 
   const getPartyAllotDate = (l) => {
@@ -326,12 +337,11 @@ export default function PartyLedger() {
       .filter((lot) =>
         isWithinDateRange(
           latestDateFrom(lot, [
-            'updatedAt',
-            'createdAt',
             'receivedBackDate',
             'dispatchDate',
             'allotDate',
             'receivedDate',
+            'createdAt',
           ]),
           dateRange,
           customRange
@@ -401,6 +411,8 @@ export default function PartyLedger() {
         }
       }
       const matchP = partyFilter === 'All' || samePartyId(l.partyId, partyFilter);
+      if (componentFilter === 'dupatta' && l.suitComponent !== 'dupatta') return false;
+      if (componentFilter === 'main' && l.suitComponent === 'dupatta') return false;
       const displayStatus = getDisplayStatus(l);
       const matchTab =
         ledgerLotsTab === 'completed'
@@ -419,12 +431,14 @@ export default function PartyLedger() {
       }
       return compareRowsByUpdatedNewestFirst(a, b, 'lot');
     });
-  }, [assignedLots, debouncedSearch, searchField, partyFilter, ledgerLotsTab, statusFilter, ledgerPartyEdits, isAdmin]);
+  }, [assignedLots, debouncedSearch, searchField, partyFilter, ledgerLotsTab, statusFilter, componentFilter, ledgerPartyEdits, isAdmin]);
 
   /** Summary cards ignore Status filter - only party / search / dates / workspace (via assignedLots). */
   const lotsForSummaryStats = useMemo(() => {
     return assignedLots.filter((lot) => {
       if (partyFilter !== 'All' && !samePartyId(lot.partyId, partyFilter)) return false;
+      if (componentFilter === 'dupatta' && lot.suitComponent !== 'dupatta') return false;
+      if (componentFilter === 'main' && lot.suitComponent === 'dupatta') return false;
 
       const q = debouncedSearch.toLowerCase();
       if (q) {
@@ -449,15 +463,25 @@ export default function PartyLedger() {
       }
       return true;
     });
-  }, [assignedLots, debouncedSearch, searchField, partyFilter, ledgerPartyEdits]);
+  }, [assignedLots, debouncedSearch, searchField, partyFilter, componentFilter, ledgerPartyEdits]);
 
   const otherLotsTabCount = useMemo(
-    () => assignedLots.reduce((n, l) => n + (getDisplayStatus(l) !== 'Completed' ? 1 : 0), 0),
-    [assignedLots, ledgerPartyEdits]
+    () =>
+      assignedLots.reduce((n, l) => {
+        if (componentFilter === 'dupatta' && l.suitComponent !== 'dupatta') return n;
+        if (componentFilter === 'main' && l.suitComponent === 'dupatta') return n;
+        return n + (getDisplayStatus(l) !== 'Completed' ? 1 : 0);
+      }, 0),
+    [assignedLots, ledgerPartyEdits, componentFilter]
   );
   const completedLotsTabCount = useMemo(
-    () => assignedLots.reduce((n, l) => n + (getDisplayStatus(l) === 'Completed' ? 1 : 0), 0),
-    [assignedLots, ledgerPartyEdits]
+    () =>
+      assignedLots.reduce((n, l) => {
+        if (componentFilter === 'dupatta' && l.suitComponent !== 'dupatta') return n;
+        if (componentFilter === 'main' && l.suitComponent === 'dupatta') return n;
+        return n + (getDisplayStatus(l) === 'Completed' ? 1 : 0);
+      }, 0),
+    [assignedLots, ledgerPartyEdits, componentFilter]
   );
   /**
    * Total pending bill-change requests across all ledger lots (ignores the active
@@ -1311,44 +1335,19 @@ export default function PartyLedger() {
       return String(p.businessOwnerId ?? '').trim() === String(workspaceFilter).trim();
     };
     const paysDateScoped = ledgerPayments.filter(
-      (p) => p.type === 'Paid' && isWithinDateRange(p.updatedAt || p.date, dateRange, customRange)
+      (p) => p.type === 'Paid' && isWithinDateRange(p.date || p.createdAt, dateRange, customRange)
     );
     const pays = paysDateScoped.filter(withinWorkspace);
     const receivedDateScoped = ledgerPayments.filter(
       (p) =>
-        p.type === 'Received' && isWithinDateRange(p.updatedAt || p.date, dateRange, customRange)
+        p.type === 'Received' && isWithinDateRange(p.date || p.createdAt, dateRange, customRange)
     );
     const receiveds = receivedDateScoped.filter(withinWorkspace);
 
     if (partyFilter === 'All') {
-      const names = [
-        ...new Set(
-          lotsForSummaryStats
-            .map((l) => getPartyNameLocal(l.partyId, l.partyName).trim())
-            .filter((n) => n && n !== '-')
-        ),
-      ];
-
-      let balance = 0;
-      let receivedFromBusiness = 0;
-      let paidToBusiness = 0;
-
-      names.forEach((name) => {
-        const billSum = lotsForSummaryStats
-          .filter((l) => getPartyNameLocal(l.partyId, l.partyName).trim() === name)
-          .reduce((s, l) => s + getLedgerAmountForTotals(l), 0);
-
-        const partyIn = pays
-          .filter((p) => String(p.party || '').trim() === name)
-          .reduce((s, p) => s + Number(p.amount || 0), 0);
-        const partyOut = receiveds
-          .filter((p) => String(p.party || '').trim() === name)
-          .reduce((s, p) => s + Number(p.amount || 0), 0);
-
-        receivedFromBusiness += partyIn;
-        paidToBusiness += partyOut;
-        balance += billSum - partyIn + partyOut;
-      });
+      const receivedFromBusiness = pays.reduce((s, p) => s + Number(p.amount || 0), 0);
+      const paidToBusiness = receiveds.reduce((s, p) => s + Number(p.amount || 0), 0);
+      const balance = totals.billTotal - receivedFromBusiness + paidToBusiness;
 
       return {
         balance,
@@ -1370,10 +1369,10 @@ export default function PartyLedger() {
     const pname = (party?.name || '').trim();
 
     const receivedFromBusiness = pays
-      .filter((p) => String(p.party || '').trim() === pname)
+      .filter((p) => samePartyId(p.partyId, partyFilter) || String(p.party || '').trim() === pname)
       .reduce((s, p) => s + Number(p.amount || 0), 0);
     const paidToBusiness = receiveds
-      .filter((p) => String(p.party || '').trim() === pname)
+      .filter((p) => samePartyId(p.partyId, partyFilter) || String(p.party || '').trim() === pname)
       .reduce((s, p) => s + Number(p.amount || 0), 0);
 
     return {
@@ -1645,6 +1644,8 @@ export default function PartyLedger() {
         setCustomEnd={setCustomEnd}
         statusFilter={statusFilter}
         setStatusFilter={setStatusFilter}
+        componentFilter={componentFilter}
+        setComponentFilter={setComponentFilter}
         isAdmin={isAdmin}
         isParty={isParty}
       />

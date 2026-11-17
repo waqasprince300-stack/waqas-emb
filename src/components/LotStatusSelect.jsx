@@ -20,6 +20,7 @@ export default function LotStatusSelect({
   className = '',
   style,
   wrapStyle,
+  date = null,
   labelFor = (s) => titleCaseStatus(s),
 }) {
   const [open, setOpen] = useState(false);
@@ -110,7 +111,31 @@ export default function LotStatusSelect({
           aria-controls={open ? listId : undefined}
           onClick={toggle}
         >
-          {labelFor(value)}
+          {date ? (
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 5,
+                flexWrap: 'wrap',
+                lineHeight: 1.25,
+              }}
+            >
+              <span>{labelFor(value)}</span>
+              <span
+                style={{
+                  fontSize: 11,
+                  fontWeight: 600,
+                  opacity: 0.82,
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                ({date})
+              </span>
+            </span>
+          ) : (
+            labelFor(value)
+          )}
         </button>
       </div>
 

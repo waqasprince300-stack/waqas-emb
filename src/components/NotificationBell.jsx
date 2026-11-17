@@ -5,6 +5,7 @@ import Swal from 'sweetalert2';
 import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
 import { formatDisplayDateTime } from '../utils/dateFilters';
+import usePushNotifications from '../hooks/usePushNotifications';
 
 function formatWhen(iso) {
   return formatDisplayDateTime(iso, '');
@@ -48,6 +49,12 @@ export default function NotificationBell() {
     markNotificationRead,
     markAllNotificationsRead,
   } = useApp();
+  const {
+    isSupported: pushSupported,
+    isSubscribed: pushSubscribed,
+    subscribeToPush,
+    loading: pushLoading,
+  } = usePushNotifications({ isAuthenticated });
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const wrapRef = useRef(null);
@@ -253,6 +260,60 @@ export default function NotificationBell() {
                 ))
               )}
             </div>
+
+            {pushSupported && (
+              <div
+                style={{
+                  padding: '9px 14px',
+                  borderTop: '1px solid var(--border, #e2e8f0)',
+                  background: 'var(--primary-bg, #f8fafc)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  fontSize: 12,
+                  flexShrink: 0,
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--text-secondary)' }}>
+                  <span>🔔</span>
+                  <span style={{ fontWeight: 600 }}>Phone Push Alerts:</span>
+                  <span
+                    style={{
+                      fontWeight: 700,
+                      color: pushSubscribed ? 'var(--success, #16a34a)' : 'var(--warning, #d97706)',
+                    }}
+                  >
+                    {pushSubscribed ? 'Active ✅' : 'Off'}
+                  </span>
+                </div>
+                {!pushSubscribed && (
+                  <button
+                    type="button"
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      try {
+                        await subscribeToPush();
+                      } catch {
+                        /* ignore */
+                      }
+                    }}
+                    disabled={pushLoading}
+                    style={{
+                      border: 'none',
+                      background: 'var(--primary, #3b82f6)',
+                      color: '#fff',
+                      borderRadius: 6,
+                      padding: '4px 10px',
+                      fontSize: 11.5,
+                      fontWeight: 700,
+                      cursor: pushLoading ? 'not-allowed' : 'pointer',
+                    }}
+                  >
+                    {pushLoading ? '...' : 'Turn On'}
+                  </button>
+                )}
+              </div>
+            )}
           </div>,
           document.body
         )}
@@ -290,6 +351,8 @@ export function LotNotificationListener() {
         action === 'bill_revision_approved' ||
         action === 'bill_revision_rejected' ||
         action === 'payment_recorded' ||
+        action === 'payment_updated' ||
+        action === 'payment_deleted' ||
         action === 'lot_dispatched' ||
         action === 'lot_assigned' ||
         action === 'lot_approved') &&
@@ -322,7 +385,11 @@ export function LotNotificationListener() {
                     ? 'Bill change rejected'
                     : action === 'payment_recorded'
                       ? 'New payment'
-                      : 'Lot awaiting your review';
+                      : action === 'payment_updated'
+                        ? 'Payment updated'
+                        : action === 'payment_deleted'
+                          ? 'Payment removed'
+                          : 'Lot awaiting your review';
     const text =
       action === 'lot_dispatched'
         ? 'The business dispatched a new lot to you. Open My Lots to view details and start work.'
@@ -342,10 +409,14 @@ export function LotNotificationListener() {
                     ? 'The business rejected your bill change. Open My Lots to review.'
                     : action === 'payment_recorded'
                       ? 'The business recorded a payment for your account. Open My Payments to review.'
-                      : 'A party submitted a lot for completion approval.';
+                      : action === 'payment_updated'
+                        ? 'A payment entry was updated. Open My Payments to review.'
+                        : action === 'payment_deleted'
+                          ? 'A payment entry was removed from your ledger.'
+                          : 'A party submitted a lot for completion approval.';
     const linkPath =
       String(pendingLotNotice.linkPath || '').trim() ||
-      (action === 'payment_recorded'
+      (action === 'payment_recorded' || action === 'payment_updated'
         ? '/payments'
         : pendingLotNotice.lotId
           ? `/party-ledger?lotId=${encodeURIComponent(pendingLotNotice.lotId)}`
@@ -355,10 +426,11 @@ export function LotNotificationListener() {
       toast: true,
       position: 'top-end',
       icon:
-        action === 'lot_rejected' || action === 'bill_revision_rejected'
+        action === 'lot_rejected' || action === 'bill_revision_rejected' || action === 'payment_deleted'
           ? 'warning'
           : action === 'bill_revision_approved' ||
               action === 'payment_recorded' ||
+              action === 'payment_updated' ||
               action === 'lot_dispatched' ||
               action === 'lot_approved'
             ? 'success'

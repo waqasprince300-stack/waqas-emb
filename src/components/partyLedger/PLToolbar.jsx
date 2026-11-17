@@ -40,6 +40,8 @@ export default function PLToolbar({
   setCustomEnd,
   statusFilter,
   setStatusFilter,
+  componentFilter,
+  setComponentFilter,
   isAdmin,
   isParty,
 }) {
@@ -184,11 +186,24 @@ export default function PLToolbar({
           className="pl-toolbar-filter--date"
           containerClassName="pl-toolbar-filter"
         />
+        <select
+          className="form-select pl-toolbar-filter pl-toolbar-filter--type pl-toolbar-filter--component"
+          value={componentFilter || 'All'}
+          onChange={(e) => setComponentFilter?.(e.target.value)}
+          aria-label="Filter by component type"
+          title="Component Type Filter"
+          style={{ width: 160, minWidth: 140 }}
+        >
+          <option value="All">All Types</option>
+          <option value="main">Main Lots Only</option>
+          <option value="dupatta">Dupatta Lots Only</option>
+        </select>
         {ledgerLotsTab === 'other' && (
           <select
             className="form-select pl-toolbar-filter pl-toolbar-filter--status"
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
+            style={{ width: 160, minWidth: 140 }}
           >
             <option value="All">All Statuses</option>
             <option value="Pending">{partyFacingStatusLabel('Pending', isParty)}</option>

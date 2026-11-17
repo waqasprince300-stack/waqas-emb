@@ -19,23 +19,23 @@ export default function SummaryCards({
     ? "All Owners"
     : businessOwners?.find(o => String(o.id || o._id) === String(activeBusinessOwnerId))?.name || "Owner";
 
-  // Total cash received from this owner
-  const totalReceivedCash = ownerIn != null ? ownerIn : 0;
+  // Total cash received from this owner (net of any direct cash refunds paid to owner)
+  const totalReceivedCash = Math.max(0, (ownerIn != null ? ownerIn : 0) - (ownerPaidToOwner != null ? ownerPaidToOwner : 0));
 
   // Total completed work billed for this owner
-  const completedWorkBilled = (billableSettledTotal != null ? billableSettledTotal : 0) + (ownerPaidToOwner != null ? ownerPaidToOwner : 0);
+  const completedWorkBilled = billableSettledTotal != null ? billableSettledTotal : 0;
 
   // Net balance between owner work billed and received cash
-  // Positive: Owner owes us (Receivable)
-  // Negative: Owner has advance surplus (Advance)
-  const netBalance = billableTotal - ownerReceivedNet;
+  // Positive: Owner owes us on billed work (Receivable)
+  // Negative: Owner has paid more than billed work (Advance surplus)
+  const netBalance = completedWorkBilled - totalReceivedCash;
   const netReceivable = netBalance > 0 ? netBalance : 0;
   const advanceAvailable = netBalance < 0 ? Math.abs(netBalance) : 0;
 
-  // Financial Collection / Recovery Rate KPI
+  // Financial Collection / Recovery Rate KPI (against completed billed work)
   const recoveryPercent = completedWorkBilled > 0
     ? Math.min(100, Math.round((totalReceivedCash / completedWorkBilled) * 1000) / 10)
-    : 0;
+    : (totalReceivedCash > 0 ? 100 : 0);
   const pendingPercent = Math.max(0, Math.round((100 - recoveryPercent) * 10) / 10);
 
   return (

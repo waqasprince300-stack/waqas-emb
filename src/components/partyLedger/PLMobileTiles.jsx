@@ -77,7 +77,7 @@ export default function PLMobileTiles({
 
                 <div className="lot-tile-info" style={{ flex: 1, marginTop: 4, marginBottom: 8 }}>
                   {showPartyNameCol && <div>Party: <strong>{getPartyNameLocal(l.partyId, l.partyName)}</strong></div>}
-                  {showWorkspaceColForLot(l) && <div>Workspace: <strong>{workspaceNameForLot(l)}</strong></div>}
+                  {showWorkspaceColForLot(l) && <div>{isParty ? 'Business' : 'Workspace'}: <strong>{workspaceNameForLot(l)}</strong></div>}
                   <div>Allot Date: {getPartyAllotDate(l) ? formatDisplayDate(getPartyAllotDate(l)) : '\u2014'}</div>
                   <div>Complete Date: {displayComplete ? formatDisplayDate(displayComplete) : '\u2014'}</div>
                   {l.description && <div>Note: {l.description}</div>}

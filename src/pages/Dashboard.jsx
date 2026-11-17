@@ -77,6 +77,22 @@ function getPageNumbers(current, total) {
   return [1, '...', current - 1, current, current + 1, '...', total];
 }
 
+// Resilient wrappers to protect Dashboard from any undefined import (tree-shaking/HMR)
+const SafeLoaderDashboard = LoaderDashboard || (({ height = 24, width = 24 }) => <div style={{ height, width, display: 'inline-block' }}>Loading...</div>);
+const SafeDateRangeSelect = DateRangeSelect || (() => null);
+const SafeStatusBadge = StatusBadge || (({ status, label }) => <span className="badge">{label || status}</span>);
+const SafeModal = Modal || (({ children }) => <div>{children}</div>);
+const SafeResponsiveContainer = ResponsiveContainer || (({ children }) => <div style={{ width: '100%', height: '100%' }}>{children}</div>);
+const SafePieChart = PieChart || (({ children }) => <div>{children}</div>);
+const SafePie = Pie || (() => null);
+const SafeCell = Cell || (() => null);
+const SafeTooltip = RechartsTooltip || (() => null);
+const SafeLineChart = LineChart || (({ children }) => <div>{children}</div>);
+const SafeCartesianGrid = CartesianGrid || (() => null);
+const SafeXAxis = XAxis || (() => null);
+const SafeYAxis = YAxis || (() => null);
+const SafeLine = Line || (() => null);
+
 export default function Dashboard() {
   const {
     reportingLots,
@@ -91,6 +107,18 @@ export default function Dashboard() {
   } = useApp();
   const { isParty, isAdmin, user } = useAuth();
   const navigate = useNavigate();
+
+  const currentPartyObj = useMemo(() => {
+    if (!isParty) return null;
+    const uid = String(user?.partyId || '').trim();
+    const uname = String(user?.partyName || '').trim().toLowerCase();
+    return (
+      parties.find((p) => String((p.id ?? p._id) || '').trim() === uid) ||
+      parties.find((p) => String(p.name || '').trim().toLowerCase() === uname) ||
+      null
+    );
+  }, [isParty, parties, user?.partyId, user?.partyName]);
+
   const [dateRange, setDateRange] = useState('all');
 
 
@@ -168,12 +196,11 @@ export default function Dashboard() {
     return lots.filter((lot) =>
       isWithinDateRange(
         latestDateFrom(lot, [
-          'updatedAt',
-          'createdAt',
           'receivedBackDate',
           'dispatchDate',
           'allotDate',
           'receivedDate',
+          'createdAt',
         ]),
         dateRange,
         customRange
@@ -187,7 +214,7 @@ export default function Dashboard() {
         ? paymentsPool.filter((p) => paymentBelongsToPartyUser(p, partyUserId, partyNameTrim))
         : paymentsPool;
     return list.filter((payment) =>
-      isWithinDateRange(payment.updatedAt || payment.date, dateRange, customRange)
+      isWithinDateRange(payment.date || payment.createdAt, dateRange, customRange)
     );
   }, [paymentsPool, isParty, partyUserId, partyNameTrim, dateRange, customRange]);
 
@@ -269,7 +296,7 @@ export default function Dashboard() {
     let stuckLots = [];
     let stuckLotsIds = [];
     dispatchedLots.forEach(l => {
-      const dispatchDateStr = l.dispatchDate || latestDateFrom(l, ['updatedAt', 'createdAt']);
+      const dispatchDateStr = l.dispatchDate || latestDateFrom(l, ['createdAt', 'allotDate']);
       if (dispatchDateStr) {
         const diffTime = Math.max(0, now - new Date(dispatchDateStr));
         const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
@@ -492,7 +519,7 @@ export default function Dashboard() {
           minHeight: '100vh',
         }}
       >
-        <LoaderDashboard height={30} width={30} />
+        <SafeLoaderDashboard height={30} width={30} />
       </div>
     );
   }
@@ -625,7 +652,7 @@ export default function Dashboard() {
             </div>
           )}
           <div className="dash-filter-toggles" style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'nowrap', justifyContent: 'flex-end' }}>
-            <DateRangeSelect
+            <SafeDateRangeSelect
               value={dateRange}
               onChange={setDateRange}
               customStart={customStart}
@@ -945,9 +972,9 @@ export default function Dashboard() {
                   {fabricStats.length > 0 ? (
                     <>
                       <div style={{ height: 180 }}>
-                        <ResponsiveContainer width="100%" height="100%">
-                          <PieChart>
-                            <Pie
+                        <SafeResponsiveContainer width="100%" height="100%">
+                          <SafePieChart>
+                            <SafePie
                               data={fabricStats}
                               cx="50%"
                               cy="50%"
@@ -960,21 +987,21 @@ export default function Dashboard() {
                               animationDuration={800}
                             >
                               {fabricStats.map((entry, index) => (
-                                <Cell 
+                                <SafeCell 
                                   key={'cell-' + index} 
                                   fill={COLORS[index % COLORS.length]} 
                                   style={{ cursor: 'pointer', outline: 'none' }}
                                   onClick={() => setSelectedFabric(entry)}
                                 />
                               ))}
-                            </Pie>
-                            <RechartsTooltip
+                            </SafePie>
+                            <SafeTooltip
                               formatter={(value, name, props) => [value + ' Lots (' + (hideAmounts ? '****' : '₨' + props.payload.revenue.toLocaleString()) + ')', name]}
                               contentStyle={{ borderRadius: 8, border: '1px solid var(--border)', background: 'var(--card-bg)', color: 'var(--text-primary)', boxShadow: 'var(--shadow-md)' }}
                               itemStyle={{ color: 'var(--text-primary)' }}
                             />
-                          </PieChart>
-                        </ResponsiveContainer>
+                          </SafePieChart>
+                        </SafeResponsiveContainer>
                       </div>
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 12px', justifyContent: 'center', marginTop: 16 }}>
                         {fabricStats.map((f, idx) => (
@@ -1012,11 +1039,11 @@ export default function Dashboard() {
                 </div>
                 <div className="card-body" style={{ padding: '24px', height: 350 }}>
                   {revenueTrendData.some(d => d.revenue > 0) ? (
-                    <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={revenueTrendData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke='var(--border, #e2e8f0)' />
-                        <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: 'var(--text-muted, #64748b)', fontSize: 12 }} dy={10} />
-                        <YAxis
+                    <SafeResponsiveContainer width="100%" height="100%">
+                      <SafeLineChart data={revenueTrendData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
+                        <SafeCartesianGrid strokeDasharray="3 3" vertical={false} stroke='var(--border, #e2e8f0)' />
+                        <SafeXAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: 'var(--text-muted, #64748b)', fontSize: 12 }} dy={10} />
+                        <SafeYAxis
                           axisLine={false}
                           tickLine={false}
                           tick={{ fill: 'var(--text-muted, #64748b)', fontSize: 12 }}
@@ -1027,15 +1054,15 @@ export default function Dashboard() {
                             return value;
                           }}
                         />
-                        <RechartsTooltip
+                        <SafeTooltip
                           contentStyle={{ borderRadius: 8, border: '1px solid var(--border)', background: 'var(--card-bg)', color: 'var(--text-primary)', boxShadow: 'var(--shadow-md)' }}
                           itemStyle={{ color: 'var(--text-primary)' }}
                           formatter={(value) => [hideAmounts ? '****' : ('₨ ' + value.toLocaleString()), 'Revenue']}
                           labelStyle={{ color: 'var(--text-primary, #0f172a)', fontWeight: 600, marginBottom: 4 }}
                         />
-                        <Line type="monotone" dataKey="revenue" stroke='var(--primary-light, #3b82f6)' strokeWidth={4} dot={{ r: 4, fill: 'var(--primary-light, #3b82f6)', strokeWidth: 2, stroke: 'var(--card-bg, #fff)' }} activeDot={{ r: 6 }} />
-                      </LineChart>
-                    </ResponsiveContainer>
+                        <SafeLine type="monotone" dataKey="revenue" stroke='var(--primary-light, #3b82f6)' strokeWidth={4} dot={{ r: 4, fill: 'var(--primary-light, #3b82f6)', strokeWidth: 2, stroke: 'var(--card-bg, #fff)' }} activeDot={{ r: 6 }} />
+                      </SafeLineChart>
+                    </SafeResponsiveContainer>
                   ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-muted, #64748b)' }}>
                       <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke='var(--border, #cbd5e1)' strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginBottom: 16 }}>
@@ -1517,6 +1544,7 @@ export default function Dashboard() {
                       const piecesVal = l.pieces || l.quantity || 0;
                       const business = workspaceDisplayTitleForLot(l, businessOwners, {
                         shortIdFallback: isParty,
+                        partyObj: currentPartyObj,
                       });
                       const lotDateStr = formatDisplayDate(lotRelevantDate(l));
                       return (
@@ -1549,7 +1577,7 @@ export default function Dashboard() {
                             </div>
                           </div>
                           <div className="dash-recent-item-status">
-                            <StatusBadge
+                            <SafeStatusBadge
                               status={lotStatusBadgeKey(l.status)}
                               label={isParty ? partyFacingLotStatusLabel(l.status) : undefined}
                             />
@@ -1659,13 +1687,14 @@ export default function Dashboard() {
                           <td style={{ color: 'var(--text-secondary)', fontSize: 13 }}>
                             {workspaceDisplayTitleForLot(l, businessOwners, {
                               shortIdFallback: isParty,
+                              partyObj: currentPartyObj,
                             })}
                           </td>
                           <td style={{ color: 'var(--text-secondary)', fontSize: 12, whiteSpace: 'nowrap' }}>
                             {formatDisplayDate(lotRelevantDate(l))}
                           </td>
                           <td>
-                            <StatusBadge
+                            <SafeStatusBadge
                               status={lotStatusBadgeKey(l.status)}
                               label={isParty ? partyFacingLotStatusLabel(l.status) : undefined}
                             />
@@ -1842,7 +1871,7 @@ export default function Dashboard() {
       )}
 
       {selectedFabric && (
-        <Modal title={`${selectedFabric.name} Insights`} onClose={() => setSelectedFabric(null)}>
+        <SafeModal title={`${selectedFabric.name} Insights`} onClose={() => setSelectedFabric(null)}>
           <div style={{ padding: '4px 8px' }}>
             {selectedFabric.name === 'Others' ? (
               <div>
@@ -1894,7 +1923,7 @@ export default function Dashboard() {
                       }, {})
                     ).sort((a, b) => b[1] - a[1]).map(([status, count]) => (
                       <div key={status} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'var(--primary-bg, #f1f5f9)', padding: '6px 12px', borderRadius: 12, fontSize: 12, fontWeight: 600, color: 'var(--text-secondary, #475569)' }}>
-                        <StatusBadge status={status} />
+                        <SafeStatusBadge status={status} />
                         <span style={{ color: 'var(--text-muted, #94a3b8)' }}>({count})</span>
                       </div>
                     ))}
@@ -1933,11 +1962,11 @@ export default function Dashboard() {
               </div>
             )}
           </div>
-        </Modal>
+        </SafeModal>
       )}
 
       {selectedLotDetail && (
-        <Modal
+        <SafeModal
           title={`Lot Details #${selectedLotDetail.lotNo || selectedLotDetail.lotNumber || '—'}`}
           onClose={() => setSelectedLotDetail(null)}
           footer={
@@ -1977,7 +2006,7 @@ export default function Dashboard() {
               <div>
                 <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Status</span>
                 <div style={{ marginTop: 4 }}>
-                  <StatusBadge
+                  <SafeStatusBadge
                     status={lotStatusBadgeKey(selectedLotDetail.status)}
                     label={isParty ? partyFacingLotStatusLabel(selectedLotDetail.status) : undefined}
                   />
@@ -2023,6 +2052,7 @@ export default function Dashboard() {
                 <span className="dash-lot-detail-value">
                   {workspaceDisplayTitleForLot(selectedLotDetail, businessOwners, {
                     shortIdFallback: isParty,
+                    partyObj: currentPartyObj,
                   }) || '—'}
                 </span>
               </div>
@@ -2058,7 +2088,7 @@ export default function Dashboard() {
               )}
             </div>
           </div>
-        </Modal>
+        </SafeModal>
       )}
     </div>
   );

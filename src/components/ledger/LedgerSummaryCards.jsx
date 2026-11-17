@@ -13,7 +13,7 @@ export default function LedgerSummaryCards({
       <div className="pk-summary-card">
         <span className="pk-card-label">Total Bills</span>
         <span className="pk-card-value text-indigo">
-          ₨ {Number(totalBillAmount || 0).toLocaleString()}
+          Rs {Number(totalBillAmount || 0).toLocaleString()}
         </span>
       </div>
 
@@ -22,7 +22,7 @@ export default function LedgerSummaryCards({
           {isParty ? 'Total Payments Sent' : 'Total Payments Received'}
         </span>
         <span className="pk-card-value text-emerald">
-          ₨ {Number(totalPaymentsReceived || 0).toLocaleString()}
+          Rs {Number(totalPaymentsReceived || 0).toLocaleString()}
         </span>
       </div>
 
@@ -33,7 +33,7 @@ export default function LedgerSummaryCards({
             netBalance > 0 ? 'text-amber' : netBalance < 0 ? 'text-emerald' : ''
           }`}
         >
-          ₨ {Number(netBalance || 0).toLocaleString()}
+          Rs {Number(netBalance || 0).toLocaleString()}
         </span>
       </div>
 

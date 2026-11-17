@@ -11,6 +11,7 @@ export default function LotTableDesktop({
   paginatedLots,
   search,
   searchField = 'all',
+  componentFilter = 'All',
   partyFilter = 'All',
   statusFilter = 'All',
   dateRange = 'all',
@@ -21,6 +22,7 @@ export default function LotTableDesktop({
   otherTabMatchCount = 0,
   onClearSearch,
   onClearHighlightedLot,
+  onClearComponentFilter,
   onClearPartyFilter,
   onClearStatusFilter,
   onClearDateRange,
@@ -67,6 +69,7 @@ export default function LotTableDesktop({
                     searchField={searchField}
                     partyFilter={partyFilter}
                     parties={parties}
+                    componentFilter={componentFilter}
                     statusFilter={statusFilter}
                     dateRange={dateRange}
                     highlightedBillableLotId={highlightedBillableLotId}
@@ -77,6 +80,7 @@ export default function LotTableDesktop({
                     otherTabMatchCount={otherTabMatchCount}
                     onClearSearch={onClearSearch}
                     onClearHighlightedLot={onClearHighlightedLot}
+                    onClearComponentFilter={onClearComponentFilter}
                     onClearPartyFilter={onClearPartyFilter}
                     onClearStatusFilter={onClearStatusFilter}
                     onClearDateRange={onClearDateRange}
@@ -177,6 +181,25 @@ export default function LotTableDesktop({
                         >
                           Completed
                         </span>
+                        {l.billedInBillNo ? (
+                          <span
+                            style={{
+                              fontSize: 11,
+                              fontWeight: 700,
+                              color: '#2563eb',
+                              background: 'rgba(37, 99, 235, 0.1)',
+                              border: '1px solid rgba(37, 99, 235, 0.25)',
+                              padding: '2px 7px',
+                              borderRadius: 4,
+                              alignSelf: 'flex-start',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 4,
+                            }}
+                          >
+                            🧾 Bill #{l.billedInBillNo} {l.billedInBookNo ? `(Book ${l.billedInBookNo})` : ''}
+                          </span>
+                        ) : null}
                         <div style={{ fontSize: 11, color: 'var(--success, #166534)', fontWeight: 600 }}>
                           Completed Date: {formatDisplayDate(l.completionApprovedAt || l.receivedBackDate || l.allotDate)}
                         </div>

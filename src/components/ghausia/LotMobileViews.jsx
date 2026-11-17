@@ -7,12 +7,27 @@ import { formatDisplayDate } from '../../utils/dateFilters';
 import { workspaceDisplayTitleForLot } from '../../utils/businessWorkspace';
 import { STATUS_OPTIONS } from '../../utils/ghausiaHelpers';
 
+const getLotStatusDate = (lot) => {
+  if (!lot) return null;
+  const s = String(lot.status || '').toLowerCase().trim();
+  let rawDate = null;
+  if (s === 'dispatched') rawDate = lot.dispatchDate || lot.allotDate;
+  else if (s === 'received back') rawDate = lot.receivedBackDate || lot.allotDate;
+  else if (s === 'completed') rawDate = lot.completionApprovedAt || lot.receivedBackDate || lot.allotDate;
+  else if (s === 'rejected') rawDate = lot.rejectedDate || lot.allotDate;
+  else if (s === 'pending approval') rawDate = lot.pendingReviewSubmittedAt || lot.allotDate;
+  else rawDate = lot.allotDate || lot.createdAt;
+
+  return rawDate ? formatDisplayDate(rawDate) : null;
+};
+
 export default function LotMobileViews({
   filtered,
   paginatedLots,
   viewMode,
   search = '',
   searchField = 'all',
+  componentFilter = 'All',
   partyFilter = 'All',
   statusFilter = 'All',
   dateRange = 'all',
@@ -23,6 +38,7 @@ export default function LotMobileViews({
   otherTabMatchCount = 0,
   onClearSearch,
   onClearHighlightedLot,
+  onClearComponentFilter,
   onClearPartyFilter,
   onClearStatusFilter,
   onClearDateRange,
@@ -45,6 +61,7 @@ export default function LotMobileViews({
     searchField,
     partyFilter,
     parties,
+    componentFilter,
     statusFilter,
     dateRange,
     highlightedBillableLotId,
@@ -55,6 +72,7 @@ export default function LotMobileViews({
     otherTabMatchCount,
     onClearSearch,
     onClearHighlightedLot,
+    onClearComponentFilter,
     onClearPartyFilter,
     onClearStatusFilter,
     onClearDateRange,
@@ -91,6 +109,23 @@ export default function LotMobileViews({
                   {lotTableTab === 'completed' ? (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                       <span className="badge-completed" style={{ display: 'block', textAlign: 'center', fontSize: 13, padding: '4px 0', borderRadius: 20 }}>Done</span>
+                      {l.billedInBillNo ? (
+                        <span
+                          style={{
+                            fontSize: 11,
+                            fontWeight: 700,
+                            color: '#2563eb',
+                            background: 'rgba(37, 99, 235, 0.1)',
+                            border: '1px solid rgba(37, 99, 235, 0.25)',
+                            padding: '2px 6px',
+                            borderRadius: 4,
+                            textAlign: 'center',
+                            display: 'block',
+                          }}
+                        >
+                          🧾 Bill #{l.billedInBillNo} {l.billedInBookNo ? `(Book ${l.billedInBookNo})` : ''}
+                        </span>
+                      ) : null}
                       <div style={{ fontSize: 11, color: 'var(--success, #166534)', textAlign: 'center', fontWeight: 600 }}>
                         Completed Date: {formatDisplayDate(l.completionApprovedAt || l.receivedBackDate || l.allotDate)}
                       </div>
@@ -99,10 +134,22 @@ export default function LotMobileViews({
                     <LotStatusSelect
                       value={l.status}
                       options={STATUS_OPTIONS}
+                      date={getLotStatusDate(l)}
                       disabled={completionPersistingLotId === l.id || inlineSummaryBusy}
                       onChange={(next) => setLotStatus(l, next)}
                       wrapStyle={{ display: 'block', width: '100%' }}
-                      style={{ width: '100%', minWidth: 0, maxWidth: 'none', fontSize: 13, fontWeight: 700, padding: '4px 24px 4px 12px', height: 32, backgroundPosition: 'right 10px center', borderRadius: 20 }}
+                      style={{
+                        width: '100%',
+                        minWidth: 0,
+                        maxWidth: 'none',
+                        fontSize: 12,
+                        fontWeight: 700,
+                        padding: '4px 22px 4px 10px',
+                        minHeight: 32,
+                        height: 'auto',
+                        backgroundPosition: 'right 8px center',
+                        borderRadius: 20,
+                      }}
                     />
                   )}
                 </div>
@@ -183,6 +230,24 @@ export default function LotMobileViews({
                 {lotTableTab === 'completed' ? (
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
                     <span className="badge-completed">Completed</span>
+                    {l.billedInBillNo ? (
+                      <span
+                        style={{
+                          fontSize: 11,
+                          fontWeight: 700,
+                          color: '#2563eb',
+                          background: 'rgba(37, 99, 235, 0.1)',
+                          border: '1px solid rgba(37, 99, 235, 0.25)',
+                          padding: '2px 6px',
+                          borderRadius: 4,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 4,
+                        }}
+                      >
+                        🧾 Bill #{l.billedInBillNo} {l.billedInBookNo ? `(Book ${l.billedInBookNo})` : ''}
+                      </span>
+                    ) : null}
                     <div style={{ fontSize: 11, color: 'var(--success, #166534)', fontWeight: 600 }}>
                       Completed Date: {formatDisplayDate(l.completionApprovedAt || l.receivedBackDate || l.allotDate)}
                     </div>
@@ -191,9 +256,17 @@ export default function LotMobileViews({
                   <LotStatusSelect
                     value={l.status}
                     options={STATUS_OPTIONS}
+                    date={getLotStatusDate(l)}
                     disabled={completionPersistingLotId === l.id || inlineSummaryBusy}
                     onChange={(next) => setLotStatus(l, next)}
-                    style={{ fontSize: 13, fontWeight: 700, borderRadius: 20 }}
+                    style={{
+                      fontSize: 12.5,
+                      fontWeight: 700,
+                      borderRadius: 20,
+                      minHeight: 32,
+                      height: 'auto',
+                      padding: '4px 26px 4px 10px',
+                    }}
                   />
                 )}
               </div>
