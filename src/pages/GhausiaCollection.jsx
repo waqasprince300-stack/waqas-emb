@@ -814,41 +814,30 @@ export default function GhausiaCollection() {
   }, [billablePage, billablePageCount]);
   const ownerIn = useMemo(() => {
     const bizNameLower = String(activeWorkspace?.name || '').trim().toLowerCase();
-    const activeOwnerIdStr = activeBusinessOwnerId ? String(activeBusinessOwnerId) : '';
     return effectivePayments
       .filter((p) => {
         if (p.type !== 'Received') return false;
         const partyLower = String(p.party || '').trim().toLowerCase();
-        const matchesParty = partyLower === 'owner' || partyLower === '' || (bizNameLower && partyLower === bizNameLower);
-        if (!matchesParty) return false;
-        if (viewAllWorkspaces) return true;
-        const pWid = String(p.businessOwnerId?._id || p.businessOwnerId || p.ownerWorkspaceId || '');
-        return !pWid || !activeOwnerIdStr || pWid === activeOwnerIdStr;
+        return partyLower === 'owner' || partyLower === '' || (bizNameLower && partyLower === bizNameLower);
       })
       .reduce((s, p) => s + Number(p.amount || 0), 0);
-  }, [effectivePayments, activeWorkspace, activeBusinessOwnerId, viewAllWorkspaces]);
+  }, [effectivePayments, activeWorkspace]);
 
   const ownerPaidToOwner = useMemo(() => {
     const bizNameLower = String(activeWorkspace?.name || '').trim().toLowerCase();
-    const activeOwnerIdStr = activeBusinessOwnerId ? String(activeBusinessOwnerId) : '';
     return effectivePayments
       .filter((p) => {
         if (p.type !== 'Paid') return false;
-        if (String(p.note || '').trim().startsWith('Billable lot settled')) return false;
         const partyLower = String(p.party || '').trim().toLowerCase();
-        const matchesParty = partyLower === 'owner' || (bizNameLower && partyLower === bizNameLower);
-        if (!matchesParty) return false;
-        if (viewAllWorkspaces) return true;
-        const pWid = String(p.businessOwnerId?._id || p.businessOwnerId || p.ownerWorkspaceId || '');
-        return !pWid || !activeOwnerIdStr || pWid === activeOwnerIdStr;
+        return partyLower === 'owner' || (bizNameLower && partyLower === bizNameLower);
       })
       .reduce((s, p) => s + Number(p.amount || 0), 0);
-  }, [effectivePayments, activeWorkspace, activeBusinessOwnerId, viewAllWorkspaces]);
+  }, [effectivePayments, activeWorkspace]);
 
   const billableSettledTotal = useMemo(
     () =>
       effectiveCollectionLots
-        .filter((l) => l.status === 'completed' || Boolean(l.ownerBillId) || Boolean(l.billedInBillNo))
+        .filter((l) => (l.status === 'completed' && l.completedFromBillable) || Boolean(l.ownerBillId) || Boolean(l.billedInBillNo))
         .reduce((s, l) => s + Number(getBusinessBillAmount(l) || l.billAmount || 0), 0),
     [effectiveCollectionLots]
   );
