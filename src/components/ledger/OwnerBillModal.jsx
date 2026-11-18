@@ -149,33 +149,8 @@ export default function OwnerBillModal({
         });
         setLots(initialSlice);
 
-        // Pre-fill received payments ONLY if they have NOT been settled in previous bills!
-        const unbilledPayments = candidatePayments.filter((p) => {
-          const pid = String(p.id || p._id || '');
-          return p.type === 'Received' && (!pid || !billedIds.has(pid));
-        });
-
-        // If a previous bill exists, only pre-fill fresh payments created on/after lastBillDate
-        let freshPayments = unbilledPayments;
-        if (next.lastBillDate) {
-          const lastDateStr = String(next.lastBillDate).slice(0, 10);
-          freshPayments = unbilledPayments.filter((p) => {
-            const pDate = p.date ? String(p.date).slice(0, 10) : '';
-            return !pDate || pDate >= lastDateStr;
-          });
-        }
-
-        if (freshPayments.length > 0) {
-          const topPayments = freshPayments.slice(0, 2).map((p) => ({
-            paymentId: String(p.id || p._id || ''),
-            date: p.date ? String(p.date).slice(0, 10) : new Date().toISOString().slice(0, 10),
-            amount: Number(p.amount || 0),
-            note: String(p.note || (p.paymentMethod ? `${p.paymentMethod} transfer` : 'Online transfer')).trim(),
-          }));
-          setPaymentsList(topPayments);
-        } else {
-          setPaymentsList([]);
-        }
+        // New bills start clean with 0 payments — user can click 'Select Payments' or '+ Add Cash / Manual'
+        setPaymentsList([]);
       } catch (err) {
         console.warn('Could not load bill defaults:', err.message);
       } finally {
@@ -1449,7 +1424,7 @@ export default function OwnerBillModal({
                   onClick={() => setShowPaymentPicker(true)}
                   style={{ fontWeight: 700, color: '#38bdf8', borderColor: 'rgba(56, 189, 248, 0.35)' }}
                 >
-                  🔍 Select Payments ({candidatePayments.filter((p) => p.type === 'Received').length} available)
+                  🔍 Select Payments ({candidatePayments.filter((p) => p.type === 'Received' && (!settledPaymentIds || !settledPaymentIds.has(String(p.id || p._id))) && !p.isLegacySettled && (!p.billedInBillNo || p.billedInBillNo === 'none')).length} available)
                 </button>
                 <button
                   type="button"
@@ -2356,16 +2331,26 @@ function PaymentPickerModal({ payments, currentlySelectedPaymentIds, settledPaym
   const [selectedIds, setSelectedIds] = useState(new Set(currentlySelectedPaymentIds));
   const [search, setSearch] = useState('');
 
-  const filtered = useMemo(() => {
-    if (!search.trim()) return payments;
-    const q = search.toLowerCase();
+  const unbilledPayments = useMemo(() => {
     return payments.filter((p) => {
+      const id = String(p.id || p._id);
+      if (settledPaymentIds && settledPaymentIds.has(id)) return false;
+      if (p.isLegacySettled) return false;
+      if (p.billedInBillNo && p.billedInBillNo !== 'none') return false;
+      return true;
+    });
+  }, [payments, settledPaymentIds]);
+
+  const filtered = useMemo(() => {
+    if (!search.trim()) return unbilledPayments;
+    const q = search.toLowerCase();
+    return unbilledPayments.filter((p) => {
       const note = String(p.note || '').toLowerCase();
       const amt = String(p.amount || '');
       const date = String(p.date || '');
       return note.includes(q) || amt.includes(q) || date.includes(q);
     });
-  }, [payments, search]);
+  }, [unbilledPayments, search]);
 
   const toggle = (id) => {
     if (settledPaymentIds && settledPaymentIds.has(id)) {
@@ -2429,7 +2414,7 @@ function PaymentPickerModal({ payments, currentlySelectedPaymentIds, settledPaym
         <div style={{ maxHeight: '340px', overflowY: 'auto', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8 }}>
           {filtered.length === 0 ? (
             <div style={{ padding: 24, textAlign: 'center', color: '#94a3b8' }}>
-              Koi received payment nahi mili.
+              Abhi koi nayi unbilled payment moojood nahi hai. Nayi payment record hone par yahan show hogi.
             </div>
           ) : (
             filtered.map((p) => {
