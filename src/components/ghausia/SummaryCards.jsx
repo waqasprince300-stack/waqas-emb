@@ -13,6 +13,7 @@ export default function SummaryCards({
   ownerPaidToOwner,
   billableSettledTotal,
   statsRefreshing,
+  onOpenBillModal,
 }) {
   const { viewAllWorkspaces, activeBusinessOwnerId, businessOwners } = useApp();
   const ownerLabel = viewAllWorkspaces
@@ -116,12 +117,14 @@ export default function SummaryCards({
                 value: billable.length > 0 ? `${billable.length} (₨${billableTotal.toLocaleString()})` : '0',
                 lakhCrore: formatLakhCrore(billableTotal),
                 color: billable.length > 0 ? 'var(--warning, #fde293)' : 'var(--text-secondary, #c2b6b1)',
-                note: billable.length > 0 ? 'Awaiting completion/bill' : 'No lots awaiting bill',
+                note: billable.length > 0 ? 'Awaiting completion/bill (Click to create)' : 'No lots awaiting bill',
+                onClick: onOpenBillModal || undefined,
               },
             ].map((c) => (
               <div
                 key={c.label}
                 className="stat-card"
+                onClick={c.onClick}
                 style={{
                   display: 'flex',
                   flexDirection: 'column',
@@ -131,6 +134,8 @@ export default function SummaryCards({
                   border: '1px solid var(--border)',
                   borderRadius: 'var(--radius, 12px)',
                   boxShadow: 'var(--shadow)',
+                  cursor: c.onClick ? 'pointer' : 'default',
+                  transition: c.onClick ? 'transform 0.15s ease, border-color 0.15s ease' : 'none',
                 }}
               >
                 <div>

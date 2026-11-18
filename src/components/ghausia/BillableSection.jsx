@@ -122,7 +122,7 @@ export default function BillableSection({
               <span>Bill History</span>
             </button>
           )}
-          {billable.length > 0 && onOpenBillModal && (
+          {onOpenBillModal && (
             <button
               type="button"
               className="btn btn-sm"
@@ -144,7 +144,7 @@ export default function BillableSection({
               }}
             >
               <span>🧾</span>
-              <span>Bill Banayein ({billable.length})</span>
+              <span>{billable.length > 0 ? `Bill Banayein (${billable.length})` : 'Naya Bill Banayein'}</span>
             </button>
           )}
           {billable.length > 0 && (

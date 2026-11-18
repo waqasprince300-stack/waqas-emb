@@ -46,7 +46,10 @@ const toLedgerStatus = (status, partyName) => {
   ) {
     return 'Pending';
   }
-  if (String(status).toLowerCase() === 'received back') return 'Completed';
+  const s = String(status || '').trim().toLowerCase();
+  if (s === 'received back' || s === 'completed' || s === 'complete' || s === 'billable') {
+    return 'Completed';
+  }
   return 'In Progress';
 };
 
@@ -369,12 +372,25 @@ export default function PartyLedger() {
     if (ls === 'pending approval') return 'Pending review';
     if (ls === 'rejected') return 'Rejected';
     const pe = ledgerPartyEdits[l.id] || {};
-    // If overrideStatus explicitly set to Completed, honour it
-    if (pe.overrideStatus && pe.overrideStatus.toLowerCase() === 'completed') return 'Completed';
+    const ov = String(pe.overrideStatus || '').trim().toLowerCase();
+    // If overrideStatus explicitly set, honour it
+    if (['completed', 'complete', 'received back', 'billable'].includes(ov)) {
+      return 'Completed';
+    }
+    if (ov === 'pending review' || ov === 'pending approval') return 'Pending review';
+    if (ov === 'rejected') return 'Rejected';
+    if (ov === 'pending') return 'Pending';
+    if (ov === 'in progress' || ov === 'dispatched') return 'In Progress';
+
+    // If lot status is completed/received back and no override
+    if (['completed', 'complete', 'received back', 'billable'].includes(ls)) {
+      return 'Completed';
+    }
+
     // Otherwise derive from lot status, passing party name to check if known
     const partyNameDisplay = getPartyNameLocal(l.partyId, l.partyName);
     return toLedgerStatus(
-      pe.overrideStatus || l.status,
+      l.status,
       partyNameDisplay !== '-' ? partyNameDisplay : ''
     );
   };
@@ -1344,9 +1360,38 @@ export default function PartyLedger() {
     );
     const receiveds = receivedDateScoped.filter(withinWorkspace);
 
+    // Build lookup sets for registered production vendor parties
+    const partyIdSet = new Set(
+      parties.map((p) => String(p.id ?? p._id ?? '').trim()).filter(Boolean)
+    );
+    const partyNameSet = new Set(
+      parties.map((p) => String(p.name || '').trim().toLowerCase()).filter(Boolean)
+    );
+
+    const isVendorPartyPayment = (p) => {
+      const pid = String(p.partyId || '').trim();
+      const pname = String(p.party || '').trim().toLowerCase();
+      if (!pname && !pid) return false;
+      // Exclude Owner or workspace client transactions from vendor totals
+      if (
+        pname === 'owner' ||
+        pname.includes('ghausia') ||
+        pname.includes('style collection')
+      ) {
+        return false;
+      }
+      if (pid && partyIdSet.has(pid)) return true;
+      if (pname && partyNameSet.has(pname)) return true;
+      return false;
+    };
+
     if (partyFilter === 'All') {
-      const receivedFromBusiness = pays.reduce((s, p) => s + Number(p.amount || 0), 0);
-      const paidToBusiness = receiveds.reduce((s, p) => s + Number(p.amount || 0), 0);
+      const receivedFromBusiness = pays
+        .filter(isVendorPartyPayment)
+        .reduce((s, p) => s + Number(p.amount || 0), 0);
+      const paidToBusiness = receiveds
+        .filter(isVendorPartyPayment)
+        .reduce((s, p) => s + Number(p.amount || 0), 0);
       const balance = totals.billTotal - receivedFromBusiness + paidToBusiness;
 
       return {
@@ -1369,10 +1414,10 @@ export default function PartyLedger() {
     const pname = (party?.name || '').trim();
 
     const receivedFromBusiness = pays
-      .filter((p) => samePartyId(p.partyId, partyFilter) || String(p.party || '').trim() === pname)
+      .filter((p) => samePartyId(p.partyId, partyFilter) || (pname && String(p.party || '').trim().toLowerCase() === pname.toLowerCase()))
       .reduce((s, p) => s + Number(p.amount || 0), 0);
     const paidToBusiness = receiveds
-      .filter((p) => samePartyId(p.partyId, partyFilter) || String(p.party || '').trim() === pname)
+      .filter((p) => samePartyId(p.partyId, partyFilter) || (pname && String(p.party || '').trim().toLowerCase() === pname.toLowerCase()))
       .reduce((s, p) => s + Number(p.amount || 0), 0);
 
     return {

@@ -270,22 +270,22 @@ export default function GhausiaCollection() {
           : billAmount,
       ...(fromBillable ? { completedFromBillable: false } : {}),
     };
-    
+
     const rawLotNum = String(lot.lotNumber || lot.lotNo || '').trim();
     const normKey = rawLotNum ? normalizeLotNumberKey(rawLotNum) : null;
     const isReworkLot = Boolean(lot.isRework);
     const existingOwnerPayments = normKey
       ? payments.filter((p) => {
-          if (!p.linkedLot) return false;
-          if (String(p.party || '').trim().toLowerCase() !== 'owner') return false;
-          const paymentLinkedKey = normalizeLotNumberKey(
-            String(p.linkedLot).replace(/\s*\(rework\)\s*/i, '')
-          );
-          if (paymentLinkedKey !== normKey) return false;
-          const paymentIsRework =
-            /rework/i.test(p.linkedLot || '') || /rework/i.test(p.note || '');
-          return paymentIsRework === isReworkLot;
-        })
+        if (!p.linkedLot) return false;
+        if (String(p.party || '').trim().toLowerCase() !== 'owner') return false;
+        const paymentLinkedKey = normalizeLotNumberKey(
+          String(p.linkedLot).replace(/\s*\(rework\)\s*/i, '')
+        );
+        if (paymentLinkedKey !== normKey) return false;
+        const paymentIsRework =
+          /rework/i.test(p.linkedLot || '') || /rework/i.test(p.note || '');
+        return paymentIsRework === isReworkLot;
+      })
       : [];
     const isReEditedLot = fromBillable && !!partyEdits[lot.id]?.amountChangeNote;
     const paymentAmount = Number(billAmount) || 0;
@@ -297,7 +297,7 @@ export default function GhausiaCollection() {
       (lot.partyId ? getPartyName(lot.partyId) : '') ||
       '';
     const designNo = String(lot.designNo || '').trim() || '—';
-    
+
     let optimisticPayment = null;
     if (paymentAmount > 0) {
       optimisticPayment = {
@@ -309,11 +309,11 @@ export default function GhausiaCollection() {
         linkedLot,
         note: fromBillable
           ? (isReworkLot
-              ? `Rework lot settled — Party: ${partyName || '—'}; Design: ${designNo}`
-              : (isReEditedLot ? `Billable lot settled (difference) — Party: ${partyName || '—'}; Design: ${designNo}` : `Defective lot settled — Party: ${partyName || '—'}`))
+            ? `Rework lot settled — Party: ${partyName || '—'}; Design: ${designNo}`
+            : (isReEditedLot ? `Billable lot settled (difference) — Party: ${partyName || '—'}; Design: ${designNo}` : `Defective lot settled — Party: ${partyName || '—'}`))
           : (isReworkLot
-              ? `Rework lot completed — Party: ${partyName || '—'}; Design: ${designNo}`
-              : `Lot completed — Party: ${partyName || '—'}; Design: ${designNo}; Type: ${lot.itemType || lot.fabric || '—'}`),
+            ? `Rework lot completed — Party: ${partyName || '—'}; Design: ${designNo}`
+            : `Lot completed — Party: ${partyName || '—'}; Design: ${designNo}; Type: ${lot.itemType || lot.fabric || '—'}`),
         businessOwnerId: lotBizId(lot),
       };
     }
@@ -550,11 +550,11 @@ export default function GhausiaCollection() {
     [visibleLots, highlightedBillableLotId]
   );
   const otherLotsCount = useMemo(() => {
-      let lots = visibleLots;
-      if (highlightedBillableLotId) {
-        lots = lots.filter(l => String(l.id) === String(highlightedBillableLotId));
-      }
-      return lots.length - lots.filter((l) => l.status === 'completed').length;
+    let lots = visibleLots;
+    if (highlightedBillableLotId) {
+      lots = lots.filter(l => String(l.id) === String(highlightedBillableLotId));
+    }
+    return lots.length - lots.filter((l) => l.status === 'completed').length;
   }, [visibleLots, highlightedBillableLotId]);
   const othersTabStatusLabel =
     statusFilter === 'All'
@@ -716,17 +716,33 @@ export default function GhausiaCollection() {
   }, [viewAllWorkspaces, activeWorkspace, businessOwners, activeBillOwnerId, billable]);
 
   const ownerPaymentsForBill = useMemo(() => {
+    const bizNameLower = String(activeWorkspace?.name || '').trim().toLowerCase();
     return payments.filter((p) => {
       const isReceived = p.type === 'Received';
       if (!isReceived) return false;
-      const isOwnerParty = String(p.party || '').trim().toLowerCase() === 'owner';
+      const partyLower = String(p.party || '').trim().toLowerCase();
+      const isOwnerParty = partyLower === 'owner' || partyLower === '' || (bizNameLower && partyLower === bizNameLower);
       const matchesBiz =
         !activeBillOwnerId ||
         !p.businessOwnerId ||
         String(p.businessOwnerId) === String(activeBillOwnerId);
-      return isOwnerParty || matchesBiz;
+      return isOwnerParty && matchesBiz;
     });
-  }, [payments, activeBillOwnerId]);
+  }, [payments, activeWorkspace, activeBillOwnerId]);
+
+  const allWorkspaceBillableLots = useMemo(
+    () =>
+      effectiveCollectionLots
+        .filter(
+          (l) =>
+            l.status === 'received back' &&
+            !l.ownerBillId &&
+            !l.billedInBillNo &&
+            l.status !== 'completed'
+        )
+        .sort((a, b) => compareRowsByUpdatedNewestFirst(a, b, 'lot')),
+    [effectiveCollectionLots]
+  );
 
   const getOwnerBillableAmount = (lot) => getBusinessBillAmount(lot);
 
@@ -976,11 +992,11 @@ export default function GhausiaCollection() {
           icon: failed.length > 0 ? 'warning' : 'success',
           title: 'Bulk save done',
           html: `<p style="margin:0 0 8px">${parts.join(' · ')}</p>${failed.length > 0
-              ? `<p style="margin:0;font-size:13px;color:var(--text-muted, #64748b)">${failed
-                .slice(0, 5)
-                .map((f) => `${f.lotNumber}: ${f.message}`)
-                .join('<br/>')}${failed.length > 5 ? '<br/>…' : ''}</p>`
-              : ''
+            ? `<p style="margin:0;font-size:13px;color:var(--text-muted, #64748b)">${failed
+              .slice(0, 5)
+              .map((f) => `${f.lotNumber}: ${f.message}`)
+              .join('<br/>')}${failed.length > 5 ? '<br/>…' : ''}</p>`
+            : ''
             }`,
         });
 
@@ -1184,16 +1200,16 @@ export default function GhausiaCollection() {
       try {
         await updateLot(editing.id || editing._id, { billAmount: formValues.dupAmt, totalAmount: formValues.dupAmt }, { businessOwnerId: lotBizId(editing) });
         if (mainLot) {
-          await updateLot(mainLot.id || mainLot._id, { 
-            billAmount: formValues.mainAmt, 
+          await updateLot(mainLot.id || mainLot._id, {
+            billAmount: formValues.mainAmt,
             totalAmount: formValues.mainAmt,
             suitType: '3-piece',
             ownerBillingChoice: 'separate',
-            dupattaDetails: { 
-              ...(mainLot.dupattaDetails || {}), 
+            dupattaDetails: {
+              ...(mainLot.dupattaDetails || {}),
               partyId: editing.partyId || '',
               partyName: editing.partyName || '',
-              billAmount: formValues.dupAmt 
+              billAmount: formValues.dupAmt
             }
           }, { businessOwnerId: lotBizId(mainLot) });
         }
@@ -1215,22 +1231,22 @@ export default function GhausiaCollection() {
       const biz = lot ? lotBizId(lot) : String(activeBusinessOwnerId || '').trim();
       const currentDate = new Date().toISOString().slice(0, 10);
       const selectedParty = parties.find((p) => p.id === partyId);
-      
+
       const currentStatus = lot?.status || 'pending';
       const shouldUpdateStatus = currentStatus === 'pending' || currentStatus === 'dispatched';
-      
+
       const payload = {
         partyId: partyId || '',
         partyName: selectedParty ? selectedParty.name : '',
       };
-      
+
       if (shouldUpdateStatus || !partyId) {
         payload.status = partyId ? 'dispatched' : 'pending';
         if (partyId) payload.dispatchDate = currentDate;
       }
-      
+
       await updateLot(lotId, payload, { businessOwnerId: biz });
-      
+
       if (partyId && shouldUpdateStatus) {
         await updatePartyEdit(
           lotId,
@@ -1494,6 +1510,10 @@ export default function GhausiaCollection() {
         ownerPaidToOwner={ownerPaidToOwner}
         billableSettledTotal={billableSettledTotal}
         statsRefreshing={statsRefreshing}
+        onOpenBillModal={() => {
+          setSelectedBillToView(null);
+          setShowOwnerBillModal(true);
+        }}
       />
 
       {/* Billable Section */}
@@ -1649,7 +1669,7 @@ export default function GhausiaCollection() {
           <option value="main">Main Lots Only</option>
           <option value="dupatta">Dupatta Lots Only</option>
         </select>
-        
+
         {lotTableTab === 'others' ? (
           <select
             className="form-select pl-toolbar-filter pl-toolbar-filter--status"
@@ -1934,8 +1954,8 @@ export default function GhausiaCollection() {
             (deleteTarget.suitComponent !== 'dupatta' && (deleteTarget.linkedLotId || (deleteTarget.suitType === '3-piece' && collectionLots.some(l => String(l.linkedLotId) === String(deleteTarget.id)))))
               ? `Delete lot ${deleteTarget.lotNumber || deleteTarget.lotNo} / ${deleteTarget.designNo}? This will also delete the linked Dupatta lot. This action cannot be undone.`
               : deleteTarget.suitComponent === 'dupatta' && deleteTarget.linkedLotId
-              ? `Delete lot ${deleteTarget.lotNumber || deleteTarget.lotNo} / ${deleteTarget.designNo}? This will downgrade the linked Main lot to a 2-piece suit. This action cannot be undone.`
-              : `Delete lot ${deleteTarget.lotNumber || deleteTarget.lotNo} / ${deleteTarget.designNo}? This action cannot be undone.`
+                ? `Delete lot ${deleteTarget.lotNumber || deleteTarget.lotNo} / ${deleteTarget.designNo}? This will downgrade the linked Main lot to a 2-piece suit. This action cannot be undone.`
+                : `Delete lot ${deleteTarget.lotNumber || deleteTarget.lotNo} / ${deleteTarget.designNo}? This action cannot be undone.`
           }
           onConfirm={handleDelete}
           onCancel={() => setDeleteTarget(null)}
@@ -1948,9 +1968,36 @@ export default function GhausiaCollection() {
         <OwnerBillModal
           ownerId={activeBillOwnerId}
           ownerName={activeBillOwnerName}
-          candidateLots={billable}
+          candidateLots={
+            selectedBillToView
+              ? [
+                  ...(selectedBillToView.lots || []).map((bLot) => {
+                    const found = effectiveCollectionLots.find(
+                      (l) => String(l.id || l._id) === String(bLot.lotId || bLot._id || bLot.id)
+                    );
+                    return (
+                      found || {
+                        _id: bLot.lotId,
+                        id: bLot.lotId,
+                        lotNo: bLot.lotNo,
+                        lotNumber: bLot.lotNo,
+                        designNo: bLot.designNo,
+                        suitQuantity: bLot.quantity,
+                        rate: bLot.rate,
+                        billAmount: bLot.amount,
+                        status: 'completed',
+                        ownerBillId: selectedBillToView.id || selectedBillToView._id,
+                        billedInBillNo: selectedBillToView.billNo,
+                      }
+                    );
+                  }),
+                  ...allWorkspaceBillableLots,
+                ]
+              : allWorkspaceBillableLots
+          }
           candidatePayments={ownerPaymentsForBill}
           existingBill={selectedBillToView}
+          initialPreviousBalance={Math.max(0, -ownerReceivedNet)}
           onClose={() => {
             setShowOwnerBillModal(false);
             setSelectedBillToView(null);

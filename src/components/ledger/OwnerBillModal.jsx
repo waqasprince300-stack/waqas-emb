@@ -18,8 +18,8 @@ import { formatLakhCrore } from '../../utils/numberToWords';
  * - 1-Click WhatsApp Roman Urdu Summary
  */
 
-const STANDARD_BILL_ROWS = 12;
-const STANDARD_BILL_LOTS_LIMIT = 12;
+const STANDARD_BILL_ROWS = 15;
+const STANDARD_BILL_LOTS_LIMIT = 15;
 
 const formatShortWasooliNote = (note) => {
   if (!note) return '';
@@ -29,18 +29,45 @@ const formatShortWasooliNote = (note) => {
   return s;
 };
 
+const formatBillLotNo = (l) => {
+  if (!l) return '';
+  let no = String(l.lotNo || l.lotNumber || '').trim();
+  if (l.suitComponent === 'dupatta' && no && !no.endsWith('-D') && !no.endsWith('(D)')) {
+    no = `${no}-D`;
+  }
+  return no;
+};
+
+const fallbackCopyText = (str) => {
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = str;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+  } catch (_) {
+    // ignore clipboard error
+  }
+};
+
 export default function OwnerBillModal({
   ownerId,
   ownerName,
   candidateLots = [],
   candidatePayments = [],
   existingBill = null,
+  initialPreviousBalance = 0,
   onClose,
   onSaved,
 }) {
   const isEditing = Boolean(existingBill);
   const [activeTab, setActiveTab] = useState(isEditing ? 'preview' : 'form'); // 'form' | 'preview'
-  const [printLayout, setPrintLayout] = useState('1-up-landscape'); // '1-up-landscape' (Single Bill on A4 Landscape) | '2-up' (2 Bills on A4 Landscape) | '1-up-portrait' (Pre-Cut 14.8 x 21 cm Slip)
+  const [printLayout, setPrintLayout] = useState('2-up'); // Default: '2-up' (2 Bills on A4 Landscape in 1 pass) | '1-up-landscape' (Single Bill) | '1-up-portrait' (Pre-Cut Slip)
+  const [badgeType, setBadgeType] = useState('both-original'); // 'both-original' | 'party-office'
+  const [showCutLine, setShowCutLine] = useState(true); // Toggle center cutting dashed line
   const [loadingDefaults, setLoadingDefaults] = useState(!isEditing);
   const [saving, setSaving] = useState(false);
   const [showLotPicker, setShowLotPicker] = useState(false);
@@ -66,7 +93,11 @@ export default function OwnerBillModal({
   );
 
   // 3. Sabqa Baqaya (Previous Balance brought forward)
-  const [sabqaBaqaya, setSabqaBaqaya] = useState(existingBill?.sabqaBaqaya || 0);
+  const [sabqaBaqaya, setSabqaBaqaya] = useState(
+    existingBill?.sabqaBaqaya != null
+      ? Number(existingBill.sabqaBaqaya)
+      : Number(initialPreviousBalance || 0)
+  );
   const [lastBillInfo, setLastBillInfo] = useState('');
 
   // 4. Multiple Online / Cash Payments Received (Wasooli)
@@ -95,9 +126,32 @@ export default function OwnerBillModal({
 
   // Load Defaults & Previous Bill Balance
   useEffect(() => {
-    if (isEditing) {
+    if (isEditing && existingBill) {
+      setBookNo(existingBill.bookNo || 1);
+      setBillNo(existingBill.billNo || 1);
+      setBillDate(
+        existingBill.date ? String(existingBill.date).slice(0, 10) : new Date().toISOString().slice(0, 10)
+      );
+      setSabqaBaqaya(Number(existingBill.sabqaBaqaya != null ? existingBill.sabqaBaqaya : 0));
+      setPrevBillNo(existingBill.unpaidPreviousBills?.[0]?.billNo || '');
+      setPrevBillAmount(existingBill.unpaidPreviousBills?.[0]?.amount || 0);
+      setKatotiTitle(existingBill.deductions?.[0]?.title || 'Dhaga Katoti');
+      setKatotiAmount(existingBill.deductions?.[0]?.amount || 0);
+      setNotes(existingBill.notes || '');
       if (existingBill.lots) {
         setLots(existingBill.lots.map((l) => ({ ...l, selected: true })));
+      }
+      if (existingBill.paymentsReceived && existingBill.paymentsReceived.length > 0) {
+        setPaymentsList(
+          existingBill.paymentsReceived.map((p) => ({
+            paymentId: String(p.paymentId || p.id || p._id || ''),
+            date: p.date ? String(p.date).slice(0, 10) : new Date().toISOString().slice(0, 10),
+            amount: Number(p.amount || 0),
+            note: String(p.note || 'Online / Cash received'),
+          }))
+        );
+      } else {
+        setPaymentsList([]);
       }
       return;
     }
@@ -112,8 +166,12 @@ export default function OwnerBillModal({
         const next = res?.nextDefaults || {};
         if (next.nextBookNo) setBookNo(next.nextBookNo);
         if (next.nextBillNo) setBillNo(next.nextBillNo);
-        if (next.lastSabqaBaqaya !== undefined && Number(next.lastSabqaBaqaya) !== 0) {
-          setSabqaBaqaya(Number(next.lastSabqaBaqaya));
+        if (res?.bills && res.bills.length > 0) {
+          if (next.lastSabqaBaqaya !== undefined) {
+            setSabqaBaqaya(Number(next.lastSabqaBaqaya || 0));
+          }
+        } else if (initialPreviousBalance > 0) {
+          setSabqaBaqaya(initialPreviousBalance);
         }
         if (next.lastBillDate) {
           setLastBillInfo(`Pichla bill ${formatDisplayDate(next.lastBillDate)} ko finalize hua tha.`);
@@ -162,7 +220,7 @@ export default function OwnerBillModal({
     return () => {
       isMounted = false;
     };
-  }, [isEditing, ownerId, candidateLots, candidatePayments, existingBill]);
+  }, [isEditing, ownerId, candidateLots, candidatePayments, existingBill, initialPreviousBalance]);
 
   // Calculations matching Waqas's physical bill formula exactly:
   const currentBillTotal = useMemo(
@@ -212,18 +270,30 @@ export default function OwnerBillModal({
       arr.map((item, idx) => {
         if (idx !== index) return item;
         const updated = { ...item, [field]: value };
-        if (field === 'quantity' || field === 'rate') {
-          const q = field === 'quantity' ? Number(value || 0) : Number(item.quantity || 0);
-          const r = field === 'rate' ? Number(value || 0) : Number(item.rate || 0);
-          if (q > 0 && r > 0) {
+        if (field === 'quantity') {
+          const q = Number(value || 0);
+          const r = Number(item.rate || 0);
+          const a = Number(item.amount || 0);
+          if (r > 0) {
             updated.amount = Math.round(q * r);
+          } else if (a > 0 && q > 0) {
+            const rawRate = a / q;
+            updated.rate = rawRate % 1 === 0 ? rawRate : Math.round(rawRate * 100) / 100;
+          } else {
+            updated.amount = 0;
           }
+        } else if (field === 'rate') {
+          const q = Number(item.quantity || 0);
+          const r = Number(value || 0);
+          updated.amount = Math.round(q * r);
         } else if (field === 'amount') {
           const a = Number(value || 0);
           const q = Number(item.quantity || 0);
-          if (q > 0 && a > 0) {
+          if (q > 0) {
             const rawRate = a / q;
             updated.rate = rawRate % 1 === 0 ? rawRate : Math.round(rawRate * 100) / 100;
+          } else {
+            updated.rate = 0;
           }
         }
         return updated;
@@ -235,7 +305,7 @@ export default function OwnerBillModal({
     if (lots.length >= STANDARD_BILL_LOTS_LIMIT) {
       Swal.fire({
         icon: 'info',
-        title: 'Standard Bill Limit (12 Lots)',
+        title: `Standard Bill Limit (${STANDARD_BILL_LOTS_LIMIT} Lots)`,
         text: `Ek standard physical bill par maximum ${STANDARD_BILL_LOTS_LIMIT} lots aati hain taake bill pad ka standard size barabar rahe. Baqi lots ka agla bill banayein.`,
       });
       return;
@@ -259,13 +329,18 @@ export default function OwnerBillModal({
     setLots((arr) => arr.filter((_, idx) => idx !== index));
   };
 
-  // Add lots from Inventory picker (capped at standard 12 lots)
+  // Add lots from Inventory picker (capped at standard 15 lots)
   const handleAddLotsFromInventory = (selectedCandidateLots) => {
-    const formatted = selectedCandidateLots.slice(0, STANDARD_BILL_LOTS_LIMIT).map((l) => {
+    const existingManualLots = lots.filter((l) => !l.lotId);
+    const availableSlotsForPicked = Math.max(0, STANDARD_BILL_LOTS_LIMIT - existingManualLots.length);
+    const formatted = selectedCandidateLots.slice(0, availableSlotsForPicked).map((l) => {
       const qty = Number(l.suitQuantity || l.pieces || l.quantity || 0);
       const amt = Number(l.businessBillAmount || l.billAmount || 0);
       let rate = Number(l.ownerRate || l.rate || 0);
-      if (!rate && qty > 0 && amt > 0) rate = Math.round(amt / qty);
+      if (!rate && qty > 0 && amt > 0) {
+        const rawRate = amt / qty;
+        rate = rawRate % 1 === 0 ? rawRate : Math.round(rawRate * 100) / 100;
+      }
       const finalAmt = amt || (qty && rate ? Math.round(qty * rate) : 0);
 
       return {
@@ -280,7 +355,7 @@ export default function OwnerBillModal({
       };
     });
 
-    setLots(formatted);
+    setLots([...formatted, ...existingManualLots]);
     setShowLotPicker(false);
   };
 
@@ -315,7 +390,8 @@ export default function OwnerBillModal({
       amount: Number(p.amount || 0),
       note: String(p.note || (p.paymentMethod ? `${p.paymentMethod} transfer` : 'Online transfer')).trim(),
     }));
-    setPaymentsList(formatted);
+    const existingManuals = paymentsList.filter((p) => !p.paymentId);
+    setPaymentsList([...formatted, ...existingManuals]);
     setShowPaymentPicker(false);
   };
 
@@ -349,7 +425,20 @@ export default function OwnerBillModal({
 
     setSaving(true);
     try {
-      const lotsPayload = lots.map((l) => ({
+      const validLots = lots.filter(
+        (l) => (l.lotNo && String(l.lotNo).trim()) || Number(l.amount || 0) > 0 || Number(l.quantity || 0) > 0
+      );
+      if (validLots.length === 0 && !prevBillAmount && Number(sabqaBaqaya || 0) === 0) {
+        Swal.fire({
+          icon: 'warning',
+          title: 'Khali Bill Save Nahi Ho Sakta',
+          text: 'Kam az kam 1 lot add karein ya koi pichla hisab shamil karein.',
+        });
+        setSaving(false);
+        return;
+      }
+
+      const lotsPayload = validLots.map((l) => ({
         ...l,
         quantity: Number(l.quantity || 0),
         rate: Number(l.rate || 0),
@@ -433,14 +522,20 @@ export default function OwnerBillModal({
     let text = `*RS EMBROIDERY*\n`;
     text += `*Mian Waqas:* 0300-0840719\n`;
     text += `Address: Kot Hanif Sheikhupura Road 4 Km Muridke\n`;
-    text += `*Bill #${billNo} (Book ${bookNo})* | *Bill To:* ${ownerName}\n`;
+    text += `*Bill #${billNo} (Book ${bookNo})* | *Bill To:* ${ownerName || 'Ghausia Collection'}\n`;
     text += `*Date:* ${formatDisplayDate(billDate)}\n\n`;
 
-    text += `*1. CURRENT LOTS:*\n`;
-    lots.forEach((l, idx) => {
-      text += `  ${idx + 1}. Lot ${l.lotNo || '-'} (D# ${l.designNo || '-'}): ${l.quantity} suit @ Rs ${l.rate} = Rs ${Number(l.amount).toLocaleString()}${l.note ? ` (${l.note})` : ''}\n`;
-    });
-    text += `  *Current Lots Total:* Rs ${currentBillTotal.toLocaleString()}\n\n`;
+    const validLots = lots.filter(
+      (l) => (l.lotNo && String(l.lotNo).trim()) || Number(l.amount || 0) > 0 || Number(l.quantity || 0) > 0
+    );
+
+    if (validLots.length > 0) {
+      text += `*1. CURRENT LOTS:*\n`;
+      validLots.forEach((l, idx) => {
+        text += `  ${idx + 1}. Lot ${l.lotNo || '-'} (D# ${l.designNo || '-'}): ${l.quantity} suit @ Rs ${l.rate} = Rs ${Number(l.amount).toLocaleString()}${l.note ? ` (${l.note})` : ''}\n`;
+      });
+      text += `  *Current Lots Total:* Rs ${currentBillTotal.toLocaleString()}\n\n`;
+    }
 
     if (prevBillTotal > 0) {
       text += `*+ Previous Bill (${prevBillNo || 'Previous'}):* +Rs ${prevBillTotal.toLocaleString()}\n`;
@@ -452,13 +547,14 @@ export default function OwnerBillModal({
     }
     text += `*Gross Total:* Rs ${grossTotal.toLocaleString()}\n\n`;
 
-    if (paymentsList.length > 0) {
+    const validPayments = paymentsList.filter((p) => Number(p.amount || 0) > 0);
+    if (validPayments.length > 0) {
       text += `*− Payments Received:*\n`;
-      paymentsList.forEach((p) => {
+      validPayments.forEach((p) => {
         const shortNote = formatShortWasooliNote(p.note);
         text += `  • ${formatDisplayDate(p.date)}: −Rs ${Number(p.amount).toLocaleString()}${shortNote ? ` (${shortNote})` : ''}\n`;
       });
-      if (paymentsList.length > 1) {
+      if (validPayments.length > 1) {
         text += `  *Total Received:* −Rs ${totalWasooli.toLocaleString()}\n`;
       }
       text += `\n`;
@@ -476,7 +572,14 @@ export default function OwnerBillModal({
     text += `=============================\n`;
     text += `Authorized Signature: Waqas`;
 
-    navigator.clipboard.writeText(text);
+    if (navigator && navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).catch(() => {
+        fallbackCopyText(text);
+      });
+    } else {
+      fallbackCopyText(text);
+    }
+
     Swal.fire({
       toast: true,
       position: 'top-end',
@@ -524,7 +627,7 @@ export default function OwnerBillModal({
               <style>
                 @page {
                   size: ${isLandscape ? 'A4 landscape' : '148mm 210mm portrait'};
-                  margin: 4mm 6mm;
+                  margin: ${isLandscape ? '4mm 5mm' : '4mm 4mm'};
                 }
                 * {
                   box-sizing: border-box !important;
@@ -547,22 +650,37 @@ export default function OwnerBillModal({
                   justify-content: ${printLayout === '1-up-portrait' ? 'center' : 'space-between'} !important;
                   align-items: stretch !important;
                   width: 100% !important;
-                  height: ${isLandscape ? '200mm' : '100%'} !important;
-                  max-height: ${isLandscape ? '202mm' : 'none'} !important;
-                  margin: 0 auto !important;
+                  max-width: 100% !important;
+                  height: ${isLandscape ? '192mm' : '100%'} !important;
+                  max-height: ${isLandscape ? '194mm' : 'none'} !important;
+                  margin: 0 !important;
+                  padding: 0 !important;
                   box-sizing: border-box !important;
                   page-break-inside: avoid !important;
                   break-inside: avoid !important;
+                  position: relative !important;
+                }
+                .official-bill-half-pane {
+                  flex: 0 0 50% !important;
+                  width: 50% !important;
+                  max-width: 50% !important;
+                  min-width: 50% !important;
+                  display: flex !important;
+                  box-sizing: border-box !important;
+                  padding: 0 3mm !important;
                 }
                 .official-bill-container {
                   box-shadow: none !important;
                   border: 1.5px solid #000000 !important;
-                  border-radius: 4px !important;
+                  border-radius: 2px !important;
                   box-sizing: border-box !important;
                   page-break-inside: avoid !important;
                   break-inside: avoid !important;
                   background: #ffffff !important;
                   color: #000000 !important;
+                  width: 100% !important;
+                  height: 100% !important;
+                  padding: 8px 10px !important;
                 }
                 .blank-half-sheet-print {
                   display: ${printLayout === '1-up-landscape' ? 'flex' : 'none'} !important;
@@ -573,31 +691,35 @@ export default function OwnerBillModal({
                   display: none !important;
                 }
                 .cut-divider {
-                  display: ${printLayout === '1-up-portrait' ? 'none' : 'flex'} !important;
-                  flex-direction: column !important;
-                  align-items: center !important;
-                  justify-content: center !important;
-                  position: relative !important;
-                }
-                .cut-line {
+                  display: ${printLayout === '1-up-portrait' || !showCutLine ? 'none' : 'block'} !important;
                   position: absolute !important;
                   top: 0 !important;
                   bottom: 0 !important;
                   left: 50% !important;
-                  border-left: 1.5px dashed #000000 !important;
+                  width: 0 !important;
+                  border-left: 1px dashed #64748b !important;
+                  z-index: 10 !important;
+                  pointer-events: none !important;
                 }
-                .cut-badge {
+                .cut-scissors-top {
+                  position: absolute !important;
+                  top: 2mm !important;
+                  left: -6px !important;
+                  font-size: 11px !important;
+                  line-height: 1 !important;
                   background: #ffffff !important;
-                  padding: 6px 2px !important;
-                  font-size: 9px !important;
-                  font-weight: 800 !important;
+                  padding: 1px 0 !important;
                   color: #000000 !important;
-                  z-index: 2 !important;
-                  writing-mode: vertical-rl !important;
-                  text-orientation: mixed !important;
-                  letter-spacing: 0.15em !important;
-                  border: 1px solid #000000 !important;
-                  border-radius: 3px !important;
+                }
+                .cut-scissors-bottom {
+                  position: absolute !important;
+                  bottom: 2mm !important;
+                  left: -6px !important;
+                  font-size: 11px !important;
+                  line-height: 1 !important;
+                  background: #ffffff !important;
+                  padding: 1px 0 !important;
+                  color: #000000 !important;
                 }
                 .bill-total-highlight,
                 .bill-total-highlight * {
@@ -655,9 +777,9 @@ export default function OwnerBillModal({
       style={{
         background: '#FFFFFF',
         color: '#000000',
-        padding: '10px 14px',
+        padding: '8px 10px',
         border: '1.5px solid #000000',
-        borderRadius: 4,
+        borderRadius: 2,
         fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
         width: '100%',
         height: '100%',
@@ -731,15 +853,15 @@ export default function OwnerBillModal({
           <tbody>
             {lots.length === 0 ? (
               <>
-                <tr style={{ height: 21, background: '#ffffff' }}>
-                  <td style={{ padding: '2px 2px', textAlign: 'center', border: '1px solid #cbd5e1', color: '#94a3b8', fontWeight: 600 }}>1</td>
-                  <td colSpan={5} style={{ padding: '2px 6px', color: '#64748b', fontStyle: 'italic', border: '1px solid #cbd5e1', fontSize: 10 }}>
+                <tr style={{ height: 22, background: '#ffffff' }}>
+                  <td style={{ padding: '3.5px 2px', textAlign: 'center', border: '1px solid #cbd5e1', color: '#94a3b8', fontWeight: 600 }}>1</td>
+                  <td colSpan={5} style={{ padding: '3.5px 6px', color: '#64748b', fontStyle: 'italic', border: '1px solid #cbd5e1', fontSize: 10 }}>
                     No lots added to this bill.
                   </td>
                 </tr>
                 {Array.from({ length: STANDARD_BILL_ROWS - 1 }).map((_, emptyIdx) => (
-                  <tr key={`empty-${emptyIdx}`} style={{ height: 21, background: emptyIdx % 2 !== 0 ? '#ffffff' : '#f8fafc' }}>
-                    <td style={{ padding: '2px 2px', textAlign: 'center', border: '1px solid #cbd5e1', color: '#94a3b8', fontWeight: 600, fontSize: 10 }}>{emptyIdx + 2}</td>
+                  <tr key={`empty-${emptyIdx}`} style={{ height: 22, background: emptyIdx % 2 !== 0 ? '#ffffff' : '#f8fafc' }}>
+                    <td style={{ padding: '3.5px 2px', textAlign: 'center', border: '1px solid #cbd5e1', color: '#94a3b8', fontWeight: 600, fontSize: 10 }}>{emptyIdx + 2}</td>
                     <td style={{ border: '1px solid #cbd5e1' }}>&nbsp;</td>
                     <td style={{ border: '1px solid #cbd5e1' }}>&nbsp;</td>
                     <td style={{ border: '1px solid #cbd5e1' }}>&nbsp;</td>
@@ -751,24 +873,24 @@ export default function OwnerBillModal({
             ) : (
               <>
                 {lots.map((l, idx) => (
-                  <tr key={idx} style={{ height: 21, background: idx % 2 === 0 ? '#ffffff' : '#f8fafc' }}>
-                    <td style={{ padding: '2px 2px', textAlign: 'center', border: '1px solid #cbd5e1', color: '#000000', fontWeight: 700 }}>
+                  <tr key={idx} style={{ height: 22, background: idx % 2 === 0 ? '#ffffff' : '#f8fafc' }}>
+                    <td style={{ padding: '3.5px 2px', textAlign: 'center', border: '1px solid #cbd5e1', color: '#000000', fontWeight: 700, fontSize: 10.5 }}>
                       {idx + 1}
                     </td>
-                    <td style={{ padding: '2px 4px', fontWeight: 800, border: '1px solid #cbd5e1', color: '#000000' }}>
-                      {l.lotNo}
+                    <td style={{ padding: '3.5px 4px', fontWeight: 800, border: '1px solid #cbd5e1', color: '#000000', fontSize: 10.5 }}>
+                      {formatBillLotNo(l)}
                       {l.note ? <span style={{ fontSize: 8.5, color: '#334155', display: 'block', fontWeight: 600 }}>{l.note}</span> : null}
                     </td>
-                    <td style={{ padding: '2px 4px', border: '1px solid #cbd5e1', color: '#000000', fontWeight: 700 }}>
+                    <td style={{ padding: '3.5px 4px', border: '1px solid #cbd5e1', color: '#000000', fontWeight: 700, fontSize: 10.5 }}>
                       {l.designNo}
                     </td>
-                    <td style={{ padding: '2px 4px', textAlign: 'right', border: '1px solid #cbd5e1', color: '#000000', fontWeight: 700 }}>
+                    <td style={{ padding: '3.5px 4px', textAlign: 'right', border: '1px solid #cbd5e1', color: '#000000', fontWeight: 700, fontSize: 10.5 }}>
                       {l.quantity}
                     </td>
-                    <td style={{ padding: '2px 4px', textAlign: 'right', border: '1px solid #cbd5e1', color: '#000000', fontWeight: 700 }}>
+                    <td style={{ padding: '3.5px 4px', textAlign: 'right', border: '1px solid #cbd5e1', color: '#000000', fontWeight: 700, fontSize: 10.5 }}>
                       {l.rate}
                     </td>
-                    <td style={{ padding: '2px 4px', textAlign: 'right', fontWeight: 800, border: '1px solid #cbd5e1', color: '#000000' }}>
+                    <td style={{ padding: '3.5px 4px', textAlign: 'right', fontWeight: 800, border: '1px solid #cbd5e1', color: '#000000', fontSize: 10.5 }}>
                       Rs {Number(l.amount).toLocaleString()}
                     </td>
                   </tr>
@@ -777,8 +899,8 @@ export default function OwnerBillModal({
                   const rowNum = lots.length + emptyIdx + 1;
                   const isEven = (lots.length + emptyIdx) % 2 !== 0;
                   return (
-                    <tr key={`empty-${emptyIdx}`} style={{ height: 21, background: isEven ? '#f8fafc' : '#ffffff' }}>
-                      <td style={{ padding: '2px 2px', textAlign: 'center', border: '1px solid #cbd5e1', color: '#94a3b8', fontWeight: 600, fontSize: 10 }}>
+                    <tr key={`empty-${emptyIdx}`} style={{ height: 22, background: isEven ? '#f8fafc' : '#ffffff' }}>
+                      <td style={{ padding: '3.5px 2px', textAlign: 'center', border: '1px solid #cbd5e1', color: '#94a3b8', fontWeight: 600, fontSize: 10 }}>
                         {rowNum}
                       </td>
                       <td style={{ border: '1px solid #cbd5e1' }}>&nbsp;</td>
@@ -796,11 +918,11 @@ export default function OwnerBillModal({
       </div>
 
       {/* Bottom Section: Calculations Breakdown + Signature */}
-      <div style={{ marginTop: 'auto', paddingTop: 2 }}>
+      <div style={{ marginTop: 'auto', paddingTop: 10 }}>
         {/* Calculations Breakdown */}
-        <div style={{ borderTop: '2px solid #000000', paddingTop: 4, fontSize: 11, color: '#000000' }}>
+        <div style={{ borderTop: '2px solid #000000', paddingTop: 10, fontSize: 12.5, color: '#000000' }}>
           {/* Row 1: Current Work */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '1.5px 0', fontWeight: 700, color: '#000000' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', fontWeight: 700, color: '#000000', fontSize: 13 }}>
             <span>Current Work (Lots Total):</span>
             <span style={{ fontWeight: 800 }}>Rs {currentBillTotal.toLocaleString()}</span>
           </div>
@@ -808,11 +930,11 @@ export default function OwnerBillModal({
           {/* Row 2: Previous Unpaid Bill */}
           {prevBillTotal > 0 && (
             <>
-              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '1.5px 0', color: '#000000' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4.5px 0', color: '#000000', fontSize: 12.5 }}>
                 <span>+ Previous Unpaid Bill ({prevBillNo || 'Previous'}):</span>
                 <span style={{ fontWeight: 700 }}>+Rs {prevBillTotal.toLocaleString()}</span>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '1.5px 0', fontWeight: 700, borderTop: '1px dashed #64748b', color: '#000000' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', fontWeight: 700, borderTop: '1px dashed #64748b', color: '#000000', fontSize: 12.5 }}>
                 <span>= Total Work (Current + Previous):</span>
                 <span style={{ fontWeight: 800 }}>Rs {kulKaamTotal.toLocaleString()}</span>
               </div>
@@ -820,13 +942,13 @@ export default function OwnerBillModal({
           )}
 
           {/* Row 3: Previous Balance */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '1.5px 0', fontWeight: 700, color: '#000000' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', fontWeight: 700, color: '#000000', fontSize: 13 }}>
             <span>+ Previous Balance:</span>
             <span style={{ fontWeight: 800 }}>+Rs {Number(sabqaBaqaya || 0).toLocaleString()}</span>
           </div>
 
           {/* Row 4: Gross Total */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0', fontWeight: 900, fontSize: 11.5, borderTop: '1px solid #000000', borderBottom: '1px solid #000000', margin: '2px 0', color: '#000000' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', fontWeight: 900, fontSize: 13.5, borderTop: '1.5px solid #000000', borderBottom: '1.5px solid #000000', margin: '6px 0', color: '#000000' }}>
             <span>= Gross Total:</span>
             <span>Rs {grossTotal.toLocaleString()}</span>
           </div>
@@ -835,30 +957,30 @@ export default function OwnerBillModal({
           {paymentsList.length > 0 && (
             <div
               style={{
-                padding: '2px 0',
+                padding: '6px 0',
                 borderTop: '1px dashed #cbd5e1',
                 borderBottom: '1px dashed #cbd5e1',
-                margin: '2px 0',
+                margin: '5px 0',
               }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: 10.5, fontWeight: 700, color: '#000000' }}>
+                <span style={{ fontSize: 12, fontWeight: 700, color: '#000000' }}>
                   − Payments Received ({paymentsList.length === 1 ? formatDisplayDate(paymentsList[0].date) : `${paymentsList.length} Payments`}):
                 </span>
-                <span style={{ fontSize: 11, fontWeight: 800, color: '#000000' }}>
+                <span style={{ fontSize: 12.5, fontWeight: 800, color: '#000000' }}>
                   −Rs {totalWasooli.toLocaleString()}
                 </span>
               </div>
               <div
                 style={{
-                  fontSize: 8.5,
+                  fontSize: 9.5,
                   color: '#475569',
                   fontWeight: 600,
-                  marginTop: 1,
+                  marginTop: 3,
                   display: 'flex',
                   flexWrap: 'wrap',
-                  gap: '1px 6px',
-                  lineHeight: 1.2,
+                  gap: '3px 10px',
+                  lineHeight: 1.35,
                 }}
               >
                 {paymentsList.map((p, pIdx) => {
@@ -876,49 +998,53 @@ export default function OwnerBillModal({
 
           {/* Row 6: Deductions */}
           {totalKatoti > 0 && (
-            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '1.5px 0', color: '#000000' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', color: '#000000', fontSize: 12.5 }}>
               <span>− Deductions ({katotiTitle}):</span>
               <span style={{ fontWeight: 800 }}>-Rs {totalKatoti.toLocaleString()}</span>
             </div>
           )}
 
-          {/* Row 7: Net Payable */}
+          {/* Row 7: Net Payable / Advance */}
           <div
             className="bill-total-highlight"
             style={{
               display: 'flex',
               justifyContent: 'space-between',
               alignItems: 'center',
-              padding: '5px 8px',
-              fontSize: 13,
+              padding: '8px 14px',
+              fontSize: 14.5,
               fontWeight: 900,
               background: '#0f172a',
               color: '#ffffff',
               borderRadius: 4,
-              marginTop: 4,
+              marginTop: 9,
             }}
           >
-            <span style={{ color: '#ffffff', fontWeight: 900 }}>👉 NET PAYABLE:</span>
-            <span style={{ color: '#ffffff', fontSize: 14.5, fontWeight: 900 }}>Rs {grandTotalBaqaya.toLocaleString()}</span>
+            <span style={{ color: '#ffffff', fontWeight: 900 }}>
+              {grandTotalBaqaya < 0 ? '👉 ADVANCE SURPLUS (PARTY ADVANCE):' : '👉 NET PAYABLE:'}
+            </span>
+            <span style={{ color: '#ffffff', fontSize: 16, fontWeight: 900 }}>
+              Rs {Math.abs(grandTotalBaqaya).toLocaleString()}
+            </span>
           </div>
 
           {formatLakhCrore(grandTotalBaqaya) && (
-            <div style={{ textAlign: 'right', fontSize: 9.5, color: '#334155', fontStyle: 'italic', marginTop: 2, fontWeight: 700 }}>
-              ({formatLakhCrore(grandTotalBaqaya)})
+            <div style={{ textAlign: 'right', fontSize: 10.5, color: '#334155', fontStyle: 'italic', marginTop: 3, fontWeight: 700 }}>
+              ({formatLakhCrore(Math.abs(grandTotalBaqaya))} {grandTotalBaqaya < 0 ? 'Advance' : ''})
             </div>
           )}
         </div>
 
         {/* Signature Area */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: 12, paddingTop: 6, color: '#000000' }}>
-          <div style={{ fontSize: 9.5, color: '#000000', fontWeight: 700 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: 22, paddingTop: 10, color: '#000000' }}>
+          <div style={{ fontSize: 11, color: '#000000', fontWeight: 700 }}>
             <div>Prepared By: ____________</div>
           </div>
           <div style={{ textAlign: 'center', color: '#000000' }}>
-            <div style={{ fontSize: 14, fontFamily: 'cursive', fontWeight: 900, letterSpacing: 1.5, marginBottom: 1, color: '#000000' }}>
+            <div style={{ fontSize: 16, fontFamily: 'cursive', fontWeight: 900, letterSpacing: 1.5, marginBottom: 2, color: '#000000' }}>
               Waqas
             </div>
-            <div style={{ borderTop: '1px solid #000000', paddingTop: 1, fontSize: 9, fontWeight: 700, color: '#000000' }}>
+            <div style={{ borderTop: '1.5px solid #000000', paddingTop: 3, fontSize: 10, fontWeight: 700, color: '#000000' }}>
               Authorized Signature
             </div>
           </div>
@@ -1133,7 +1259,7 @@ export default function OwnerBillModal({
                 }}
               >
                 <div>
-                  <strong style={{ color: '#ffffff' }}>ℹ️ Standard Bill Book Size (12 Lots / Page):</strong> Total {candidateLots.length} billable lots. First 12 lots in Bill #{billNo}, remaining in next bill.
+                  <strong style={{ color: '#ffffff' }}>ℹ️ Standard Bill Book Size ({STANDARD_BILL_LOTS_LIMIT} Lots / Page):</strong> Total {candidateLots.length} billable lots. First {STANDARD_BILL_LOTS_LIMIT} lots in Bill #{billNo}, remaining in next bill.
                 </div>
                 <button
                   type="button"
@@ -1208,7 +1334,7 @@ export default function OwnerBillModal({
             </div>
 
             {/* Table Body */}
-            <div style={{ overflowX: 'auto', maxHeight: '250px' }}>
+            <div style={{ overflowX: 'auto', maxHeight: '340px' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5, marginBottom: 0 }}>
                 <thead>
                   <tr style={{ background: '#120d0b', color: '#94a3b8', borderBottom: '1px solid rgba(255, 255, 255, 0.08)' }}>
@@ -1870,8 +1996,25 @@ export default function OwnerBillModal({
               ← Edit Bill Details
             </button>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-              {/* Layout Switcher (A4 Horizontal 1 Bill vs A4 2 Bills vs Pre-Cut Slip) */}
+              {/* Layout Switcher (A4 2 Bills vs A4 1 Bill vs Pre-Cut Slip) */}
               <div style={{ display: 'inline-flex', alignItems: 'center', background: 'rgba(255, 255, 255, 0.08)', borderRadius: 6, padding: 2, border: '1px solid var(--border)' }}>
+                <button
+                  type="button"
+                  onClick={() => setPrintLayout('2-up')}
+                  style={{
+                    fontSize: 11.5,
+                    fontWeight: 700,
+                    padding: '4px 10px',
+                    borderRadius: 4,
+                    border: 'none',
+                    background: printLayout === '2-up' ? '#2563eb' : 'transparent',
+                    color: printLayout === '2-up' ? '#ffffff' : '#94a3b8',
+                    cursor: 'pointer',
+                  }}
+                  title="A4 page par aik hi click mein 2 bills (1 single cutting line ke saath) print karein — No double feed!"
+                >
+                  📄 A4 (2 Bills - Ek Sath)
+                </button>
                 <button
                   type="button"
                   onClick={() => setPrintLayout('1-up-landscape')}
@@ -1887,24 +2030,7 @@ export default function OwnerBillModal({
                   }}
                   title="Print 1 bill on half A4 horizontally, saving the other half"
                 >
-                  📄 A4 Horizontal (Half-Sheet)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPrintLayout('2-up')}
-                  style={{
-                    fontSize: 11.5,
-                    fontWeight: 700,
-                    padding: '4px 10px',
-                    borderRadius: 4,
-                    border: 'none',
-                    background: printLayout === '2-up' ? '#2563eb' : 'transparent',
-                    color: printLayout === '2-up' ? '#ffffff' : '#94a3b8',
-                    cursor: 'pointer',
-                  }}
-                  title="Print 2 bills side-by-side on A4 (Party + Office Copy)"
-                >
-                  📄 A4 (2 Bills / Party + Office)
+                  📄 A4 (1 Bill / Half-Sheet)
                 </button>
                 <button
                   type="button"
@@ -1923,7 +2049,51 @@ export default function OwnerBillModal({
                 >
                   📄 Pre-Cut 14.8×21cm Slip
                 </button>
+                <label
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 5,
+                    fontSize: 11.5,
+                    fontWeight: 700,
+                    color: showCutLine ? '#60a5fa' : '#94a3b8',
+                    cursor: 'pointer',
+                    background: 'rgba(255, 255, 255, 0.05)',
+                    padding: '3px 8px',
+                    borderRadius: 4,
+                    border: '1px solid var(--border)',
+                  }}
+                  title="A4 sheet ke darmiyan mein 1 single dashed cutting line print karni hai ya nahi"
+                >
+                  <input
+                    type="checkbox"
+                    checked={showCutLine}
+                    onChange={(e) => setShowCutLine(e.target.checked)}
+                    style={{ accentColor: '#2563eb', cursor: 'pointer' }}
+                  />
+                  ✂ Center Cut Line
+                </label>
               </div>
+
+              {printLayout === '2-up' && (
+                <button
+                  type="button"
+                  onClick={() => setBadgeType((prev) => (prev === 'both-original' ? 'party-office' : 'both-original'))}
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 700,
+                    padding: '4px 8px',
+                    borderRadius: 5,
+                    border: '1px solid var(--border)',
+                    background: 'rgba(255, 255, 255, 0.06)',
+                    color: '#38bdf8',
+                    cursor: 'pointer',
+                  }}
+                  title="Click to toggle badges between 'Dono ORIGINAL' ya 'PARTY COPY + OFFICE COPY'"
+                >
+                  🏷️ {badgeType === 'both-original' ? 'Badge: Dono ORIGINAL' : 'Badge: Party + Office'}
+                </button>
+              )}
 
               <button
                 type="button"
@@ -1968,112 +2138,70 @@ export default function OwnerBillModal({
               justifyContent: printLayout === '1-up-portrait' ? 'center' : 'space-between',
               alignItems: 'stretch',
               width: '100%',
-              maxWidth: printLayout === '1-up-portrait' ? '520px' : '1060px',
+              maxWidth: printLayout === '1-up-portrait' ? '490px' : '1020px',
+              minHeight: printLayout === '1-up-portrait' ? '680px' : '710px',
               margin: '0 auto',
               boxSizing: 'border-box',
-              gap: printLayout === '1-up-portrait' ? '0' : '12px',
+              position: 'relative',
             }}
           >
             {printLayout === '2-up' && (
               <>
-                <div style={{ flex: 1, minWidth: 0, display: 'flex' }}>
-                  {renderBillSlip('PARTY COPY')}
+                <div className="official-bill-half-pane" style={{ flex: '0 0 50%', width: '50%', minWidth: 0, display: 'flex', padding: '0 4px', boxSizing: 'border-box', height: '100%' }}>
+                  {renderBillSlip(badgeType === 'both-original' ? 'ORIGINAL' : 'PARTY COPY')}
                 </div>
-                <div
-                  className="cut-divider"
-                  style={{
-                    width: '26px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    position: 'relative',
-                  }}
-                >
+                {showCutLine && (
                   <div
-                    className="cut-line"
+                    className="cut-divider"
                     style={{
                       position: 'absolute',
                       top: 0,
                       bottom: 0,
                       left: '50%',
-                      borderLeft: '1.5px dashed #000000',
-                    }}
-                  />
-                  <div
-                    className="cut-badge"
-                    style={{
-                      background: '#ffffff',
-                      padding: '8px 2px',
-                      fontSize: 9.5,
-                      fontWeight: 800,
-                      color: '#000000',
-                      zIndex: 2,
-                      writingMode: 'vertical-rl',
-                      textOrientation: 'mixed',
-                      letterSpacing: '0.15em',
-                      border: '1px solid #000000',
-                      borderRadius: 3,
+                      width: 0,
+                      borderLeft: '1px dashed #64748b',
+                      zIndex: 10,
+                      pointerEvents: 'none',
                     }}
                   >
-                    ✂ CUT HERE ✂
+                    <span className="cut-scissors-top" style={{ position: 'absolute', top: 6, left: -6, fontSize: 11, background: '#ffffff', color: '#000000', lineHeight: 1 }}>✂</span>
+                    <span className="cut-scissors-bottom" style={{ position: 'absolute', bottom: 6, left: -6, fontSize: 11, background: '#ffffff', color: '#000000', lineHeight: 1 }}>✂</span>
                   </div>
-                </div>
-                <div style={{ flex: 1, minWidth: 0, display: 'flex' }}>
-                  {renderBillSlip('OFFICE COPY')}
+                )}
+                <div className="official-bill-half-pane" style={{ flex: '0 0 50%', width: '50%', minWidth: 0, display: 'flex', padding: '0 4px', boxSizing: 'border-box', height: '100%' }}>
+                  {renderBillSlip(badgeType === 'both-original' ? 'ORIGINAL' : 'OFFICE COPY')}
                 </div>
               </>
             )}
 
             {printLayout === '1-up-landscape' && (
               <>
-                <div style={{ flex: 1, minWidth: 0, display: 'flex' }}>
+                <div className="official-bill-half-pane" style={{ flex: '0 0 50%', width: '50%', minWidth: 0, display: 'flex', padding: '0 4px', boxSizing: 'border-box', height: '100%' }}>
                   {renderBillSlip('ORIGINAL')}
                 </div>
-                <div
-                  className="cut-divider"
-                  style={{
-                    width: '26px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    position: 'relative',
-                  }}
-                >
+                {showCutLine && (
                   <div
-                    className="cut-line"
+                    className="cut-divider"
                     style={{
                       position: 'absolute',
                       top: 0,
                       bottom: 0,
                       left: '50%',
-                      borderLeft: '1.5px dashed #000000',
-                    }}
-                  />
-                  <div
-                    className="cut-badge"
-                    style={{
-                      background: '#ffffff',
-                      padding: '8px 2px',
-                      fontSize: 9,
-                      fontWeight: 800,
-                      color: '#000000',
-                      zIndex: 2,
-                      writingMode: 'vertical-rl',
-                      textOrientation: 'mixed',
-                      letterSpacing: '0.15em',
-                      border: '1px solid #000000',
-                      borderRadius: 3,
+                      width: 0,
+                      borderLeft: '1px dashed #64748b',
+                      zIndex: 10,
+                      pointerEvents: 'none',
                     }}
                   >
-                    ✂ CUT HERE (HALF SHEET) ✂
+                    <span className="cut-scissors-top" style={{ position: 'absolute', top: 6, left: -6, fontSize: 11, background: '#ffffff', color: '#000000', lineHeight: 1 }}>✂</span>
+                    <span className="cut-scissors-bottom" style={{ position: 'absolute', bottom: 6, left: -6, fontSize: 11, background: '#ffffff', color: '#000000', lineHeight: 1 }}>✂</span>
                   </div>
-                </div>
+                )}
                 <div
-                  className="blank-half-sheet-print"
+                  className="official-bill-half-pane blank-half-sheet-print"
                   style={{
-                    flex: 1,
+                    flex: '0 0 50%',
+                    width: '50%',
                     minWidth: 0,
                     display: 'flex',
                     flexDirection: 'column',
@@ -2085,19 +2213,21 @@ export default function OwnerBillModal({
                     color: '#94a3b8',
                     padding: 20,
                     textAlign: 'center',
+                    margin: '0 4px',
+                    boxSizing: 'border-box',
                   }}
                 >
                   <span style={{ fontSize: 28, marginBottom: 8 }}>📄</span>
                   <strong style={{ fontSize: 13, color: '#e2e8f0' }}>Blank Half-Sheet</strong>
                   <span style={{ fontSize: 11, color: '#94a3b8', marginTop: 4, maxWidth: 220 }}>
-                    Cut along the dashed line to keep this half-sheet for your next bill.
+                    Cut along the center dashed line (50%) to keep this half-sheet for your next bill.
                   </span>
                 </div>
               </>
             )}
 
             {printLayout === '1-up-portrait' && (
-              <div style={{ flex: 1, minWidth: 0, display: 'flex', width: '100%' }}>
+              <div style={{ flex: 1, minWidth: 0, display: 'flex', width: '100%', maxWidth: '490px' }}>
                 {renderBillSlip('ORIGINAL')}
               </div>
             )}
@@ -2139,8 +2269,13 @@ function LotPickerModal({ availableLots, currentlySelectedLotIds, currentBillNo 
   const [search, setSearch] = useState('');
 
   const unbilledLots = useMemo(() => {
-    return (availableLots || []).filter((l) => !l.ownerBillId && !l.billedInBillNo);
-  }, [availableLots]);
+    const selectedSet = new Set(currentlySelectedLotIds || []);
+    return (availableLots || []).filter((l) => {
+      const id = String(l.id || l._id);
+      if (selectedSet.has(id)) return true;
+      return !l.ownerBillId && !l.billedInBillNo;
+    });
+  }, [availableLots, currentlySelectedLotIds]);
 
   const filtered = useMemo(() => {
     if (!search.trim()) return unbilledLots;
@@ -2175,14 +2310,14 @@ function LotPickerModal({ availableLots, currentlySelectedLotIds, currentBillNo 
     });
   };
 
-  const selectFirst12 = () => {
-    const first12 = filtered.slice(0, STANDARD_BILL_LOTS_LIMIT).map((l) => String(l.id || l._id));
-    setSelectedIds(new Set(first12));
+  const selectFirstBatch = () => {
+    const first = filtered.slice(0, STANDARD_BILL_LOTS_LIMIT).map((l) => String(l.id || l._id));
+    setSelectedIds(new Set(first));
   };
 
-  const selectNext12 = () => {
-    const next12 = filtered.slice(STANDARD_BILL_LOTS_LIMIT, STANDARD_BILL_LOTS_LIMIT * 2).map((l) => String(l.id || l._id));
-    setSelectedIds(new Set(next12));
+  const selectNextBatch = () => {
+    const next = filtered.slice(STANDARD_BILL_LOTS_LIMIT, STANDARD_BILL_LOTS_LIMIT * 2).map((l) => String(l.id || l._id));
+    setSelectedIds(new Set(next));
   };
 
   const clearAll = () => setSelectedIds(new Set());
@@ -2193,7 +2328,7 @@ function LotPickerModal({ availableLots, currentlySelectedLotIds, currentBillNo 
   };
 
   return (
-    <Modal title="📦 Select Lots from Inventory (Standard Bill: 12 Lots)" onClose={onClose}>
+    <Modal title={`📦 Select Lots from Inventory (Standard Bill: ${STANDARD_BILL_LOTS_LIMIT} Lots)`} onClose={onClose}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         {availableLots.length > STANDARD_BILL_LOTS_LIMIT && (
           <div
@@ -2207,7 +2342,7 @@ function LotPickerModal({ availableLots, currentlySelectedLotIds, currentBillNo 
               lineHeight: 1.4,
             }}
           >
-            ℹ️ <strong>Standard Bill Book Size (12 Lots/Page):</strong> Total {availableLots.length} billable lots hain. Pehle 12 lots ka Bill #{currentBillNo || 1} banayein, baqi lots agle bill mein jayeingi.
+            ℹ️ <strong>Standard Bill Book Size ({STANDARD_BILL_LOTS_LIMIT} Lots/Page):</strong> Total {availableLots.length} billable lots hain. Pehle {STANDARD_BILL_LOTS_LIMIT} lots ka Bill #{currentBillNo || 1} banayein, baqi lots agle bill mein jayeingi.
           </div>
         )}
 
@@ -2224,19 +2359,19 @@ function LotPickerModal({ availableLots, currentlySelectedLotIds, currentBillNo 
             <button
               type="button"
               className="btn btn-secondary btn-xs"
-              onClick={selectFirst12}
+              onClick={selectFirstBatch}
               style={{ fontWeight: 700, color: '#38bdf8', borderColor: 'rgba(56, 189, 248, 0.35)' }}
             >
-              ⚡ Pehle 12 Lots (Bill #1)
+              ⚡ Pehle {STANDARD_BILL_LOTS_LIMIT} Lots (Bill #1)
             </button>
             {filtered.length > STANDARD_BILL_LOTS_LIMIT && (
               <button
                 type="button"
                 className="btn btn-secondary btn-xs"
-                onClick={selectNext12}
+                onClick={selectNextBatch}
                 style={{ fontWeight: 700, color: '#a78bfa', borderColor: 'rgba(167, 139, 250, 0.35)' }}
               >
-                ⚡ Agle Lots (Lots 13-{Math.min(24, filtered.length)})
+                ⚡ Agle Lots (Lots {STANDARD_BILL_LOTS_LIMIT + 1}-{Math.min(STANDARD_BILL_LOTS_LIMIT * 2, filtered.length)})
               </button>
             )}
             <button type="button" className="btn btn-secondary btn-xs" onClick={clearAll}>
@@ -2257,7 +2392,10 @@ function LotPickerModal({ availableLots, currentlySelectedLotIds, currentBillNo 
               const qty = Number(l.suitQuantity || l.pieces || l.quantity || 0);
               const amt = Number(l.businessBillAmount || l.billAmount || 0);
               let rate = Number(l.ownerRate || l.rate || 0);
-              if (!rate && qty > 0 && amt > 0) rate = Math.round(amt / qty);
+              if (!rate && qty > 0 && amt > 0) {
+                const rawRate = amt / qty;
+                rate = rawRate % 1 === 0 ? rawRate : Math.round(rawRate * 100) / 100;
+              }
 
               return (
                 <div
@@ -2332,14 +2470,16 @@ function PaymentPickerModal({ payments, currentlySelectedPaymentIds, settledPaym
   const [search, setSearch] = useState('');
 
   const unbilledPayments = useMemo(() => {
+    const selectedSet = new Set(currentlySelectedPaymentIds || []);
     return payments.filter((p) => {
       const id = String(p.id || p._id);
+      if (selectedSet.has(id)) return true;
       if (settledPaymentIds && settledPaymentIds.has(id)) return false;
       if (p.isLegacySettled) return false;
-      if (p.billedInBillNo && p.billedInBillNo !== 'none') return false;
+      if (p.billedInBillNo != null && p.billedInBillNo !== '' && p.billedInBillNo !== 'none') return false;
       return true;
     });
-  }, [payments, settledPaymentIds]);
+  }, [payments, settledPaymentIds, currentlySelectedPaymentIds]);
 
   const filtered = useMemo(() => {
     if (!search.trim()) return unbilledPayments;
@@ -2353,13 +2493,13 @@ function PaymentPickerModal({ payments, currentlySelectedPaymentIds, settledPaym
   }, [unbilledPayments, search]);
 
   const toggle = (id) => {
-    if (settledPaymentIds && settledPaymentIds.has(id)) {
+    if (settledPaymentIds && settledPaymentIds.has(id) && !selectedIds.has(id)) {
       Swal.fire({
         toast: true,
         position: 'top-end',
         icon: 'info',
         title: 'Already Settled',
-        text: 'Yeh payment pehle hi finalized bill mein adjust ho chuki hai.',
+        text: 'Yeh payment pehle hi kisi aur finalized bill mein adjust ho chuki hai.',
         timer: 3000,
       });
       return;
@@ -2373,7 +2513,10 @@ function PaymentPickerModal({ payments, currentlySelectedPaymentIds, settledPaym
   };
 
   const selectAll = () => {
-    const unbilled = filtered.filter((p) => !settledPaymentIds || !settledPaymentIds.has(String(p.id || p._id)));
+    const unbilled = filtered.filter((p) => {
+      const id = String(p.id || p._id);
+      return !settledPaymentIds || !settledPaymentIds.has(id) || selectedIds.has(id);
+    });
     setSelectedIds(new Set(unbilled.map((p) => String(p.id || p._id))));
   };
   const clearAll = () => setSelectedIds(new Set());
@@ -2419,7 +2562,7 @@ function PaymentPickerModal({ payments, currentlySelectedPaymentIds, settledPaym
           ) : (
             filtered.map((p) => {
               const id = String(p.id || p._id);
-              const isSettled = settledPaymentIds && settledPaymentIds.has(id);
+              const isSettled = settledPaymentIds && settledPaymentIds.has(id) && !selectedIds.has(id);
               const checked = selectedIds.has(id);
               const amt = Number(p.amount || 0);
 

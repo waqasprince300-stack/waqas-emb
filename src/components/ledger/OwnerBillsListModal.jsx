@@ -149,12 +149,22 @@ export default function OwnerBillsListModal({
                     <td>{b.lots?.length || 0} lots</td>
                     <td style={{ textAlign: 'right', fontWeight: 600 }}>
                       Rs {Number(b.currentBillTotal || 0).toLocaleString()}
+                      {Number(b.unpaidPreviousBillsTotal || 0) > 0 && (
+                        <div style={{ fontSize: 10, color: '#38bdf8', fontWeight: 500 }}>
+                          +Pichla: Rs {Number(b.unpaidPreviousBillsTotal).toLocaleString()}
+                        </div>
+                      )}
                     </td>
                     <td style={{ textAlign: 'right', color: 'var(--warning, #d97706)' }}>
                       Rs {Number(b.sabqaBaqaya || 0).toLocaleString()}
                     </td>
                     <td style={{ textAlign: 'right', color: 'var(--success, #059669)' }}>
                       Rs {Number(b.totalPaymentsReceived || 0).toLocaleString()}
+                      {Number(b.totalDeductions || 0) > 0 && (
+                        <div style={{ fontSize: 10, color: '#f87171', fontWeight: 500 }}>
+                          Katoti: -Rs {Number(b.totalDeductions).toLocaleString()}
+                        </div>
+                      )}
                     </td>
                     <td style={{ textAlign: 'right', fontWeight: 800, color: 'var(--primary, #1e40af)' }}>
                       Rs {Number(b.grandTotalBaqaya || 0).toLocaleString()}

@@ -1046,7 +1046,14 @@ export function AppProvider({ children }) {
         const matchId = lotIdSet.has(String(lot.id || lot._id || ''));
         const matchNo = lotNoSet.has(String(lot.lotNo || lot.lotNumber || '').trim());
         if (matchId || matchNo) {
-          return {
+          const matchBilled = lotsBilled.find((l) => {
+            const lid = String(l.id || l._id || l.lotId || '');
+            const lno = String(l.lotNo || l.lotNumber || '').trim();
+            return (lid && (lid === String(lot.id || '') || lid === String(lot._id || ''))) ||
+                   (lno && (lno === String(lot.lotNo || '').trim() || lno === String(lot.lotNumber || '').trim()));
+          });
+
+          const updated = {
             ...lot,
             status: 'completed',
             ownerBillId: billInfo?.id || billInfo?._id || lot.ownerBillId,
@@ -1055,6 +1062,18 @@ export function AppProvider({ children }) {
             completionApprovedAt: new Date().toISOString(),
             receivedBackDate: lot.receivedBackDate || new Date().toISOString().slice(0, 10),
           };
+
+          if (matchBilled) {
+            const r = Number(matchBilled.rate || 0);
+            const a = Number(matchBilled.amount || 0);
+            if (r > 0) updated.rate = r;
+            if (a > 0) {
+              updated.billAmount = a;
+              updated.totalAmount = a;
+            }
+          }
+
+          return updated;
         }
         return lot;
       });
