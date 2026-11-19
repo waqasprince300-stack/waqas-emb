@@ -86,7 +86,9 @@ export default function PLSummaryCards({ totals, partyBalanceInfo, isParty }) {
           color: `${(partyBalanceInfo?.completedNet ?? 0) >= 0 ? 'var(--success, #0f766e)' : 'var(--danger, #dc2626)'}`,
           sub: isParty 
             ? 'Your ledger (received - completed bill)' 
-            : '(Calculated after deducting total advances from total payable)',
+            : partyBalanceInfo?.totalAdvance > 0
+              ? `Total Payable (Advance: ₨${partyBalanceInfo.totalAdvance.toLocaleString()})`
+              : 'Matches Parties total payable',
         },
         {
           key: 'overall-balance',

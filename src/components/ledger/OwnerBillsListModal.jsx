@@ -37,12 +37,20 @@ export default function OwnerBillsListModal({
   }, [loadBills]);
 
   const handleDelete = async (b) => {
+    const hasNewerBills = bills.some(
+      (other) =>
+        Number(other.bookNo || 1) > Number(b.bookNo || 1) ||
+        (Number(other.bookNo || 1) === Number(b.bookNo || 1) && Number(other.billNo || 1) > Number(b.billNo || 1))
+    );
+
     const res = await Swal.fire({
       title: `Delete Bill #${b.billNo}?`,
-      text: 'Are you sure you want to delete this saved bill record?',
+      html: hasNewerBills
+        ? `<div style="font-size:13px; color:#f87171; margin-bottom:8px; line-height:1.4;">⚠️ <strong>Tawajjo:</strong> Is bill ke baad agle bills ban chuke hain. Isay delete karne se hisab ki chain toot sakti hai.</div>Kya aap waqai is bill ko delete karna chahte hain?`
+        : 'Kya aap waqai is saved bill record ko delete karna chahte hain?',
       icon: 'warning',
       showCancelButton: true,
-      confirmButtonText: 'Yes, delete',
+      confirmButtonText: 'Haan, delete karein',
       cancelButtonText: 'Cancel',
       confirmButtonColor: '#dc2626',
     });

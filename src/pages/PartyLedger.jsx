@@ -11,7 +11,7 @@ import {
   latestDateFrom,
   compareRowsByUpdatedNewestFirst,
 } from '../utils/dateFilters';
-import { getPartyLedgerBillNumeric } from '../utils/partyBillPrivacy';
+import { getPartyLedgerBillNumeric, getAdminLedgerOrBusinessBill } from '../utils/partyBillPrivacy';
 import { workspaceDisplayTitleForLot, normalizedBusinessOwnerId } from '../utils/businessWorkspace';
 import {
   countPendingBillRevisionRequests,
@@ -336,7 +336,13 @@ export default function PartyLedger() {
 
     return ledgerLots
       .filter(byWorkspace)
-      .filter((l) => String(l.partyId || '').trim() || String(l.partyName || '').trim())
+      .filter((l) => {
+        const pid = String(l.partyId || '').trim();
+        const pname = String(l.partyName || '').trim().toLowerCase();
+        if (pid && pid !== 'null' && pid !== 'undefined') return true;
+        if (pname && pname !== 'unknown' && pname !== '-') return true;
+        return false;
+      })
       .filter((lot) =>
         isWithinDateRange(
           latestDateFrom(lot, [
@@ -398,10 +404,13 @@ export default function PartyLedger() {
   const getPartyNameLocal = (partyId, fallback) =>
     parties.find((p) => samePartyId(p.id, partyId))?.name || fallback || '-';
 
-  /** Totals use party ledger amounts only (same figure party and admin see in the table - never lot bill fallback). */
+  /** Totals use agreed party amount when set, falling back to lot bill for admin reconciliation (matches Parties page). */
   const getLedgerAmountForTotals = (l) => {
     const pe = ledgerPartyEdits[l.id] || {};
-    return getPartyLedgerBillNumeric(pe);
+    if (isParty) {
+      return getPartyLedgerBillNumeric(pe);
+    }
+    return getAdminLedgerOrBusinessBill(l, pe);
   };
 
   const filtered = useMemo(() => {
@@ -1386,32 +1395,100 @@ export default function PartyLedger() {
     };
 
     if (partyFilter === 'All') {
-      const receivedFromBusiness = pays
-        .filter(isVendorPartyPayment)
-        .reduce((s, p) => s + Number(p.amount || 0), 0);
-      const paidToBusiness = receiveds
-        .filter(isVendorPartyPayment)
-        .reduce((s, p) => s + Number(p.amount || 0), 0);
-      const balance = totals.billTotal - receivedFromBusiness + paidToBusiness;
+      // Reconciled per-party aggregation (matches Parties page vendor accounting):
+      // Each party's balance is evaluated independently. Advances of one party do NOT reduce what is owed to another party.
+      const lotsByParty = new Map();
+      for (const l of lotsForSummaryStats) {
+        const pid = String(l.partyId ?? '');
+        if (!lotsByParty.has(pid)) lotsByParty.set(pid, []);
+        lotsByParty.get(pid).push(l);
+      }
+
+      const addAmt = (byId, byName, p, amt) => {
+        if (p.partyId != null && String(p.partyId).trim() !== '') {
+          const k = String(p.partyId);
+          byId.set(k, (byId.get(k) || 0) + amt);
+        } else {
+          const k = String(p.party || '').trim();
+          byName.set(k, (byName.get(k) || 0) + amt);
+        }
+      };
+
+      const paidByPartyId = new Map();
+      const paidByPartyName = new Map();
+      const receivedByPartyId = new Map();
+      const receivedByPartyName = new Map();
+      for (const p of pays.filter(isVendorPartyPayment)) {
+        addAmt(paidByPartyId, paidByPartyName, p, Number(p.amount || 0));
+      }
+      for (const p of receiveds.filter(isVendorPartyPayment)) {
+        addAmt(receivedByPartyId, receivedByPartyName, p, Number(p.amount || 0));
+      }
+
+      let totalCompletedPayable = 0;
+      let totalOverallPayable = 0;
+      let totalAdvance = 0;
+      let totalPaidAll = 0;
+      let totalReceivedAll = 0;
+
+      for (const party of parties) {
+        const pid = String(party.id ?? party._id ?? '');
+        const lots = lotsByParty.get(pid) || [];
+        const pname = String(party.name || '').trim();
+
+        let partyCompletedAmt = 0;
+        let partyTotalBillAmt = 0;
+        for (const l of lots) {
+          const amt = getLedgerAmountForTotals(l);
+          partyTotalBillAmt += amt;
+          if (getDisplayStatus(l) === 'Completed') {
+            partyCompletedAmt += amt;
+          }
+        }
+
+        const totalPaid = (paidByPartyId.get(pid) || 0) + (paidByPartyName.get(pname) || 0);
+        const receivedFromParty = (receivedByPartyId.get(pid) || 0) + (receivedByPartyName.get(pname) || 0);
+        totalPaidAll += totalPaid;
+        totalReceivedAll += receivedFromParty;
+
+        const completedRem = partyCompletedAmt - totalPaid + receivedFromParty;
+        const overallRem = partyTotalBillAmt - totalPaid + receivedFromParty;
+
+        if (completedRem > 0) totalCompletedPayable += completedRem;
+        else if (completedRem < 0) totalAdvance += Math.abs(completedRem);
+
+        if (overallRem > 0) totalOverallPayable += overallRem;
+      }
 
       return {
-        balance,
-        receivedFromBusiness,
-        paidToBusiness,
-        completedNet: totals.completedAmount - receivedFromBusiness + paidToBusiness,
+        balance: totalOverallPayable,
+        receivedFromBusiness: totalPaidAll,
+        paidToBusiness: totalReceivedAll,
+        completedNet: totalCompletedPayable,
+        totalAdvance,
         hint:
           workspaceFilter === 'All'
             ? isParty
               ? 'Overall ledger (Status filter does not change these totals).'
-              : 'Overall totals for filtered workspaces - Status filter only changes the table below.'
+              : 'Sum of individual party payables (matches Parties page).'
             : isParty
               ? 'Overall for this workspace (Status filter does not change these totals).'
-              : 'Overall for this workspace - Status filter only changes the table below.',
+              : 'Overall for this workspace - matches individual party payables.',
       };
     }
 
     const party = parties.find((p) => samePartyId(p.id, partyFilter));
     const pname = (party?.name || '').trim();
+
+    let partyCompletedAmt = 0;
+    let partyTotalBillAmt = 0;
+    for (const l of lotsForSummaryStats) {
+      const amt = getLedgerAmountForTotals(l);
+      partyTotalBillAmt += amt;
+      if (getDisplayStatus(l) === 'Completed') {
+        partyCompletedAmt += amt;
+      }
+    }
 
     const receivedFromBusiness = pays
       .filter((p) => samePartyId(p.partyId, partyFilter) || (pname && String(p.party || '').trim().toLowerCase() === pname.toLowerCase()))
@@ -1421,10 +1498,10 @@ export default function PartyLedger() {
       .reduce((s, p) => s + Number(p.amount || 0), 0);
 
     return {
-      balance: totals.billTotal - receivedFromBusiness + paidToBusiness,
+      balance: partyTotalBillAmt - receivedFromBusiness + paidToBusiness,
       receivedFromBusiness,
       paidToBusiness,
-      completedNet: totals.completedAmount - receivedFromBusiness + paidToBusiness,
+      completedNet: partyCompletedAmt - receivedFromBusiness + paidToBusiness,
       hint: pname
         ? isParty
           ? `${pname} - overall balance (bill - paid to you + you paid back). Status filter does not change this.`

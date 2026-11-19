@@ -123,36 +123,19 @@ export default function OwnerBillModal({
 
   const [notes, setNotes] = useState(existingBill?.notes || '');
   const printAreaRef = useRef(null);
+  const candidateLotsRef = useRef(candidateLots);
+  candidateLotsRef.current = candidateLots;
+  const defaultsLoadedRef = useRef(false);
 
   // Load Defaults & Previous Bill Balance
   useEffect(() => {
-    if (isEditing && existingBill) {
-      setBookNo(existingBill.bookNo || 1);
-      setBillNo(existingBill.billNo || 1);
-      setBillDate(
-        existingBill.date ? String(existingBill.date).slice(0, 10) : new Date().toISOString().slice(0, 10)
-      );
-      setSabqaBaqaya(Number(existingBill.sabqaBaqaya != null ? existingBill.sabqaBaqaya : 0));
-      setPrevBillNo(existingBill.unpaidPreviousBills?.[0]?.billNo || '');
-      setPrevBillAmount(existingBill.unpaidPreviousBills?.[0]?.amount || 0);
-      setKatotiTitle(existingBill.deductions?.[0]?.title || 'Dhaga Katoti');
-      setKatotiAmount(existingBill.deductions?.[0]?.amount || 0);
-      setNotes(existingBill.notes || '');
-      if (existingBill.lots) {
-        setLots(existingBill.lots.map((l) => ({ ...l, selected: true })));
-      }
-      if (existingBill.paymentsReceived && existingBill.paymentsReceived.length > 0) {
-        setPaymentsList(
-          existingBill.paymentsReceived.map((p) => ({
-            paymentId: String(p.paymentId || p.id || p._id || ''),
-            date: p.date ? String(p.date).slice(0, 10) : new Date().toISOString().slice(0, 10),
-            amount: Number(p.amount || 0),
-            note: String(p.note || 'Online / Cash received'),
-          }))
-        );
-      } else {
-        setPaymentsList([]);
-      }
+    if (isEditing) {
+      setLoadingDefaults(false);
+      return;
+    }
+
+    if (defaultsLoadedRef.current) {
+      setLoadingDefaults(false);
       return;
     }
 
@@ -162,6 +145,7 @@ export default function OwnerBillModal({
       try {
         const res = await apiService.getOwnerBills(ownerId);
         if (!isMounted) return;
+        defaultsLoadedRef.current = true;
 
         const next = res?.nextDefaults || {};
         if (next.nextBookNo) setBookNo(next.nextBookNo);
@@ -181,8 +165,9 @@ export default function OwnerBillModal({
         const billedIds = new Set(next?.billedPaymentIds || []);
         setSettledPaymentIds(billedIds);
 
-        // Only start with up to standard 8 billable lots (Standard physical bill book size)
-        const unbilledLots = candidateLots.filter((l) => !l.ownerBillId && !l.billedInBillNo);
+        // Only start with up to standard 15 billable lots (Standard physical bill book size)
+        const currentCandidateLots = candidateLotsRef.current || [];
+        const unbilledLots = currentCandidateLots.filter((l) => !l.ownerBillId && !l.billedInBillNo);
         const initialSlice = unbilledLots.slice(0, STANDARD_BILL_LOTS_LIMIT).map((l) => {
           const qty = Number(l.suitQuantity || l.pieces || l.quantity || 0);
           const amt = Number(l.businessBillAmount || l.billAmount || 0);
@@ -207,20 +192,27 @@ export default function OwnerBillModal({
         });
         setLots(initialSlice);
 
-        // New bills start clean with 0 payments — user can click 'Select Payments' or '+ Add Cash / Manual'
+        // New bills start clean with 0 payments
         setPaymentsList([]);
       } catch (err) {
         console.warn('Could not load bill defaults:', err.message);
       } finally {
-        if (isMounted) setLoadingDefaults(false);
+        setLoadingDefaults(false);
       }
     }
 
     loadDefaults();
+
+    // Safety timeout: Never stay stuck in loading more than 2.5s even if network delays
+    const safetyTimer = setTimeout(() => {
+      setLoadingDefaults(false);
+    }, 2500);
+
     return () => {
       isMounted = false;
+      clearTimeout(safetyTimer);
     };
-  }, [isEditing, ownerId, candidateLots, candidatePayments, existingBill, initialPreviousBalance]);
+  }, [isEditing, ownerId, initialPreviousBalance]);
 
   // Calculations matching Waqas's physical bill formula exactly:
   const currentBillTotal = useMemo(
@@ -517,8 +509,8 @@ export default function OwnerBillModal({
     }
   };
 
-  // WhatsApp Summary Copy (Clean English, multi-payment support)
-  const copyWhatsAppText = () => {
+  // WhatsApp Summary Generator (Clean, professional, multi-payment & dupatta suffix support)
+  const generateWhatsAppText = () => {
     let text = `*RS EMBROIDERY*\n`;
     text += `*Mian Waqas:* 0300-0840719\n`;
     text += `Address: Kot Hanif Sheikhupura Road 4 Km Muridke\n`;
@@ -532,7 +524,7 @@ export default function OwnerBillModal({
     if (validLots.length > 0) {
       text += `*1. CURRENT LOTS:*\n`;
       validLots.forEach((l, idx) => {
-        text += `  ${idx + 1}. Lot ${l.lotNo || '-'} (D# ${l.designNo || '-'}): ${l.quantity} suit @ Rs ${l.rate} = Rs ${Number(l.amount).toLocaleString()}${l.note ? ` (${l.note})` : ''}\n`;
+        text += `  ${idx + 1}. Lot ${formatBillLotNo(l) || '-'} (D# ${l.designNo || '-'}): ${l.quantity} suit @ Rs ${l.rate} = Rs ${Number(l.amount).toLocaleString()}${l.note ? ` (${l.note})` : ''}\n`;
       });
       text += `  *Current Lots Total:* Rs ${currentBillTotal.toLocaleString()}\n\n`;
     }
@@ -542,7 +534,9 @@ export default function OwnerBillModal({
       text += `  *Total Work:* Rs ${kulKaamTotal.toLocaleString()}\n\n`;
     }
 
-    if (Number(sabqaBaqaya || 0) !== 0) {
+    if (Number(sabqaBaqaya || 0) < 0) {
+      text += `*− Previous Advance Surplus:* −Rs ${Math.abs(Number(sabqaBaqaya)).toLocaleString()}\n`;
+    } else if (Number(sabqaBaqaya || 0) > 0) {
       text += `*+ Previous Balance:* +Rs ${Number(sabqaBaqaya).toLocaleString()}\n`;
     }
     text += `*Gross Total:* Rs ${grossTotal.toLocaleString()}\n\n`;
@@ -561,17 +555,28 @@ export default function OwnerBillModal({
     }
 
     if (totalKatoti > 0) {
-      text += `*− Deductions (${katotiTitle}):* -Rs ${totalKatoti.toLocaleString()}\n`;
+      text += `*− Deductions (${katotiTitle}):* −Rs ${totalKatoti.toLocaleString()}\n`;
     }
 
     text += `\n=============================\n`;
-    text += `*👉 NET PAYABLE:* Rs ${grandTotalBaqaya.toLocaleString()}\n`;
-    if (formatLakhCrore(grandTotalBaqaya)) {
-      text += `(${formatLakhCrore(grandTotalBaqaya)})\n`;
+    if (grandTotalBaqaya < 0) {
+      text += `*👉 ADVANCE SURPLUS (PARTY ADVANCE):* Rs ${Math.abs(grandTotalBaqaya).toLocaleString()}\n`;
+      if (formatLakhCrore(Math.abs(grandTotalBaqaya))) {
+        text += `(${formatLakhCrore(Math.abs(grandTotalBaqaya))} Advance)\n`;
+      }
+    } else {
+      text += `*👉 NET PAYABLE:* Rs ${grandTotalBaqaya.toLocaleString()}\n`;
+      if (formatLakhCrore(grandTotalBaqaya)) {
+        text += `(${formatLakhCrore(grandTotalBaqaya)})\n`;
+      }
     }
     text += `=============================\n`;
     text += `Authorized Signature: Waqas`;
+    return text;
+  };
 
+  const copyWhatsAppText = () => {
+    const text = generateWhatsAppText();
     if (navigator && navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(text).catch(() => {
         fallbackCopyText(text);
@@ -588,6 +593,12 @@ export default function OwnerBillModal({
       showConfirmButton: false,
       timer: 2000,
     });
+  };
+
+  const shareDirectWhatsApp = () => {
+    const text = generateWhatsAppText();
+    const url = `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
+    window.open(url, '_blank');
   };
 
   useEffect(() => {
@@ -800,11 +811,11 @@ export default function OwnerBillModal({
             <span
               style={{
                 fontSize: 9,
-                fontWeight: 800,
+                fontWeight: 900,
                 textTransform: 'uppercase',
-                color: '#1e40af',
-                background: '#eff6ff',
-                border: '1px solid #bfdbfe',
+                color: '#000000',
+                background: '#f8fafc',
+                border: '1.5px solid #000000',
                 padding: '1px 6px',
                 borderRadius: 3,
                 letterSpacing: '0.04em',
@@ -814,54 +825,54 @@ export default function OwnerBillModal({
             </span>
             <span>Mob: 0300-0840719</span>
           </div>
-          <div style={{ textAlign: 'center', fontSize: 19, fontWeight: 900, letterSpacing: '0.05em', color: '#000000', textTransform: 'uppercase', lineHeight: 1.15, marginTop: 1 }}>
+          <div style={{ textAlign: 'center', fontSize: 18.5, fontWeight: 900, letterSpacing: '0.05em', color: '#000000', textTransform: 'uppercase', lineHeight: 1.15, marginTop: 1 }}>
             RS EMBROIDERY
           </div>
-          <div style={{ textAlign: 'center', fontSize: 9.5, color: '#475569', fontWeight: 700, letterSpacing: '0.01em', marginTop: 1 }}>
+          <div style={{ textAlign: 'center', fontSize: 9.5, color: '#334155', fontWeight: 700, letterSpacing: '0.01em', marginTop: 1 }}>
             Address: Kot Hanif Sheikhupura Road 4 Km Muridke
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, fontWeight: 800, marginTop: 5, color: '#000000', borderTop: '1px dashed #cbd5e1', paddingTop: 4 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10.5, fontWeight: 800, marginTop: 4, color: '#000000', borderTop: '1px dashed #cbd5e1', paddingTop: 3 }}>
             <div>Date: <u style={{ fontWeight: 900 }}>{formatDisplayDate(billDate)}</u></div>
             <div>Book#: <u style={{ fontWeight: 900 }}>{bookNo}</u> &nbsp;&nbsp; Bill#: <u style={{ fontWeight: 900 }}>{billNo}</u></div>
           </div>
-          <div style={{ textAlign: 'left', fontSize: 12, fontWeight: 900, marginTop: 4, color: '#000000' }}>
+          <div style={{ textAlign: 'left', fontSize: 11.5, fontWeight: 900, marginTop: 3, color: '#000000' }}>
             <span>Bill To: </span>
             <u style={{ fontWeight: 900 }}>{ownerName || '—'}</u>
           </div>
         </div>
 
-        {/* Standard Fixed 12-Row Table (Physical Bill Book Format) */}
+        {/* Standard Fixed 15-Row Table (Physical Bill Book Format) */}
         <table
           style={{
             width: '100%',
             borderCollapse: 'collapse',
-            fontSize: 10.5,
+            fontSize: 10,
             color: '#000000',
-            marginBottom: 4,
+            marginBottom: 2,
           }}
         >
           <thead>
             <tr style={{ background: '#0f172a', color: '#ffffff' }}>
-              <th style={{ padding: '4px 2px', width: 28, textAlign: 'center', border: '1px solid #000000', color: '#ffffff', fontWeight: 800 }}>SR#</th>
-              <th style={{ padding: '4px 4px', border: '1px solid #000000', color: '#ffffff', fontWeight: 800 }}>LOT#</th>
-              <th style={{ padding: '4px 4px', border: '1px solid #000000', color: '#ffffff', fontWeight: 800 }}>DESIGN#</th>
-              <th style={{ padding: '4px 4px', width: 42, textAlign: 'right', border: '1px solid #000000', color: '#ffffff', fontWeight: 800 }}>QTY</th>
-              <th style={{ padding: '4px 4px', width: 45, textAlign: 'right', border: '1px solid #000000', color: '#ffffff', fontWeight: 800 }}>RATE</th>
-              <th style={{ padding: '4px 4px', width: 85, textAlign: 'right', border: '1px solid #000000', color: '#ffffff', fontWeight: 800 }}>AMOUNT (RS)</th>
+              <th style={{ padding: '3px 2px', width: 26, textAlign: 'center', border: '1px solid #000000', color: '#ffffff', fontWeight: 800 }}>SR#</th>
+              <th style={{ padding: '3px 4px', border: '1px solid #000000', color: '#ffffff', fontWeight: 800 }}>LOT#</th>
+              <th style={{ padding: '3px 4px', border: '1px solid #000000', color: '#ffffff', fontWeight: 800 }}>DESIGN#</th>
+              <th style={{ padding: '3px 4px', width: 40, textAlign: 'right', border: '1px solid #000000', color: '#ffffff', fontWeight: 800 }}>QTY</th>
+              <th style={{ padding: '3px 4px', width: 44, textAlign: 'right', border: '1px solid #000000', color: '#ffffff', fontWeight: 800 }}>RATE</th>
+              <th style={{ padding: '3px 4px', width: 84, textAlign: 'right', border: '1px solid #000000', color: '#ffffff', fontWeight: 800 }}>AMOUNT (RS)</th>
             </tr>
           </thead>
           <tbody>
             {lots.length === 0 ? (
               <>
-                <tr style={{ height: 22, background: '#ffffff' }}>
-                  <td style={{ padding: '3.5px 2px', textAlign: 'center', border: '1px solid #cbd5e1', color: '#94a3b8', fontWeight: 600 }}>1</td>
-                  <td colSpan={5} style={{ padding: '3.5px 6px', color: '#64748b', fontStyle: 'italic', border: '1px solid #cbd5e1', fontSize: 10 }}>
+                <tr style={{ height: 18.5, background: '#ffffff' }}>
+                  <td style={{ padding: '2px 2px', textAlign: 'center', border: '1px solid #cbd5e1', color: '#94a3b8', fontWeight: 600 }}>1</td>
+                  <td colSpan={5} style={{ padding: '2px 6px', color: '#64748b', fontStyle: 'italic', border: '1px solid #cbd5e1', fontSize: 9.5 }}>
                     No lots added to this bill.
                   </td>
                 </tr>
                 {Array.from({ length: STANDARD_BILL_ROWS - 1 }).map((_, emptyIdx) => (
-                  <tr key={`empty-${emptyIdx}`} style={{ height: 22, background: emptyIdx % 2 !== 0 ? '#ffffff' : '#f8fafc' }}>
-                    <td style={{ padding: '3.5px 2px', textAlign: 'center', border: '1px solid #cbd5e1', color: '#94a3b8', fontWeight: 600, fontSize: 10 }}>{emptyIdx + 2}</td>
+                  <tr key={`empty-${emptyIdx}`} style={{ height: 18.5, background: emptyIdx % 2 !== 0 ? '#ffffff' : '#f8fafc' }}>
+                    <td style={{ padding: '2px 2px', textAlign: 'center', border: '1px solid #cbd5e1', color: '#94a3b8', fontWeight: 600, fontSize: 9.5 }}>{emptyIdx + 2}</td>
                     <td style={{ border: '1px solid #cbd5e1' }}>&nbsp;</td>
                     <td style={{ border: '1px solid #cbd5e1' }}>&nbsp;</td>
                     <td style={{ border: '1px solid #cbd5e1' }}>&nbsp;</td>
@@ -873,24 +884,24 @@ export default function OwnerBillModal({
             ) : (
               <>
                 {lots.map((l, idx) => (
-                  <tr key={idx} style={{ height: 22, background: idx % 2 === 0 ? '#ffffff' : '#f8fafc' }}>
-                    <td style={{ padding: '3.5px 2px', textAlign: 'center', border: '1px solid #cbd5e1', color: '#000000', fontWeight: 700, fontSize: 10.5 }}>
+                  <tr key={idx} style={{ height: 18.5, background: idx % 2 === 0 ? '#ffffff' : '#f8fafc' }}>
+                    <td style={{ padding: '2px 2px', textAlign: 'center', border: '1px solid #cbd5e1', color: '#000000', fontWeight: 700, fontSize: 10 }}>
                       {idx + 1}
                     </td>
-                    <td style={{ padding: '3.5px 4px', fontWeight: 800, border: '1px solid #cbd5e1', color: '#000000', fontSize: 10.5 }}>
+                    <td style={{ padding: '2px 4px', fontWeight: 800, border: '1px solid #cbd5e1', color: '#000000', fontSize: 10 }}>
                       {formatBillLotNo(l)}
-                      {l.note ? <span style={{ fontSize: 8.5, color: '#334155', display: 'block', fontWeight: 600 }}>{l.note}</span> : null}
+                      {l.note ? <span style={{ fontSize: 8, color: '#334155', display: 'block', fontWeight: 600, lineHeight: 1 }}>{l.note}</span> : null}
                     </td>
-                    <td style={{ padding: '3.5px 4px', border: '1px solid #cbd5e1', color: '#000000', fontWeight: 700, fontSize: 10.5 }}>
+                    <td style={{ padding: '2px 4px', border: '1px solid #cbd5e1', color: '#000000', fontWeight: 700, fontSize: 10 }}>
                       {l.designNo}
                     </td>
-                    <td style={{ padding: '3.5px 4px', textAlign: 'right', border: '1px solid #cbd5e1', color: '#000000', fontWeight: 700, fontSize: 10.5 }}>
+                    <td style={{ padding: '2px 4px', textAlign: 'right', border: '1px solid #cbd5e1', color: '#000000', fontWeight: 700, fontSize: 10 }}>
                       {l.quantity}
                     </td>
-                    <td style={{ padding: '3.5px 4px', textAlign: 'right', border: '1px solid #cbd5e1', color: '#000000', fontWeight: 700, fontSize: 10.5 }}>
+                    <td style={{ padding: '2px 4px', textAlign: 'right', border: '1px solid #cbd5e1', color: '#000000', fontWeight: 700, fontSize: 10 }}>
                       {l.rate}
                     </td>
-                    <td style={{ padding: '3.5px 4px', textAlign: 'right', fontWeight: 800, border: '1px solid #cbd5e1', color: '#000000', fontSize: 10.5 }}>
+                    <td style={{ padding: '2px 4px', textAlign: 'right', fontWeight: 800, border: '1px solid #cbd5e1', color: '#000000', fontSize: 10 }}>
                       Rs {Number(l.amount).toLocaleString()}
                     </td>
                   </tr>
@@ -899,8 +910,8 @@ export default function OwnerBillModal({
                   const rowNum = lots.length + emptyIdx + 1;
                   const isEven = (lots.length + emptyIdx) % 2 !== 0;
                   return (
-                    <tr key={`empty-${emptyIdx}`} style={{ height: 22, background: isEven ? '#f8fafc' : '#ffffff' }}>
-                      <td style={{ padding: '3.5px 2px', textAlign: 'center', border: '1px solid #cbd5e1', color: '#94a3b8', fontWeight: 600, fontSize: 10 }}>
+                    <tr key={`empty-${emptyIdx}`} style={{ height: 18.5, background: isEven ? '#f8fafc' : '#ffffff' }}>
+                      <td style={{ padding: '2px 2px', textAlign: 'center', border: '1px solid #cbd5e1', color: '#94a3b8', fontWeight: 600, fontSize: 9.5 }}>
                         {rowNum}
                       </td>
                       <td style={{ border: '1px solid #cbd5e1' }}>&nbsp;</td>
@@ -918,11 +929,11 @@ export default function OwnerBillModal({
       </div>
 
       {/* Bottom Section: Calculations Breakdown + Signature */}
-      <div style={{ marginTop: 'auto', paddingTop: 10 }}>
+      <div style={{ marginTop: 'auto', paddingTop: 4 }}>
         {/* Calculations Breakdown */}
-        <div style={{ borderTop: '2px solid #000000', paddingTop: 10, fontSize: 12.5, color: '#000000' }}>
+        <div style={{ borderTop: '2px solid #000000', paddingTop: 4, fontSize: 11.5, color: '#000000' }}>
           {/* Row 1: Current Work */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', fontWeight: 700, color: '#000000', fontSize: 13 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0', fontWeight: 700, color: '#000000', fontSize: 12 }}>
             <span>Current Work (Lots Total):</span>
             <span style={{ fontWeight: 800 }}>Rs {currentBillTotal.toLocaleString()}</span>
           </div>
@@ -930,25 +941,32 @@ export default function OwnerBillModal({
           {/* Row 2: Previous Unpaid Bill */}
           {prevBillTotal > 0 && (
             <>
-              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4.5px 0', color: '#000000', fontSize: 12.5 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0', color: '#000000', fontSize: 11.5 }}>
                 <span>+ Previous Unpaid Bill ({prevBillNo || 'Previous'}):</span>
                 <span style={{ fontWeight: 700 }}>+Rs {prevBillTotal.toLocaleString()}</span>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', fontWeight: 700, borderTop: '1px dashed #64748b', color: '#000000', fontSize: 12.5 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2.5px 0', fontWeight: 700, borderTop: '1px dashed #64748b', color: '#000000', fontSize: 11.5 }}>
                 <span>= Total Work (Current + Previous):</span>
                 <span style={{ fontWeight: 800 }}>Rs {kulKaamTotal.toLocaleString()}</span>
               </div>
             </>
           )}
 
-          {/* Row 3: Previous Balance */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', fontWeight: 700, color: '#000000', fontSize: 13 }}>
-            <span>+ Previous Balance:</span>
-            <span style={{ fontWeight: 800 }}>+Rs {Number(sabqaBaqaya || 0).toLocaleString()}</span>
-          </div>
+          {/* Row 3: Previous Balance / Advance Surplus */}
+          {Number(sabqaBaqaya || 0) < 0 ? (
+            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0', fontWeight: 700, color: '#059669', fontSize: 12 }}>
+              <span>− Advance Surplus (Pichla Advance):</span>
+              <span style={{ fontWeight: 800 }}>−Rs {Math.abs(Number(sabqaBaqaya)).toLocaleString()}</span>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0', fontWeight: 700, color: '#000000', fontSize: 12 }}>
+              <span>+ Previous Balance:</span>
+              <span style={{ fontWeight: 800 }}>+Rs {Number(sabqaBaqaya || 0).toLocaleString()}</span>
+            </div>
+          )}
 
           {/* Row 4: Gross Total */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', fontWeight: 900, fontSize: 13.5, borderTop: '1.5px solid #000000', borderBottom: '1.5px solid #000000', margin: '6px 0', color: '#000000' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', fontWeight: 900, fontSize: 12.5, borderTop: '1.5px solid #000000', borderBottom: '1.5px solid #000000', margin: '3px 0', color: '#000000' }}>
             <span>= Gross Total:</span>
             <span>Rs {grossTotal.toLocaleString()}</span>
           </div>
@@ -957,30 +975,30 @@ export default function OwnerBillModal({
           {paymentsList.length > 0 && (
             <div
               style={{
-                padding: '6px 0',
+                padding: '3px 0',
                 borderTop: '1px dashed #cbd5e1',
                 borderBottom: '1px dashed #cbd5e1',
-                margin: '5px 0',
+                margin: '3px 0',
               }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: 12, fontWeight: 700, color: '#000000' }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: '#000000' }}>
                   − Payments Received ({paymentsList.length === 1 ? formatDisplayDate(paymentsList[0].date) : `${paymentsList.length} Payments`}):
                 </span>
-                <span style={{ fontSize: 12.5, fontWeight: 800, color: '#000000' }}>
+                <span style={{ fontSize: 11.5, fontWeight: 800, color: '#000000' }}>
                   −Rs {totalWasooli.toLocaleString()}
                 </span>
               </div>
               <div
                 style={{
-                  fontSize: 9.5,
+                  fontSize: 9,
                   color: '#475569',
                   fontWeight: 600,
-                  marginTop: 3,
+                  marginTop: 2,
                   display: 'flex',
                   flexWrap: 'wrap',
-                  gap: '3px 10px',
-                  lineHeight: 1.35,
+                  gap: '2px 8px',
+                  lineHeight: 1.3,
                 }}
               >
                 {paymentsList.map((p, pIdx) => {
@@ -998,7 +1016,7 @@ export default function OwnerBillModal({
 
           {/* Row 6: Deductions */}
           {totalKatoti > 0 && (
-            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', color: '#000000', fontSize: 12.5 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0', color: '#000000', fontSize: 11.5 }}>
               <span>− Deductions ({katotiTitle}):</span>
               <span style={{ fontWeight: 800 }}>-Rs {totalKatoti.toLocaleString()}</span>
             </div>
@@ -1011,13 +1029,13 @@ export default function OwnerBillModal({
               display: 'flex',
               justifyContent: 'space-between',
               alignItems: 'center',
-              padding: '8px 14px',
-              fontSize: 14.5,
+              padding: '5px 10px',
+              fontSize: 13.5,
               fontWeight: 900,
               background: '#0f172a',
               color: '#ffffff',
               borderRadius: 4,
-              marginTop: 9,
+              marginTop: 4,
             }}
           >
             <span style={{ color: '#ffffff', fontWeight: 900 }}>
@@ -1036,7 +1054,7 @@ export default function OwnerBillModal({
         </div>
 
         {/* Signature Area */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: 22, paddingTop: 10, color: '#000000' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: 10, paddingTop: 4, color: '#000000' }}>
           <div style={{ fontSize: 11, color: '#000000', fontWeight: 700 }}>
             <div>Prepared By: ____________</div>
           </div>
@@ -1192,20 +1210,20 @@ export default function OwnerBillModal({
               </div>
             </div>
 
-            {/* Sabqa Baqaya Highlight Box */}
+            {/* Sabqa Baqaya / Advance Surplus Highlight Box */}
             <div
               style={{
                 display: 'flex',
                 alignItems: 'center',
                 gap: 8,
-                background: 'rgba(245, 158, 11, 0.1)',
+                background: Number(sabqaBaqaya || 0) < 0 ? 'rgba(16, 185, 129, 0.12)' : 'rgba(245, 158, 11, 0.1)',
                 padding: '4px 12px',
                 borderRadius: 8,
-                border: '1px solid rgba(245, 158, 11, 0.35)',
+                border: Number(sabqaBaqaya || 0) < 0 ? '1px solid rgba(16, 185, 129, 0.35)' : '1px solid rgba(245, 158, 11, 0.35)',
               }}
             >
-              <span style={{ fontSize: 11.5, fontWeight: 700, color: '#f59e0b', textTransform: 'uppercase' }}>
-                Previous Balance:
+              <span style={{ fontSize: 11.5, fontWeight: 700, color: Number(sabqaBaqaya || 0) < 0 ? '#34d399' : '#f59e0b', textTransform: 'uppercase' }}>
+                {Number(sabqaBaqaya || 0) < 0 ? 'Advance Surplus:' : 'Previous Balance:'}
               </span>
               <span style={{ fontSize: 12, color: '#94a3b8' }}>Rs</span>
               <input
@@ -1221,7 +1239,7 @@ export default function OwnerBillModal({
                   fontSize: 14,
                   background: 'transparent',
                   border: 'none',
-                  color: '#fbbf24',
+                  color: Number(sabqaBaqaya || 0) < 0 ? '#34d399' : '#fbbf24',
                   textAlign: 'right',
                 }}
               />
@@ -1744,6 +1762,9 @@ export default function OwnerBillModal({
                   />
                 </div>
               </div>
+              <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 5, lineHeight: 1.3 }}>
+                ℹ️ Sirf tab daalein agar pichle bill ka amount ooper &quot;Previous Balance&quot; mein shamil na ho.
+              </div>
             </div>
 
             {/* Box 2: Katoti */}
@@ -1932,6 +1953,15 @@ export default function OwnerBillModal({
               <button
                 type="button"
                 className="btn btn-secondary btn-sm"
+                onClick={shareDirectWhatsApp}
+                style={{ fontWeight: 700, color: '#34d399', borderColor: 'rgba(52, 211, 153, 0.35)' }}
+                title="Direct WhatsApp khol kar summary send karein"
+              >
+                📲 WhatsApp Share
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
                 onClick={() => setActiveTab('preview')}
                 style={{ fontWeight: 700 }}
               >
@@ -2102,6 +2132,15 @@ export default function OwnerBillModal({
                 style={{ fontWeight: 600 }}
               >
                 📋 Copy WhatsApp
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={shareDirectWhatsApp}
+                style={{ fontWeight: 700, color: '#34d399', borderColor: 'rgba(52, 211, 153, 0.35)' }}
+                title="Direct WhatsApp khol kar summary send karein"
+              >
+                📲 WhatsApp Share
               </button>
               <button
                 type="button"
