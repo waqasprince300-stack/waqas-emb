@@ -1038,19 +1038,50 @@ export function AppProvider({ children }) {
 
   const markLotsBilledLocally = useCallback((lotsBilled, billInfo) => {
     if (!lotsBilled || lotsBilled.length === 0) return;
-    const lotIdSet = new Set(lotsBilled.map((l) => String(l.id || l._id || l.lotId || '')).filter(Boolean));
-    const lotNoSet = new Set(lotsBilled.map((l) => String(l.lotNo || l.lotNumber || '').trim()).filter(Boolean));
+    const lotIdSet = new Set(
+      lotsBilled
+        .map((l) => String(l.lotId || l.id || l._id || ''))
+        .filter(Boolean)
+    );
+    const lotNoSet = new Set(
+      lotsBilled
+        .map((l) => String(l.lotNo || l.lotNumber || '').trim().toLowerCase())
+        .filter(Boolean)
+    );
+    const cleanLotNoSet = new Set(
+      lotsBilled
+        .map((l) =>
+          String(l.lotNo || l.lotNumber || '')
+            .trim()
+            .replace(/-[dD]$/, '')
+            .replace(/\([dD]\)$/, '')
+            .toLowerCase()
+        )
+        .filter(Boolean)
+    );
 
     const applyUpdates = (arr) =>
       arr.map((lot) => {
-        const matchId = lotIdSet.has(String(lot.id || lot._id || ''));
-        const matchNo = lotNoSet.has(String(lot.lotNo || lot.lotNumber || '').trim());
+        const curLotId = String(lot.id || lot._id || '');
+        const curLotNo = String(lot.lotNo || lot.lotNumber || '').trim().toLowerCase();
+        const curCleanLotNo = curLotNo.replace(/-[dD]$/, '').replace(/\([dD]\)$/, '');
+
+        const matchId = Boolean(curLotId && lotIdSet.has(curLotId));
+        const matchNo = Boolean(
+          (curLotNo && lotNoSet.has(curLotNo)) ||
+          (curCleanLotNo && cleanLotNoSet.has(curCleanLotNo))
+        );
+
         if (matchId || matchNo) {
           const matchBilled = lotsBilled.find((l) => {
-            const lid = String(l.id || l._id || l.lotId || '');
-            const lno = String(l.lotNo || l.lotNumber || '').trim();
-            return (lid && (lid === String(lot.id || '') || lid === String(lot._id || ''))) ||
-                   (lno && (lno === String(lot.lotNo || '').trim() || lno === String(lot.lotNumber || '').trim()));
+            const lid = String(l.lotId || l.id || l._id || '');
+            const lno = String(l.lotNo || l.lotNumber || '').trim().toLowerCase();
+            const lclean = lno.replace(/-[dD]$/, '').replace(/\([dD]\)$/, '');
+            return (
+              (lid && curLotId && lid === curLotId) ||
+              (lno && curLotNo && lno === curLotNo) ||
+              (lclean && curCleanLotNo && lclean === curCleanLotNo)
+            );
           });
 
           const updated = {
@@ -1079,10 +1110,8 @@ export function AppProvider({ children }) {
       });
 
     setGhausiaLots(applyUpdates);
-    if (user?.role === 'admin') {
-      setAdminReportingLots(applyUpdates);
-    }
-  }, [user?.role]);
+    setAdminReportingLots(applyUpdates);
+  }, []);
 
   const revertLotsBilledLocally = useCallback((billId, billNo) => {
     const applyUpdates = (arr) =>
@@ -1102,10 +1131,8 @@ export function AppProvider({ children }) {
       });
 
     setGhausiaLots(applyUpdates);
-    if (user?.role === 'admin') {
-      setAdminReportingLots(applyUpdates);
-    }
-  }, [user?.role]);
+    setAdminReportingLots(applyUpdates);
+  }, []);
 
   const approveLotCompletion = useCallback(
     async (lotId, opts = {}) => {

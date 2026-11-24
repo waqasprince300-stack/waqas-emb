@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Modal, FormGroup } from '../UI';
 import { latestDateFrom, formatDisplayDateTime, DateRangeSelect, isWithinDateRange, parseDateValue } from '../../utils/dateFilters';
 import { getBusinessBillAmount } from '../../utils/partyBillPrivacy';
@@ -112,32 +112,55 @@ export default function OwnerLedgerModal({ ownerId, ownerName, payments, lots, o
   const [showBillsList, setShowBillsList] = useState(false);
   const [selectedBillToView, setSelectedBillToView] = useState(null);
   const [billsCount, setBillsCount] = useState(0);
+  const [bills, setBills] = useState([]);
+  const [billsDefaults, setBillsDefaults] = useState(null);
 
   const [dateRange, setDateRange] = useState('all');
   const [customDateRange, setCustomDateRange] = useState({ start: '', end: '' });
 
-  useEffect(() => {
-    let isMounted = true;
-    async function fetchBillsCount() {
-      try {
-        const res = await apiService.getOwnerBills(ownerId);
-        if (isMounted) setBillsCount(res?.bills?.length || 0);
-      } catch (err) {
-        // Ignore fetch errors silently
-      }
+  const fetchBills = useCallback(async () => {
+    try {
+      const res = await apiService.getOwnerBills(ownerId);
+      setBills(res?.bills || []);
+      setBillsDefaults(res?.nextDefaults || null);
+      setBillsCount(res?.bills?.length || 0);
+    } catch (err) {
+      // Ignore fetch errors silently
     }
-    fetchBillsCount();
-    return () => {
-      isMounted = false;
-    };
   }, [ownerId]);
+
+  useEffect(() => {
+    fetchBills();
+  }, [fetchBills]);
   
   // Build raw rows
   const raw = [];
   const normalizedOwnerId = normalizedBusinessOwnerId(ownerId);
 
-  // Extract all lot numbers that have been billed (i.e. have an AutoBill payment)
+  const parseBaqayaFromTally = (p) => {
+    if (!p) return null;
+    if (p.amount != null && Number(p.amount) > 0) {
+      return Number(p.amount);
+    }
+    const note = String(p.note || '');
+    const m = note.match(/Baqaya:\s*Rs\s*([0-9,]+)/i);
+    if (m) {
+      const parsed = Number(m[1].replace(/,/g, ''));
+      if (!Number.isNaN(parsed) && parsed > 0) return parsed;
+    }
+    return null;
+  };
+
+  // Extract all lot numbers that have been billed (i.e. have an AutoBill payment or billed in an Owner Bill)
   const billedLotNumbers = new Set();
+  lots.forEach((l) => {
+    const lotBizId = normalizedBusinessOwnerId(l.businessOwnerId) || normalizedBusinessOwnerId(l.ownerWorkspaceId);
+    if (lotBizId === normalizedOwnerId && (l.ownerBillId || l.billedInBillNo || l.status === 'completed')) {
+      const lotNum = String(l.lotNo || l.lotNumber || '').trim();
+      if (lotNum) billedLotNumbers.add(lotNum);
+    }
+  });
+
   payments.forEach((p) => {
     const pParty = String(p.party || '').toLowerCase().trim();
     const oName = String(ownerName || '').toLowerCase().trim();
@@ -146,7 +169,10 @@ export default function OwnerLedgerModal({ ownerId, ownerName, payments, lots, o
     const pWid = normalizedBusinessOwnerId(p.businessOwnerId) || normalizedBusinessOwnerId(p.ownerWorkspaceId) || normalizedBusinessOwnerId(p.ownerWorkspace);
     const matchesWorkspace = pWid === normalizedOwnerId;
 
-    const isAutoBill = p.type === 'Paid' && String(p.note || '').trim().startsWith('Billable lot settled');
+    const isAutoBill =
+      (p.type === 'Paid' && String(p.note || '').trim().startsWith('Billable lot settled')) ||
+      (p.type === 'Paid' && Boolean(p.ownerBillId)) ||
+      (p.type === 'Paid' && String(p.note || '').includes('billed to owner'));
 
     if (matchesWorkspace && isOwnerParty && isAutoBill && p.linkedLot) {
       billedLotNumbers.add(String(p.linkedLot).trim());
@@ -168,7 +194,10 @@ export default function OwnerLedgerModal({ ownerId, ownerName, payments, lots, o
     const matchesWorkspace = pWid === normalizedOwnerId;
     
     // Ignore auto-generated payments for settled lots because we already iterate over lots separately.
-    const isAutoBill = p.type === 'Paid' && String(p.note || '').trim().startsWith('Billable lot settled');
+    const isAutoBill =
+      (p.type === 'Paid' && String(p.note || '').trim().startsWith('Billable lot settled')) ||
+      (p.type === 'Paid' && Boolean(p.ownerBillId)) ||
+      (p.type === 'Paid' && String(p.note || '').includes('billed to owner'));
     
     // Tally markers don't have amounts but we want to show them
     if (p.type === 'Tally' && (p.businessOwnerId === ownerId || matchesWorkspace)) {
@@ -190,6 +219,8 @@ export default function OwnerLedgerModal({ ownerId, ownerName, payments, lots, o
     const sortMs = when ? when.getTime() : 0;
     const amt = Number(p.amount || 0);
     const isReceived = p.type === 'Received'; // Received from owner
+    const isTally = p.type === 'Tally';
+    const tallyBaqaya = isTally ? parseBaqayaFromTally(p) : null;
 
     raw.push({
       rowKey: `paid-${p.id || p._id}`,
@@ -200,8 +231,9 @@ export default function OwnerLedgerModal({ ownerId, ownerName, payments, lots, o
       note: (p.note || '').trim(),
       linkedLot: (p.linkedLot || '').trim(),
       paymentType: p.type || 'Received',
+      tallyBaqaya,
       received: isReceived ? amt : 0, // Money from owner
-      billed: (isReceived || p.type === 'Tally') ? 0 : amt, // Paid to owner (acts like bill, increases what they owe us)
+      billed: (isReceived || isTally) ? 0 : amt, // Paid to owner (acts like bill, increases what they owe us)
       payment: p,
     });
   });
@@ -210,18 +242,16 @@ export default function OwnerLedgerModal({ ownerId, ownerName, payments, lots, o
   const ownerLots = lots.filter((l) => {
     const lotBizId = normalizedBusinessOwnerId(l.businessOwnerId) || normalizedBusinessOwnerId(l.ownerWorkspaceId);
     const matchesWorkspace = lotBizId === normalizedOwnerId;
-    
-    // As per user request: "jo lot unhy bill ho chuki hain just wo yahan show krni"
-    // So we ONLY show lots that have a corresponding AutoBill payment.
     const lotNum = String(l.lotNo || l.lotNumber || '').trim();
-    return matchesWorkspace && billedLotNumbers.has(lotNum);
+    const isBilledInBill = Boolean(l.ownerBillId || l.billedInBillNo);
+    return matchesWorkspace && (billedLotNumbers.has(lotNum) || isBilledInBill);
   });
 
   // Billable lots for this owner (status === 'received back' and ready to be billed)
   const billableLotsForOwner = lots.filter((l) => {
     const lotBizId = normalizedBusinessOwnerId(l.businessOwnerId) || normalizedBusinessOwnerId(l.ownerWorkspaceId);
     const matchesWorkspace = lotBizId === normalizedOwnerId;
-    return matchesWorkspace && String(l.status || '').toLowerCase() === 'received back';
+    return matchesWorkspace && String(l.status || '').toLowerCase() === 'received back' && !l.ownerBillId && !l.billedInBillNo;
   });
 
   ownerLots.forEach((l) => {
@@ -262,7 +292,11 @@ export default function OwnerLedgerModal({ ownerId, ownerName, payments, lots, o
   let owedRunning = 0; // Positive means Owner owes us
   const withBalance = [];
   for (const row of raw) {
-    owedRunning += row.billed - row.received;
+    if (row.paymentType === 'Tally' && row.tallyBaqaya != null) {
+      owedRunning = row.tallyBaqaya;
+    } else {
+      owedRunning += row.billed - row.received;
+    }
     withBalance.push({ ...row, balanceAfter: owedRunning });
   }
 
@@ -290,7 +324,15 @@ export default function OwnerLedgerModal({ ownerId, ownerName, payments, lots, o
     periodReceived = displayRows.reduce((s, r) => s + Number(r.received || 0), 0);
   }
 
-  const netBalance = withBalance.length ? withBalance[withBalance.length - 1].balanceAfter : 0;
+  const latestBillBaqaya = billsDefaults?.lastSabqaBaqaya != null && bills.length > 0
+    ? Number(billsDefaults.lastSabqaBaqaya)
+    : null;
+
+  const calculatedNet = withBalance.length ? withBalance[withBalance.length - 1].balanceAfter : 0;
+  const netBalance = latestBillBaqaya != null && (calculatedNet === 0 || !withBalance.some(r => r.paymentType === 'Tally' && r.tallyBaqaya != null))
+    ? latestBillBaqaya
+    : calculatedNet;
+
   const currentNetBalance =
     dateRange !== 'all' && displayRows.length > 0
       ? displayRows[0].balanceAfter
@@ -575,8 +617,23 @@ export default function OwnerLedgerModal({ ownerId, ownerName, payments, lots, o
                         </div>
                       </div>
                     </div>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--success, #047857)' }}>
-                      {formattedDate}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <div
+                        style={{
+                          fontSize: 12.5,
+                          fontWeight: 800,
+                          background: '#047857',
+                          color: '#ffffff',
+                          padding: '3px 10px',
+                          borderRadius: 6,
+                          letterSpacing: '0.02em',
+                        }}
+                      >
+                        Bal. {t.balanceAfter < 0 ? '-' : ''}{formatMoney(t.balanceAfter)}
+                      </div>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--success, #047857)' }}>
+                        {formattedDate}
+                      </div>
                     </div>
                   </div>
                 );
@@ -727,14 +784,16 @@ export default function OwnerLedgerModal({ ownerId, ownerName, payments, lots, o
           candidateLots={billableLotsForOwner}
           candidatePayments={ownerPayments}
           existingBill={selectedBillToView}
+          initialPreviousBalance={billsDefaults?.lastSabqaBaqaya != null ? Number(billsDefaults.lastSabqaBaqaya) : netBalance}
           onClose={() => {
             setShowBillModal(false);
             setSelectedBillToView(null);
           }}
           onSaved={(savedBill) => {
-            markLotsBilledLocally?.(billableLotsForOwner, savedBill);
+            const billedLots = savedBill?.lots || billableLotsForOwner;
+            markLotsBilledLocally?.(billedLots, savedBill);
             onRefresh?.();
-            apiService.getOwnerBills(ownerId).then((r) => setBillsCount(r?.bills?.length || 0)).catch(() => {});
+            fetchBills();
           }}
         />
       )}
@@ -754,7 +813,7 @@ export default function OwnerLedgerModal({ ownerId, ownerName, payments, lots, o
           onBillDeleted={(b) => {
             revertLotsBilledLocally?.(b?.id || b?._id, b?.billNo);
             onRefresh?.();
-            apiService.getOwnerBills(ownerId).then((r) => setBillsCount(r?.bills?.length || 0)).catch(() => {});
+            fetchBills();
           }}
         />
       )}

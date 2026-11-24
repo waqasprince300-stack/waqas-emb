@@ -2,7 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import Loader from './Loader';
 
-export function Modal({ title, onClose, children, footer, wide, onFormSubmit, overlayClassName }) {
+export function Modal({ title, onClose, children, footer, wide, onFormSubmit, overlayClassName, maxWidth }) {
   const overlayClass = ['modal-overlay', overlayClassName].filter(Boolean).join(' ');
   const body = (
     <>
@@ -18,7 +18,7 @@ export function Modal({ title, onClose, children, footer, wide, onFormSubmit, ov
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="modal-box" style={{ maxWidth: wide ? 820 : 680 }}>
+      <div className="modal-box" style={{ maxWidth: maxWidth || (wide ? 820 : 680) }}>
         <div className="modal-header">
           <h3>{title}</h3>
           <button type="button" className="modal-close" onClick={onClose}>

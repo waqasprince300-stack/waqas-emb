@@ -12,6 +12,8 @@ export default function SummaryCards({
   ownerIn,
   ownerPaidToOwner,
   billableSettledTotal,
+  ownerReceivableFromBills = null,
+  latestFinalizedBill = null,
   statsRefreshing,
   onOpenBillModal,
 }) {
@@ -27,15 +29,17 @@ export default function SummaryCards({
   const completedWorkBilled = (billableSettledTotal != null ? billableSettledTotal : 0) + (ownerPaidToOwner != null ? ownerPaidToOwner : 0);
 
   // Net balance between owner work billed and received cash
-  // Positive: Owner owes us (Receivable)
-  // Negative: Owner has advance surplus (Advance)
-  const netBalance = billableTotal - ownerReceivedNet;
+  // When an owner bill is finalized, anchor to the true bill Baqaya
+  const netBalance = ownerReceivableFromBills != null
+    ? ownerReceivableFromBills
+    : (billableTotal - ownerReceivedNet);
+
   const netReceivable = netBalance > 0 ? netBalance : 0;
   const advanceAvailable = netBalance < 0 ? Math.abs(netBalance) : 0;
 
   // Financial Collection / Recovery Rate KPI
   const recoveryPercent = completedWorkBilled > 0
-    ? Math.min(100, Math.round((totalReceivedCash / completedWorkBilled) * 1000) / 10)
+    ? Math.min(100, Math.max(0, Math.round(((completedWorkBilled - netReceivable) / completedWorkBilled) * 1000) / 10))
     : 0;
   const pendingPercent = Math.max(0, Math.round((100 - recoveryPercent) * 10) / 10);
 
@@ -104,9 +108,9 @@ export default function SummaryCards({
                 value: netReceivable > 0 ? `₨${netReceivable.toLocaleString()}` : `₨${advanceAvailable.toLocaleString()}`,
                 lakhCrore: formatLakhCrore(netReceivable > 0 ? netReceivable : advanceAvailable),
                 color: netReceivable > 0 ? 'var(--danger, #f28b82)' : 'var(--warning, #fde293)',
-                note: netReceivable > 0
-                  ? 'Baqi udhaar (Work − Received)'
-                  : 'Advance surplus',
+                note: latestFinalizedBill
+                  ? `Baqi udhaar (Bill #${latestFinalizedBill.billNo} Baqaya${billable.length > 0 ? ` + ${billable.length} unbilled` : ''})`
+                  : (netReceivable > 0 ? 'Baqi udhaar (Work − Received)' : 'Advance surplus'),
                 badge: netReceivable > 0 && pendingPercent > 0 ? `${pendingPercent}% Pending` : null,
                 badgeBg: 'var(--danger-bg, rgba(90, 48, 48, 0.6))',
                 badgeColor: 'var(--danger, #f28b82)',

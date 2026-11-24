@@ -272,13 +272,13 @@ function fallbackIdCompare(a, b) {
 /** Newest first (tables). kind: 'lot' | 'payment' | 'user'. */
 export function compareRowsByUpdatedNewestFirst(a, b, kind) {
   if (kind === 'payment') {
-    // Primary sort: Date (descending)
-    const dateA = String(a?.date || '').trim();
-    const dateB = String(b?.date || '').trim();
-    if (dateA !== dateB) {
-      return dateB.localeCompare(dateA);
+    // Primary sort: Calendar day timestamp (descending: newest day first)
+    const timeA = parseDateValue(a?.date)?.setHours(0, 0, 0, 0) || 0;
+    const timeB = parseDateValue(b?.date)?.setHours(0, 0, 0, 0) || 0;
+    if (timeA !== timeB) {
+      return timeB - timeA;
     }
-    // Secondary sort: Actual entry time (descending)
+    // Secondary sort: Actual entry time (descending: newest created entry first)
     const createdA = parseDateValue(a?.createdAt)?.getTime() || 0;
     const createdB = parseDateValue(b?.createdAt)?.getTime() || 0;
     if (createdA !== createdB) {

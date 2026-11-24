@@ -29,6 +29,81 @@ const formatShortWasooliNote = (note) => {
   return s;
 };
 
+const formatShortDateYY = (dateVal) => {
+  if (!dateVal) return '—';
+  const str = String(dateVal).trim();
+  if (/^\d{1,2}[/-]\d{1,2}[/-]\d{2,4}$/.test(str)) {
+    const parts = str.split(/[/-]/);
+    const day = parts[0].padStart(2, '0');
+    const month = parts[1].padStart(2, '0');
+    const yy = parts[2].slice(-2);
+    return `${day}-${month}-${yy}`;
+  }
+  if (/^\d{4}-\d{2}-\d{2}/.test(str)) {
+    const parts = str.slice(0, 10).split('-');
+    const yy = parts[0].slice(-2);
+    return `${parts[2]}-${parts[1]}-${yy}`;
+  }
+  const d = new Date(dateVal);
+  if (!isNaN(d.getTime())) {
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const yy = String(d.getFullYear()).slice(-2);
+    return `${day}-${month}-${yy}`;
+  }
+  return str;
+};
+
+const toStandardDateIso = (dateVal) => {
+  if (!dateVal) return '9999-99-99';
+  const str = String(dateVal).trim();
+  if (/^\d{1,2}[/-]\d{1,2}[/-]\d{4}$/.test(str)) {
+    const parts = str.split(/[/-]/);
+    const day = parts[0].padStart(2, '0');
+    const month = parts[1].padStart(2, '0');
+    const year = parts[2];
+    return `${year}-${month}-${day}`;
+  }
+  if (/^\d{1,2}[/-]\d{1,2}[/-]\d{2}$/.test(str)) {
+    const parts = str.split(/[/-]/);
+    const day = parts[0].padStart(2, '0');
+    const month = parts[1].padStart(2, '0');
+    const year = `20${parts[2]}`;
+    return `${year}-${month}-${day}`;
+  }
+  if (/^\d{4}-\d{2}-\d{2}/.test(str)) {
+    return str.slice(0, 10);
+  }
+  const d = new Date(dateVal);
+  if (!isNaN(d.getTime())) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }
+  return str;
+};
+
+const getPaymentSortScore = (p, originalIdx = 0) => {
+  if (!p) return 0;
+  // 1. Check MongoDB ObjectId (timestamp is encoded in first 8 hex characters)
+  const idStr = String(p.paymentId || p.id || p._id || '').trim();
+  if (/^[0-9a-fA-F]{24}$/.test(idStr)) {
+    return parseInt(idStr.slice(0, 8), 16);
+  }
+  // 2. Check createdAt or timestamp
+  if (p.createdAt) {
+    const t = new Date(p.createdAt).getTime();
+    if (!isNaN(t)) return t;
+  }
+  // 3. Check numeric installment in note, e.g. "1st", "2nd", "14th"
+  const noteMatch = String(p.note || '').match(/(\d+)(?:st|nd|rd|th)?/i);
+  if (noteMatch) {
+    return parseInt(noteMatch[1], 10);
+  }
+  return originalIdx;
+};
+
 const formatBillLotNo = (l) => {
   if (!l) return '';
   let no = String(l.lotNo || l.lotNumber || '').trim();
@@ -65,10 +140,10 @@ export default function OwnerBillModal({
 }) {
   const isEditing = Boolean(existingBill);
   const [activeTab, setActiveTab] = useState(isEditing ? 'preview' : 'form'); // 'form' | 'preview'
-  const [printLayout, setPrintLayout] = useState('2-up'); // Default: '2-up' (2 Bills on A4 Landscape in 1 pass) | '1-up-landscape' (Single Bill) | '1-up-portrait' (Pre-Cut Slip)
-  const [badgeType, setBadgeType] = useState('both-original'); // 'both-original' | 'party-office'
+  const [printLayout, setPrintLayout] = useState('1-up-landscape'); // Default: '1-up-landscape' (Single Bill on A4 Half-Sheet) | '2-up' (Double Bill: 1 Original + 1 Factory Copy) | '1-up-portrait' (Pre-Cut Slip)
+  const [doubleBadgeType, setDoubleBadgeType] = useState('original-factory'); // 'original-factory' (1 Original + 1 Factory Copy) | 'both-original' (Dono Original)
+  const [singleBadge, setSingleBadge] = useState('ORIGINAL'); // 'ORIGINAL' | 'FACTORY COPY'
   const [showCutLine, setShowCutLine] = useState(true); // Toggle center cutting dashed line
-  const [loadingDefaults, setLoadingDefaults] = useState(!isEditing);
   const [saving, setSaving] = useState(false);
   const [showLotPicker, setShowLotPicker] = useState(false);
   const [showPaymentPicker, setShowPaymentPicker] = useState(false);
@@ -81,8 +156,48 @@ export default function OwnerBillModal({
     existingBill?.date || new Date().toISOString().slice(0, 10)
   );
 
-  // 1. Lots in this Bill (Only the chosen ones, default 5-8 max)
-  const [lots, setLots] = useState([]);
+  // 1. Lots in this Bill (Initialized immediately from existingBill or candidateLots — 0ms wait!)
+  const [lots, setLots] = useState(() => {
+    if (existingBill?.lots && existingBill.lots.length > 0) {
+      return existingBill.lots.map((l) => ({
+        lotId: String(l.lotId || l.id || l._id || ''),
+        lotNo: String(l.lotNo || l.lotNumber || ''),
+        designNo: String(l.designNo || ''),
+        suitComponent: String(l.suitComponent || 'main'),
+        quantity: Number(l.quantity || 0),
+        rate: Number(l.rate || 0),
+        amount: Number(l.amount || 0),
+        note: String(l.note || l.itemDescription || l.description || ''),
+        selected: true,
+      }));
+    }
+    const currentCandidateLots = candidateLots || [];
+    const unbilledLots = currentCandidateLots.filter(
+      (l) => (l.status === 'received back' || !l.status) && !l.ownerBillId && !l.billedInBillNo
+    );
+    return unbilledLots.slice(0, STANDARD_BILL_LOTS_LIMIT).map((l) => {
+      const qty = Number(l.suitQuantity || l.pieces || l.quantity || 0);
+      const amt = Number(l.businessBillAmount || l.billAmount || 0);
+      let rate = Number(l.ownerRate || l.rate || 0);
+      if (!rate && qty > 0 && amt > 0) {
+        const rawRate = amt / qty;
+        rate = rawRate % 1 === 0 ? rawRate : Math.round(rawRate * 100) / 100;
+      }
+      const finalAmt = amt || (qty && rate ? Math.round(qty * rate) : 0);
+
+      return {
+        lotId: String(l.id || l._id || ''),
+        lotNo: String(l.lotNo || l.lotNumber || ''),
+        designNo: String(l.designNo || ''),
+        suitComponent: String(l.suitComponent || 'main'),
+        quantity: qty,
+        rate: rate,
+        amount: finalAmt,
+        note: String(l.itemDescription || l.description || ''),
+        selected: true,
+      };
+    });
+  });
 
   // 2. Pichla Unsettled Bill (Optional, e.g. Bill #71 = Rs 1,642,416)
   const [prevBillNo, setPrevBillNo] = useState(
@@ -127,21 +242,13 @@ export default function OwnerBillModal({
   candidateLotsRef.current = candidateLots;
   const defaultsLoadedRef = useRef(false);
 
-  // Load Defaults & Previous Bill Balance
+  // Background Defaults Sync (Non-blocking: Modal opens immediately!)
   useEffect(() => {
-    if (isEditing) {
-      setLoadingDefaults(false);
-      return;
-    }
-
-    if (defaultsLoadedRef.current) {
-      setLoadingDefaults(false);
-      return;
-    }
+    if (isEditing) return;
+    if (defaultsLoadedRef.current) return;
 
     let isMounted = true;
     async function loadDefaults() {
-      setLoadingDefaults(true);
       try {
         const res = await apiService.getOwnerBills(ownerId);
         if (!isMounted) return;
@@ -164,55 +271,38 @@ export default function OwnerBillModal({
         // Save settledPaymentIds so picker can mark them as settled
         const billedIds = new Set(next?.billedPaymentIds || []);
         setSettledPaymentIds(billedIds);
-
-        // Only start with up to standard 15 billable lots (Standard physical bill book size)
-        const currentCandidateLots = candidateLotsRef.current || [];
-        const unbilledLots = currentCandidateLots.filter((l) => !l.ownerBillId && !l.billedInBillNo);
-        const initialSlice = unbilledLots.slice(0, STANDARD_BILL_LOTS_LIMIT).map((l) => {
-          const qty = Number(l.suitQuantity || l.pieces || l.quantity || 0);
-          const amt = Number(l.businessBillAmount || l.billAmount || 0);
-          let rate = Number(l.ownerRate || l.rate || 0);
-          if (!rate && qty > 0 && amt > 0) {
-            const rawRate = amt / qty;
-            rate = rawRate % 1 === 0 ? rawRate : Math.round(rawRate * 100) / 100;
-          }
-          const finalAmt = amt || (qty && rate ? Math.round(qty * rate) : 0);
-
-          return {
-            lotId: String(l.id || l._id || ''),
-            lotNo: String(l.lotNo || l.lotNumber || ''),
-            designNo: String(l.designNo || ''),
-            suitComponent: String(l.suitComponent || 'main'),
-            quantity: qty,
-            rate: rate,
-            amount: finalAmt,
-            note: String(l.itemDescription || l.description || ''),
-            selected: true,
-          };
-        });
-        setLots(initialSlice);
-
-        // New bills start clean with 0 payments
-        setPaymentsList([]);
       } catch (err) {
-        console.warn('Could not load bill defaults:', err.message);
-      } finally {
-        setLoadingDefaults(false);
+        console.warn('Could not load bill defaults in background:', err.message);
       }
     }
 
     loadDefaults();
-
-    // Safety timeout: Never stay stuck in loading more than 2.5s even if network delays
-    const safetyTimer = setTimeout(() => {
-      setLoadingDefaults(false);
-    }, 2500);
-
     return () => {
       isMounted = false;
-      clearTimeout(safetyTimer);
     };
   }, [isEditing, ownerId, initialPreviousBalance]);
+
+  // Unbilled payments available for this owner (Online & Cash)
+  const unbilledAvailablePayments = useMemo(() => {
+    return (candidatePayments || []).filter(
+      (p) =>
+        p.type === 'Received' &&
+        (!settledPaymentIds || !settledPaymentIds.has(String(p.id || p._id))) &&
+        !p.isLegacySettled &&
+        (!p.billedInBillNo || p.billedInBillNo === 'none')
+    );
+  }, [candidatePayments, settledPaymentIds]);
+
+  const totalUnbilledAvailablePayments = useMemo(() => {
+    return unbilledAvailablePayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
+  }, [unbilledAvailablePayments]);
+
+  // Available billable candidate lots count (only received back / unbilled)
+  const billableCandidateCount = useMemo(() => {
+    return (candidateLots || []).filter(
+      (l) => (l.status === 'received back' || !l.status) && !l.ownerBillId && !l.billedInBillNo
+    ).length;
+  }, [candidateLots]);
 
   // Calculations matching Waqas's physical bill formula exactly:
   const currentBillTotal = useMemo(
@@ -240,6 +330,34 @@ export default function OwnerBillModal({
     () => paymentsList.reduce((sum, p) => sum + Number(p.amount || 0), 0),
     [paymentsList]
   );
+
+  // Group payments by date (format: DD-MM-YY, e.g. 20-11-26), sorted chronologically (earliest date on top, earliest payments first)
+  const groupedPaymentsByDate = useMemo(() => {
+    const map = new Map();
+    paymentsList.forEach((p, originalIdx) => {
+      if (!p || Number(p.amount || 0) <= 0) return;
+      const dateKey = formatShortDateYY(p.date);
+      const isoKey = toStandardDateIso(p.date);
+      if (!map.has(dateKey)) {
+        map.set(dateKey, { isoKey, items: [] });
+      }
+      map.get(dateKey).items.push({ p, originalIdx });
+    });
+
+    const entries = Array.from(map.entries()).map(([dateKey, group]) => {
+      // Sort items inside this date group chronologically (earliest payment first)
+      const sortedItems = group.items
+        .slice()
+        .sort((a, b) => getPaymentSortScore(a.p, a.originalIdx) - getPaymentSortScore(b.p, b.originalIdx))
+        .map((item) => item.p);
+      return { dateKey, isoKey: group.isoKey, items: sortedItems };
+    });
+
+    // Sort date groups chronologically (earliest date on top, later date below)
+    entries.sort((a, b) => a.isoKey.localeCompare(b.isoKey));
+
+    return entries.map((e) => [e.dateKey, e.items]);
+  }, [paymentsList]);
 
   const subTotalAfterWasooli = useMemo(
     () => grossTotal - totalWasooli,
@@ -432,6 +550,7 @@ export default function OwnerBillModal({
 
       const lotsPayload = validLots.map((l) => ({
         ...l,
+        lotId: String(l.lotId || l.id || l._id || ''),
         quantity: Number(l.quantity || 0),
         rate: Number(l.rate || 0),
         amount: Number(l.amount || 0),
@@ -544,9 +663,14 @@ export default function OwnerBillModal({
     const validPayments = paymentsList.filter((p) => Number(p.amount || 0) > 0);
     if (validPayments.length > 0) {
       text += `*− Payments Received:*\n`;
-      validPayments.forEach((p) => {
-        const shortNote = formatShortWasooliNote(p.note);
-        text += `  • ${formatDisplayDate(p.date)}: −Rs ${Number(p.amount).toLocaleString()}${shortNote ? ` (${shortNote})` : ''}\n`;
+      groupedPaymentsByDate.forEach(([dateKey, items]) => {
+        const line = items
+          .map((p) => {
+            const shortNote = formatShortWasooliNote(p.note);
+            return `${Number(p.amount).toLocaleString()}${shortNote ? ` (${shortNote})` : ''}`;
+          })
+          .join(' | ');
+        text += `  • *${dateKey}:* ${line}\n`;
       });
       if (validPayments.length > 1) {
         text += `  *Total Received:* −Rs ${totalWasooli.toLocaleString()}\n`;
@@ -571,7 +695,7 @@ export default function OwnerBillModal({
       }
     }
     text += `=============================\n`;
-    text += `Authorized Signature: Waqas`;
+    text += `Prepared By: Waqas`;
     return text;
   };
 
@@ -676,11 +800,15 @@ export default function OwnerBillModal({
                   width: 50% !important;
                   max-width: 50% !important;
                   min-width: 50% !important;
+                  height: 100% !important;
                   display: flex !important;
                   box-sizing: border-box !important;
                   padding: 0 3mm !important;
                 }
                 .official-bill-container {
+                  display: flex !important;
+                  flex-direction: column !important;
+                  justify-content: space-between !important;
                   box-shadow: none !important;
                   border: 1.5px solid #000000 !important;
                   border-radius: 2px !important;
@@ -692,6 +820,31 @@ export default function OwnerBillModal({
                   width: 100% !important;
                   height: 100% !important;
                   padding: 8px 10px !important;
+                }
+                .official-bill-top-section {
+                  display: flex !important;
+                  flex-direction: column !important;
+                  flex: 1 1 auto !important;
+                  min-height: 0 !important;
+                }
+                .official-bill-table {
+                  flex: 1 1 auto !important;
+                  height: 100% !important;
+                  width: 100% !important;
+                  border-collapse: collapse !important;
+                  table-layout: fixed !important;
+                }
+                .official-bill-table tbody {
+                  height: 100% !important;
+                }
+                .official-bill-table tbody tr,
+                .official-bill-table tbody tr td {
+                  height: calc((100% - 22px) / 15) !important;
+                  vertical-align: middle !important;
+                }
+                .official-bill-bottom-section {
+                  flex-shrink: 0 !important;
+                  margin-top: auto !important;
                 }
                 .blank-half-sheet-print {
                   display: ${printLayout === '1-up-landscape' ? 'flex' : 'none'} !important;
@@ -801,29 +954,60 @@ export default function OwnerBillModal({
         boxSizing: 'border-box',
       }}
     >
-      {/* Top Section: Header + 12-Row Standard Table */}
-      <div>
+      {/* Top Section: Header + 15-Row Standard Table */}
+      <div
+        className="official-bill-top-section"
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          flex: '1 1 auto',
+          minHeight: 0,
+        }}
+      >
         {/* Header */}
-        <div style={{ borderBottom: '2px solid #000000', paddingBottom: 5, marginBottom: 5 }}>
+        <div style={{ borderBottom: '2px solid #000000', paddingBottom: 5, marginBottom: 4, flexShrink: 0 }}>
           {/* Top Row: Owner Name, Copy Badge, Phone */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11, fontWeight: 800, color: '#000000', marginBottom: 2 }}>
-            <span style={{ fontSize: 12, fontWeight: 900 }}>Mian Waqas</span>
+            <span style={{ fontSize: 12.5, fontWeight: 900, letterSpacing: '0.02em', textTransform: 'uppercase' }}>Mian Waqas</span>
             <span
+              className="bill-badge-premium"
               style={{
-                fontSize: 9,
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 5,
+                fontSize: 10,
                 fontWeight: 900,
                 textTransform: 'uppercase',
-                color: '#000000',
-                background: '#f8fafc',
-                border: '1.5px solid #000000',
-                padding: '1px 6px',
+                letterSpacing: '0.12em',
+                padding: '2.5px 12px',
                 borderRadius: 3,
-                letterSpacing: '0.04em',
+                lineHeight: 1.2,
+                ...(copyBadge === 'ORIGINAL'
+                  ? {
+                      background: '#000000',
+                      color: '#ffffff',
+                      border: '1.5px solid #000000',
+                      boxShadow: '0 1px 3px rgba(0, 0, 0, 0.25)',
+                    }
+                  : {
+                      background: '#ffffff',
+                      color: '#000000',
+                      border: '1.5px dashed #000000',
+                    }),
               }}
             >
-              {copyBadge}
+              {copyBadge === 'ORIGINAL' ? (
+                <>
+                  <span style={{ fontSize: 9, opacity: 0.85 }}>★</span>
+                  <span>ORIGINAL</span>
+                  <span style={{ fontSize: 9, opacity: 0.85 }}>★</span>
+                </>
+              ) : (
+                <span>{copyBadge}</span>
+              )}
             </span>
-            <span>Mob: 0300-0840719</span>
+            <span style={{ fontSize: 11.5, fontWeight: 800 }}>Mob: 0300-0840719</span>
           </div>
           <div style={{ textAlign: 'center', fontSize: 18.5, fontWeight: 900, letterSpacing: '0.05em', color: '#000000', textTransform: 'uppercase', lineHeight: 1.15, marginTop: 1 }}>
             RS EMBROIDERY
@@ -831,77 +1015,106 @@ export default function OwnerBillModal({
           <div style={{ textAlign: 'center', fontSize: 9.5, color: '#334155', fontWeight: 700, letterSpacing: '0.01em', marginTop: 1 }}>
             Address: Kot Hanif Sheikhupura Road 4 Km Muridke
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10.5, fontWeight: 800, marginTop: 4, color: '#000000', borderTop: '1px dashed #cbd5e1', paddingTop: 3 }}>
-            <div>Date: <u style={{ fontWeight: 900 }}>{formatDisplayDate(billDate)}</u></div>
-            <div>Book#: <u style={{ fontWeight: 900 }}>{bookNo}</u> &nbsp;&nbsp; Bill#: <u style={{ fontWeight: 900 }}>{billNo}</u></div>
-          </div>
-          <div style={{ textAlign: 'left', fontSize: 11.5, fontWeight: 900, marginTop: 3, color: '#000000' }}>
-            <span>Bill To: </span>
-            <u style={{ fontWeight: 900 }}>{ownerName || '—'}</u>
+          {/* Bill Meta Row: Bill To on the left, Date & Book#/Bill# on the right — Perfectly Balanced & Opposed */}
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              fontSize: 11,
+              color: '#000000',
+              borderTop: '1.5px solid #000000',
+              marginTop: 4,
+              paddingTop: 4,
+              paddingBottom: 2,
+              gap: 8,
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0, flex: 1 }}>
+              <span style={{ fontWeight: 900, textTransform: 'uppercase', fontSize: 10.5, letterSpacing: '0.03em', color: '#0f172a' }}>Bill To:</span>
+              <span style={{ fontWeight: 900, fontSize: 12, borderBottom: '1.5px solid #000000', paddingBottom: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {ownerName || '—'}
+              </span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0, fontSize: 10.5, fontWeight: 800 }}>
+              <div>
+                <span>Date: </span>
+                <span style={{ fontWeight: 900, borderBottom: '1px solid #000000', paddingBottom: 1 }}>{formatDisplayDate(billDate)}</span>
+              </div>
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: '#f8fafc', padding: '1.5px 7px', borderRadius: 4, border: '1px solid #cbd5e1' }}>
+                <span>Book#: <strong style={{ fontWeight: 900, color: '#000000' }}>{bookNo}</strong></span>
+                <span style={{ color: '#94a3b8' }}>|</span>
+                <span>Bill#: <strong style={{ fontWeight: 900, color: '#000000' }}>{billNo}</strong></span>
+              </div>
+            </div>
           </div>
         </div>
 
         {/* Standard Fixed 15-Row Table (Physical Bill Book Format) */}
         <table
+          className="official-bill-table"
           style={{
             width: '100%',
             borderCollapse: 'collapse',
             fontSize: 10,
             color: '#000000',
-            marginBottom: 2,
+            marginBottom: 0,
+            flex: '1 1 auto',
+            height: '100%',
+            tableLayout: 'fixed',
           }}
         >
-          <thead>
-            <tr style={{ background: '#0f172a', color: '#ffffff' }}>
+          <thead style={{ flexShrink: 0 }}>
+            <tr style={{ background: '#0f172a', color: '#ffffff', height: 22 }}>
               <th style={{ padding: '3px 2px', width: 26, textAlign: 'center', border: '1px solid #000000', color: '#ffffff', fontWeight: 800 }}>SR#</th>
               <th style={{ padding: '3px 4px', border: '1px solid #000000', color: '#ffffff', fontWeight: 800 }}>LOT#</th>
               <th style={{ padding: '3px 4px', border: '1px solid #000000', color: '#ffffff', fontWeight: 800 }}>DESIGN#</th>
-              <th style={{ padding: '3px 4px', width: 40, textAlign: 'right', border: '1px solid #000000', color: '#ffffff', fontWeight: 800 }}>QTY</th>
-              <th style={{ padding: '3px 4px', width: 44, textAlign: 'right', border: '1px solid #000000', color: '#ffffff', fontWeight: 800 }}>RATE</th>
-              <th style={{ padding: '3px 4px', width: 84, textAlign: 'right', border: '1px solid #000000', color: '#ffffff', fontWeight: 800 }}>AMOUNT (RS)</th>
+              <th style={{ padding: '3px 2px', width: 38, textAlign: 'right', border: '1px solid #000000', color: '#ffffff', fontWeight: 800 }}>QTY</th>
+              <th style={{ padding: '3px 2px', width: 44, textAlign: 'right', border: '1px solid #000000', color: '#ffffff', fontWeight: 800 }}>RATE</th>
+              <th style={{ padding: '3px 8px 3px 4px', width: 104, textAlign: 'right', border: '1px solid #000000', color: '#ffffff', fontWeight: 800, whiteSpace: 'nowrap' }}>AMOUNT (RS)</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody style={{ height: '100%' }}>
             {lots.length === 0 ? (
               <>
-                <tr style={{ height: 18.5, background: '#ffffff' }}>
-                  <td style={{ padding: '2px 2px', textAlign: 'center', border: '1px solid #cbd5e1', color: '#94a3b8', fontWeight: 600 }}>1</td>
-                  <td colSpan={5} style={{ padding: '2px 6px', color: '#64748b', fontStyle: 'italic', border: '1px solid #cbd5e1', fontSize: 9.5 }}>
+                <tr style={{ height: 'calc((100% - 22px) / 15)', minHeight: 24, background: '#ffffff' }}>
+                  <td style={{ padding: '3px 2px', textAlign: 'center', border: '1px solid #cbd5e1', color: '#94a3b8', fontWeight: 600, verticalAlign: 'middle' }}>1</td>
+                  <td colSpan={5} style={{ padding: '3px 6px', color: '#64748b', fontStyle: 'italic', border: '1px solid #cbd5e1', fontSize: 9.5, verticalAlign: 'middle' }}>
                     No lots added to this bill.
                   </td>
                 </tr>
                 {Array.from({ length: STANDARD_BILL_ROWS - 1 }).map((_, emptyIdx) => (
-                  <tr key={`empty-${emptyIdx}`} style={{ height: 18.5, background: emptyIdx % 2 !== 0 ? '#ffffff' : '#f8fafc' }}>
-                    <td style={{ padding: '2px 2px', textAlign: 'center', border: '1px solid #cbd5e1', color: '#94a3b8', fontWeight: 600, fontSize: 9.5 }}>{emptyIdx + 2}</td>
-                    <td style={{ border: '1px solid #cbd5e1' }}>&nbsp;</td>
-                    <td style={{ border: '1px solid #cbd5e1' }}>&nbsp;</td>
-                    <td style={{ border: '1px solid #cbd5e1' }}>&nbsp;</td>
-                    <td style={{ border: '1px solid #cbd5e1' }}>&nbsp;</td>
-                    <td style={{ border: '1px solid #cbd5e1' }}>&nbsp;</td>
+                  <tr key={`empty-${emptyIdx}`} style={{ height: 'calc((100% - 22px) / 15)', minHeight: 24, background: emptyIdx % 2 !== 0 ? '#ffffff' : '#f8fafc' }}>
+                    <td style={{ padding: '3px 2px', textAlign: 'center', border: '1px solid #cbd5e1', color: '#94a3b8', fontWeight: 600, fontSize: 9.5, verticalAlign: 'middle' }}>{emptyIdx + 2}</td>
+                    <td style={{ border: '1px solid #cbd5e1', verticalAlign: 'middle' }}>&nbsp;</td>
+                    <td style={{ border: '1px solid #cbd5e1', verticalAlign: 'middle' }}>&nbsp;</td>
+                    <td style={{ border: '1px solid #cbd5e1', verticalAlign: 'middle' }}>&nbsp;</td>
+                    <td style={{ border: '1px solid #cbd5e1', verticalAlign: 'middle' }}>&nbsp;</td>
+                    <td style={{ border: '1px solid #cbd5e1', verticalAlign: 'middle' }}>&nbsp;</td>
                   </tr>
                 ))}
               </>
             ) : (
               <>
                 {lots.map((l, idx) => (
-                  <tr key={idx} style={{ height: 18.5, background: idx % 2 === 0 ? '#ffffff' : '#f8fafc' }}>
-                    <td style={{ padding: '2px 2px', textAlign: 'center', border: '1px solid #cbd5e1', color: '#000000', fontWeight: 700, fontSize: 10 }}>
+                  <tr key={idx} style={{ height: 'calc((100% - 22px) / 15)', minHeight: 24, background: idx % 2 === 0 ? '#ffffff' : '#f8fafc' }}>
+                    <td style={{ padding: '3px 2px', textAlign: 'center', border: '1px solid #cbd5e1', color: '#000000', fontWeight: 700, fontSize: 10, verticalAlign: 'middle' }}>
                       {idx + 1}
                     </td>
-                    <td style={{ padding: '2px 4px', fontWeight: 800, border: '1px solid #cbd5e1', color: '#000000', fontSize: 10 }}>
+                    <td style={{ padding: '3px 4px', fontWeight: 800, border: '1px solid #cbd5e1', color: '#000000', fontSize: 10, verticalAlign: 'middle' }}>
                       {formatBillLotNo(l)}
-                      {l.note ? <span style={{ fontSize: 8, color: '#334155', display: 'block', fontWeight: 600, lineHeight: 1 }}>{l.note}</span> : null}
+                      {l.note ? <span style={{ fontSize: 8, color: '#334155', display: 'block', fontWeight: 600, lineHeight: 1.1 }}>{l.note}</span> : null}
                     </td>
-                    <td style={{ padding: '2px 4px', border: '1px solid #cbd5e1', color: '#000000', fontWeight: 700, fontSize: 10 }}>
+                    <td style={{ padding: '3px 4px', border: '1px solid #cbd5e1', color: '#000000', fontWeight: 700, fontSize: 10, verticalAlign: 'middle' }}>
                       {l.designNo}
                     </td>
-                    <td style={{ padding: '2px 4px', textAlign: 'right', border: '1px solid #cbd5e1', color: '#000000', fontWeight: 700, fontSize: 10 }}>
+                    <td style={{ padding: '3px 4px', textAlign: 'right', border: '1px solid #cbd5e1', color: '#000000', fontWeight: 700, fontSize: 10, verticalAlign: 'middle' }}>
                       {l.quantity}
                     </td>
-                    <td style={{ padding: '2px 4px', textAlign: 'right', border: '1px solid #cbd5e1', color: '#000000', fontWeight: 700, fontSize: 10 }}>
+                    <td style={{ padding: '3px 4px', textAlign: 'right', border: '1px solid #cbd5e1', color: '#000000', fontWeight: 700, fontSize: 10, verticalAlign: 'middle' }}>
                       {l.rate}
                     </td>
-                    <td style={{ padding: '2px 4px', textAlign: 'right', fontWeight: 800, border: '1px solid #cbd5e1', color: '#000000', fontSize: 10 }}>
+                    <td style={{ padding: '3px 8px 3px 4px', textAlign: 'right', fontWeight: 800, border: '1px solid #cbd5e1', color: '#000000', fontSize: 10, verticalAlign: 'middle' }}>
                       Rs {Number(l.amount).toLocaleString()}
                     </td>
                   </tr>
@@ -910,15 +1123,15 @@ export default function OwnerBillModal({
                   const rowNum = lots.length + emptyIdx + 1;
                   const isEven = (lots.length + emptyIdx) % 2 !== 0;
                   return (
-                    <tr key={`empty-${emptyIdx}`} style={{ height: 18.5, background: isEven ? '#f8fafc' : '#ffffff' }}>
-                      <td style={{ padding: '2px 2px', textAlign: 'center', border: '1px solid #cbd5e1', color: '#94a3b8', fontWeight: 600, fontSize: 9.5 }}>
+                    <tr key={`empty-${emptyIdx}`} style={{ height: 'calc((100% - 22px) / 15)', minHeight: 24, background: isEven ? '#f8fafc' : '#ffffff' }}>
+                      <td style={{ padding: '3px 2px', textAlign: 'center', border: '1px solid #cbd5e1', color: '#94a3b8', fontWeight: 600, fontSize: 9.5, verticalAlign: 'middle' }}>
                         {rowNum}
                       </td>
-                      <td style={{ border: '1px solid #cbd5e1' }}>&nbsp;</td>
-                      <td style={{ border: '1px solid #cbd5e1' }}>&nbsp;</td>
-                      <td style={{ border: '1px solid #cbd5e1' }}>&nbsp;</td>
-                      <td style={{ border: '1px solid #cbd5e1' }}>&nbsp;</td>
-                      <td style={{ border: '1px solid #cbd5e1' }}>&nbsp;</td>
+                      <td style={{ border: '1px solid #cbd5e1', verticalAlign: 'middle' }}>&nbsp;</td>
+                      <td style={{ border: '1px solid #cbd5e1', verticalAlign: 'middle' }}>&nbsp;</td>
+                      <td style={{ border: '1px solid #cbd5e1', verticalAlign: 'middle' }}>&nbsp;</td>
+                      <td style={{ border: '1px solid #cbd5e1', verticalAlign: 'middle' }}>&nbsp;</td>
+                      <td style={{ border: '1px solid #cbd5e1', verticalAlign: 'middle' }}>&nbsp;</td>
                     </tr>
                   );
                 })}
@@ -929,7 +1142,7 @@ export default function OwnerBillModal({
       </div>
 
       {/* Bottom Section: Calculations Breakdown + Signature */}
-      <div style={{ marginTop: 'auto', paddingTop: 4 }}>
+      <div className="official-bill-bottom-section" style={{ marginTop: 'auto', paddingTop: 4, flexShrink: 0 }}>
         {/* Calculations Breakdown */}
         <div style={{ borderTop: '2px solid #000000', paddingTop: 4, fontSize: 11.5, color: '#000000' }}>
           {/* Row 1: Current Work */}
@@ -966,24 +1179,43 @@ export default function OwnerBillModal({
           )}
 
           {/* Row 4: Gross Total */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', fontWeight: 900, fontSize: 12.5, borderTop: '1.5px solid #000000', borderBottom: '1.5px solid #000000', margin: '3px 0', color: '#000000' }}>
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              padding: '3px 0',
+              fontWeight: 900,
+              fontSize: 12.5,
+              borderTop: '1.5px solid #000000',
+              borderBottom: '1.5px solid #000000',
+              margin: '3px 0',
+              color: '#000000',
+            }}
+          >
             <span>= Gross Total:</span>
-            <span>Rs {grossTotal.toLocaleString()}</span>
+            <span>
+              Rs {grossTotal.toLocaleString()}
+              {formatLakhCrore(grossTotal) && (
+                <span style={{ fontSize: 10, color: '#475569', fontStyle: 'italic', fontWeight: 700, marginLeft: 6 }}>
+                  ({formatLakhCrore(grossTotal)})
+                </span>
+              )}
+            </span>
           </div>
 
-          {/* Row 5: Payments Received */}
+          {/* Row 5: Payments Received (if any) */}
           {paymentsList.length > 0 && (
             <div
               style={{
                 padding: '3px 0',
-                borderTop: '1px dashed #cbd5e1',
                 borderBottom: '1px dashed #cbd5e1',
-                margin: '3px 0',
+                margin: '2px 0',
               }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontSize: 11, fontWeight: 700, color: '#000000' }}>
-                  − Payments Received ({paymentsList.length === 1 ? formatDisplayDate(paymentsList[0].date) : `${paymentsList.length} Payments`}):
+                  − Payments Received ({paymentsList.length === 1 ? formatShortDateYY(paymentsList[0].date) : `${paymentsList.length} Payments`}):
                 </span>
                 <span style={{ fontSize: 11.5, fontWeight: 800, color: '#000000' }}>
                   −Rs {totalWasooli.toLocaleString()}
@@ -992,29 +1224,34 @@ export default function OwnerBillModal({
               <div
                 style={{
                   fontSize: 9,
-                  color: '#475569',
-                  fontWeight: 600,
+                  color: '#1e293b',
                   marginTop: 2,
                   display: 'flex',
-                  flexWrap: 'wrap',
-                  gap: '2px 8px',
-                  lineHeight: 1.3,
+                  flexDirection: 'column',
+                  gap: 1.5,
+                  lineHeight: 1.35,
                 }}
               >
-                {paymentsList.map((p, pIdx) => {
-                  const shortNote = formatShortWasooliNote(p.note);
-                  return (
-                    <span key={pIdx}>
-                      • {formatDisplayDate(p.date)}: Rs {Number(p.amount).toLocaleString()}
-                      {shortNote ? ` (${shortNote})` : ''}
-                    </span>
-                  );
-                })}
+                {groupedPaymentsByDate.map(([dateKey, items], gIdx) => (
+                  <div key={gIdx} style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: '1px 4px' }}>
+                    <strong style={{ color: '#000000', fontWeight: 800, whiteSpace: 'nowrap' }}>• {dateKey}:</strong>
+                    {items.map((p, pIdx) => {
+                      const shortNote = formatShortWasooliNote(p.note);
+                      return (
+                        <span key={pIdx} style={{ fontWeight: 600 }}>
+                          {Number(p.amount).toLocaleString()}
+                          {shortNote ? <span style={{ fontSize: 8, color: '#64748b', marginLeft: 2 }}>({shortNote})</span> : null}
+                          {pIdx < items.length - 1 ? <span style={{ color: '#94a3b8', margin: '0 4px' }}>|</span> : null}
+                        </span>
+                      );
+                    })}
+                  </div>
+                ))}
               </div>
             </div>
           )}
 
-          {/* Row 6: Deductions */}
+          {/* Row 6: Deductions (if any) */}
           {totalKatoti > 0 && (
             <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0', color: '#000000', fontSize: 11.5 }}>
               <span>− Deductions ({katotiTitle}):</span>
@@ -1022,49 +1259,44 @@ export default function OwnerBillModal({
             </div>
           )}
 
-          {/* Row 7: Net Payable / Advance */}
-          <div
-            className="bill-total-highlight"
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              padding: '5px 10px',
-              fontSize: 13.5,
-              fontWeight: 900,
-              background: '#0f172a',
-              color: '#ffffff',
-              borderRadius: 4,
-              marginTop: 4,
-            }}
-          >
-            <span style={{ color: '#ffffff', fontWeight: 900 }}>
-              {grandTotalBaqaya < 0 ? '👉 ADVANCE SURPLUS (PARTY ADVANCE):' : '👉 NET PAYABLE:'}
-            </span>
-            <span style={{ color: '#ffffff', fontSize: 16, fontWeight: 900 }}>
-              Rs {Math.abs(grandTotalBaqaya).toLocaleString()}
-            </span>
-          </div>
-
-          {formatLakhCrore(grandTotalBaqaya) && (
-            <div style={{ textAlign: 'right', fontSize: 10.5, color: '#334155', fontStyle: 'italic', marginTop: 3, fontWeight: 700 }}>
-              ({formatLakhCrore(Math.abs(grandTotalBaqaya))} {grandTotalBaqaya < 0 ? 'Advance' : ''})
+          {/* Row 7: Net Total (shown cleanly when deductions or wasooli exist) */}
+          {(paymentsList.length > 0 || totalKatoti > 0) && (
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                padding: '3px 0',
+                fontWeight: 900,
+                fontSize: 12.5,
+                borderTop: '1.5px solid #000000',
+                borderBottom: '1.5px solid #000000',
+                margin: '3px 0',
+                color: '#000000',
+              }}
+            >
+              <span>{grandTotalBaqaya < 0 ? '= Net Advance:' : '= Net Total:'}</span>
+              <span>
+                Rs {Math.abs(grandTotalBaqaya).toLocaleString()}
+                {formatLakhCrore(grandTotalBaqaya) && (
+                  <span style={{ fontSize: 10, color: '#475569', fontStyle: 'italic', fontWeight: 700, marginLeft: 6 }}>
+                    ({formatLakhCrore(Math.abs(grandTotalBaqaya))} {grandTotalBaqaya < 0 ? 'Advance' : ''})
+                  </span>
+                )}
+              </span>
             </div>
           )}
         </div>
 
-        {/* Signature Area */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: 10, paddingTop: 4, color: '#000000' }}>
-          <div style={{ fontSize: 11, color: '#000000', fontWeight: 700 }}>
+        {/* Footer Area: Prepared By (Left) + Write-able Lines for Manual Calculation (Right) */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: 14, paddingTop: 4, color: '#000000' }}>
+          <div style={{ fontSize: 11, color: '#000000', fontWeight: 700, paddingBottom: 2 }}>
             <div>Prepared By: ____________</div>
           </div>
-          <div style={{ textAlign: 'center', color: '#000000' }}>
-            <div style={{ fontSize: 16, fontFamily: 'cursive', fontWeight: 900, letterSpacing: 1.5, marginBottom: 2, color: '#000000' }}>
-              Waqas
-            </div>
-            <div style={{ borderTop: '1.5px solid #000000', paddingTop: 3, fontSize: 10, fontWeight: 700, color: '#000000' }}>
-              Authorized Signature
-            </div>
+          <div style={{ width: 180, display: 'flex', flexDirection: 'column', gap: 10, paddingBottom: 2 }}>
+            <div style={{ borderBottom: '1.5px solid #000000', height: 16 }}></div>
+            <div style={{ borderBottom: '1.5px solid #000000', height: 16 }}></div>
+            <div style={{ borderBottom: '1.5px solid #000000', height: 16 }}></div>
           </div>
         </div>
       </div>
@@ -1076,24 +1308,24 @@ export default function OwnerBillModal({
       wide
       overlayClassName="owner-bill-modal-overlay"
       title={
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', flexWrap: 'wrap', gap: 12 }}>
+        <div className="owner-bill-modal-header-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', flexWrap: 'wrap', gap: 10 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span style={{ fontSize: 16, fontWeight: 800, color: '#f8fafc' }}>
+            <span style={{ fontSize: 15, fontWeight: 800, color: 'var(--text-primary)' }}>
               Bill To: {ownerName || 'Party'} — Bill #{billNo} (Book {bookNo})
             </span>
           </div>
-          <div style={{ display: 'flex', gap: 8, marginRight: 24 }} className="hide-print">
+          <div style={{ display: 'flex', gap: 6, marginRight: 20 }} className="hide-print owner-bill-modal-tabs">
             <button
               type="button"
               onClick={() => setActiveTab('form')}
               style={{
                 fontSize: 12,
                 fontWeight: 700,
-                padding: '6px 14px',
+                padding: '6px 12px',
                 borderRadius: 20,
-                border: '1px solid ' + (activeTab === 'form' ? '#3b82f6' : 'rgba(255,255,255,0.12)'),
-                background: activeTab === 'form' ? '#1e40af' : 'rgba(255,255,255,0.04)',
-                color: activeTab === 'form' ? '#ffffff' : '#94a3b8',
+                border: activeTab === 'form' ? '1.5px solid var(--primary-light, #3b82f6)' : '1px solid var(--border)',
+                background: activeTab === 'form' ? 'var(--primary, #1e40af)' : 'var(--card-bg)',
+                color: activeTab === 'form' ? '#ffffff' : 'var(--text-secondary)',
                 cursor: 'pointer',
                 transition: 'all 0.15s ease',
               }}
@@ -1106,11 +1338,11 @@ export default function OwnerBillModal({
               style={{
                 fontSize: 12,
                 fontWeight: 700,
-                padding: '6px 14px',
+                padding: '6px 12px',
                 borderRadius: 20,
-                border: '1px solid ' + (activeTab === 'preview' ? '#3b82f6' : 'rgba(255,255,255,0.12)'),
-                background: activeTab === 'preview' ? '#1e40af' : 'rgba(255,255,255,0.04)',
-                color: activeTab === 'preview' ? '#ffffff' : '#94a3b8',
+                border: activeTab === 'preview' ? '1.5px solid var(--primary-light, #3b82f6)' : '1px solid var(--border)',
+                background: activeTab === 'preview' ? 'var(--primary, #1e40af)' : 'var(--card-bg)',
+                color: activeTab === 'preview' ? '#ffffff' : 'var(--text-secondary)',
                 cursor: 'pointer',
                 transition: 'all 0.15s ease',
               }}
@@ -1122,23 +1354,17 @@ export default function OwnerBillModal({
       }
       onClose={onClose}
     >
-      {loadingDefaults ? (
-        <div style={{ textAlign: 'center', padding: '40px' }}>
-          <Loader />
-          <div style={{ marginTop: 12, fontSize: 13, color: '#94a3b8' }}>
-            Bill book aur Sabqa Baqaya load ho raha hai...
-          </div>
-        </div>
-      ) : activeTab === 'form' ? (
+      {activeTab === 'form' ? (
         /* ========================================================================= */
-        /* SLEEK, MODERN 1-SCREEN BILL MAKER (Linear / Stripe Quality)              */
+        /* SLEEK, MODERN 1-SCREEN BILL MAKER (Responsive & Theme-Adaptive)           */
         /* ========================================================================= */
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           {/* Header Row: Compact Sticky Info Bar */}
           <div
+            className="owner-bill-info-bar"
             style={{
-              background: 'linear-gradient(180deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.02) 100%)',
-              border: '1px solid rgba(255, 255, 255, 0.1)',
+              background: 'var(--card-bg)',
+              border: '1px solid var(--border)',
               borderRadius: 12,
               padding: '10px 14px',
               display: 'flex',
@@ -1148,63 +1374,61 @@ export default function OwnerBillModal({
               gap: 12,
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <div className="owner-bill-info-inputs-group" style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>Book#</span>
+                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Book#</span>
                 <input
                   type="number"
                   min="1"
                   value={bookNo}
                   onChange={(e) => setBookNo(Number(e.target.value) || 1)}
+                  className="owner-bill-input"
                   style={{
                     width: 55,
-                    padding: '4px 6px',
+                    padding: '5px 6px',
                     borderRadius: 6,
                     fontWeight: 800,
                     textAlign: 'center',
-                    background: 'rgba(255,255,255,0.06)',
-                    border: '1px solid rgba(255,255,255,0.15)',
-                    color: '#ffffff',
                     fontSize: 13,
                   }}
                 />
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>Bill#</span>
+                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Bill#</span>
                 <input
                   type="number"
                   min="1"
                   max="100"
                   value={billNo}
                   onChange={(e) => handleBillNoChange(e.target.value)}
+                  className="owner-bill-input"
                   style={{
                     width: 65,
-                    padding: '4px 6px',
+                    padding: '5px 6px',
                     borderRadius: 6,
                     fontWeight: 900,
                     textAlign: 'center',
-                    background: 'rgba(37, 99, 235, 0.2)',
-                    border: '1.5px solid #3b82f6',
-                    color: '#60a5fa',
+                    background: 'var(--primary-bg, #eff6ff)',
+                    borderColor: 'var(--primary-light, #3b82f6)',
+                    color: 'var(--primary, #1e40af)',
                     fontSize: 13,
                   }}
                 />
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>Date</span>
+                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Date</span>
                 <input
                   type="date"
                   value={billDate}
                   onChange={(e) => setBillDate(e.target.value)}
+                  className="owner-bill-input"
                   style={{
-                    padding: '4px 8px',
+                    padding: '5px 8px',
                     borderRadius: 6,
                     fontSize: 12.5,
-                    background: 'rgba(255,255,255,0.06)',
-                    border: '1px solid rgba(255,255,255,0.15)',
-                    color: '#ffffff',
+                    fontWeight: 600,
                   }}
                 />
               </div>
@@ -1212,34 +1436,35 @@ export default function OwnerBillModal({
 
             {/* Sabqa Baqaya / Advance Surplus Highlight Box */}
             <div
+              className="owner-bill-sabqa-box"
               style={{
                 display: 'flex',
                 alignItems: 'center',
                 gap: 8,
-                background: Number(sabqaBaqaya || 0) < 0 ? 'rgba(16, 185, 129, 0.12)' : 'rgba(245, 158, 11, 0.1)',
-                padding: '4px 12px',
+                background: Number(sabqaBaqaya || 0) < 0 ? 'var(--success-bg, #f0fdf4)' : 'var(--warning-bg, #fffbeb)',
+                padding: '6px 14px',
                 borderRadius: 8,
-                border: Number(sabqaBaqaya || 0) < 0 ? '1px solid rgba(16, 185, 129, 0.35)' : '1px solid rgba(245, 158, 11, 0.35)',
+                border: Number(sabqaBaqaya || 0) < 0 ? '1px solid var(--success, #15803d)' : '1px solid var(--warning-border, #fde68a)',
               }}
             >
-              <span style={{ fontSize: 11.5, fontWeight: 700, color: Number(sabqaBaqaya || 0) < 0 ? '#34d399' : '#f59e0b', textTransform: 'uppercase' }}>
+              <span style={{ fontSize: 11.5, fontWeight: 800, color: Number(sabqaBaqaya || 0) < 0 ? 'var(--success, #15803d)' : 'var(--warning-text, #92600a)', textTransform: 'uppercase', letterSpacing: '0.02em' }}>
                 {Number(sabqaBaqaya || 0) < 0 ? 'Advance Surplus:' : 'Previous Balance:'}
               </span>
-              <span style={{ fontSize: 12, color: '#94a3b8' }}>Rs</span>
+              <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)' }}>Rs</span>
               <input
                 type="number"
                 value={sabqaBaqaya}
                 onChange={(e) => setSabqaBaqaya(Number(e.target.value) || 0)}
                 placeholder="0"
                 style={{
-                  width: 110,
-                  padding: '3px 0',
+                  width: 120,
+                  padding: '2px 0',
                   borderRadius: 4,
                   fontWeight: 900,
-                  fontSize: 14,
+                  fontSize: 15,
                   background: 'transparent',
                   border: 'none',
-                  color: Number(sabqaBaqaya || 0) < 0 ? '#34d399' : '#fbbf24',
+                  color: Number(sabqaBaqaya || 0) < 0 ? 'var(--success, #15803d)' : 'var(--warning-text, #92600a)',
                   textAlign: 'right',
                 }}
               />
@@ -1247,43 +1472,41 @@ export default function OwnerBillModal({
           </div>
 
           {lastBillInfo && (
-            <div style={{ fontSize: 11.5, color: '#94a3b8', marginTop: -6, paddingLeft: 4 }}>
+            <div style={{ fontSize: 11.5, color: 'var(--text-secondary)', marginTop: -6, paddingLeft: 4 }}>
               💡 {lastBillInfo} Previous balance carried forward from last finalized bill.
             </div>
           )}
 
           {/* Section 1: Clean, Elegant Lots Table */}
           <div
+            className="owner-bill-surface"
             style={{
-              border: '1px solid rgba(255, 255, 255, 0.1)',
-              borderRadius: 12,
               overflow: 'hidden',
-              background: '#181210',
             }}
           >
-            {/* Multi-Bill Info Banner if lots > 8 */}
-            {candidateLots.length > STANDARD_BILL_LOTS_LIMIT && (
+            {/* Multi-Bill Info Banner if lots > 15 */}
+            {billableCandidateCount > STANDARD_BILL_LOTS_LIMIT && (
               <div
                 style={{
-                  background: 'rgba(59, 130, 246, 0.1)',
-                  borderBottom: '1px solid rgba(59, 130, 246, 0.25)',
+                  background: 'var(--primary-bg, #eff6ff)',
+                  borderBottom: '1px solid var(--border)',
                   padding: '8px 14px',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
                   gap: 10,
                   fontSize: 12,
-                  color: '#93c5fd',
+                  color: 'var(--primary, #1e40af)',
                 }}
               >
                 <div>
-                  <strong style={{ color: '#ffffff' }}>ℹ️ Standard Bill Book Size ({STANDARD_BILL_LOTS_LIMIT} Lots / Page):</strong> Total {candidateLots.length} billable lots. First {STANDARD_BILL_LOTS_LIMIT} lots in Bill #{billNo}, remaining in next bill.
+                  <strong>ℹ️ Standard Bill Book Size ({STANDARD_BILL_LOTS_LIMIT} Lots / Page):</strong> Total {billableCandidateCount} billable lots. First {STANDARD_BILL_LOTS_LIMIT} lots in Bill #{billNo}, remaining in next bill.
                 </div>
                 <button
                   type="button"
                   className="btn btn-secondary btn-xs"
                   onClick={() => setShowLotPicker(true)}
-                  style={{ whiteSpace: 'nowrap', fontWeight: 700, color: '#38bdf8' }}
+                  style={{ whiteSpace: 'nowrap', fontWeight: 700 }}
                 >
                   ⚡ Select Lots
                 </button>
@@ -1292,10 +1515,11 @@ export default function OwnerBillModal({
 
             {/* Table Toolbar */}
             <div
+              className="owner-bill-lots-toolbar"
               style={{
                 padding: '10px 14px',
-                background: 'rgba(255, 255, 255, 0.03)',
-                borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+                background: 'var(--body-bg, #f8fafc)',
+                borderBottom: '1px solid var(--border)',
                 display: 'flex',
                 justifyContent: 'space-between',
                 alignItems: 'center',
@@ -1303,32 +1527,32 @@ export default function OwnerBillModal({
                 gap: 8,
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span style={{ fontWeight: 800, fontSize: 13.5, color: '#f8fafc' }}>
+              <div className="owner-bill-lots-header-info" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                <span style={{ fontWeight: 800, fontSize: 13.5, color: 'var(--text-primary)' }}>
                   1. Current Work (Lots)
                 </span>
                 <span
                   style={{
-                    background: 'rgba(37, 99, 235, 0.18)',
-                    color: '#60a5fa',
+                    background: 'var(--primary-bg, #eff6ff)',
+                    color: 'var(--primary, #1e40af)',
                     fontWeight: 800,
                     fontSize: 12,
                     padding: '3px 10px',
                     borderRadius: 6,
-                    border: '1px solid rgba(59, 130, 246, 0.35)',
+                    border: '1px solid var(--border)',
                   }}
                 >
                   {lots.length} / {STANDARD_BILL_LOTS_LIMIT} Lots — Rs {currentBillTotal.toLocaleString()}
                 </span>
               </div>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <div className="owner-bill-lots-btns" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                 <button
                   type="button"
                   className="btn btn-secondary btn-xs"
                   onClick={() => setShowLotPicker(true)}
-                  style={{ fontWeight: 700, color: '#38bdf8', borderColor: 'rgba(56, 189, 248, 0.35)' }}
+                  style={{ fontWeight: 700 }}
                 >
-                  📦 Pick Lots ({candidateLots.length} available)
+                  📦 Pick Lots ({billableCandidateCount} available)
                 </button>
                 <button
                   type="button"
@@ -1343,7 +1567,7 @@ export default function OwnerBillModal({
                     type="button"
                     className="btn btn-secondary btn-xs"
                     onClick={() => setLots([])}
-                    style={{ color: '#f87171', borderColor: 'rgba(248, 113, 113, 0.3)' }}
+                    style={{ color: 'var(--danger, #dc2626)', borderColor: 'var(--border)' }}
                   >
                     Clear All
                   </button>
@@ -1351,26 +1575,31 @@ export default function OwnerBillModal({
               </div>
             </div>
 
+            {/* Mobile swipe hint */}
+            <div className="owner-bill-mobile-hint">
+              👉 Table ko daayein/baayein scroll karein (Swipe left/right)
+            </div>
+
             {/* Table Body */}
-            <div style={{ overflowX: 'auto', maxHeight: '340px' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5, marginBottom: 0 }}>
+            <div className="owner-bill-table-scroll" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', maxHeight: '380px' }}>
+              <table style={{ width: '100%', minWidth: '660px', borderCollapse: 'collapse', fontSize: 12.5, marginBottom: 0 }}>
                 <thead>
-                  <tr style={{ background: '#120d0b', color: '#94a3b8', borderBottom: '1px solid rgba(255, 255, 255, 0.08)' }}>
+                  <tr style={{ background: 'var(--body-bg, #f8fafc)', color: 'var(--text-secondary)', borderBottom: '1px solid var(--border)' }}>
                     <th style={{ width: 36, textAlign: 'center', padding: '8px 4px', fontWeight: 700 }}>#</th>
-                    <th style={{ width: 95, padding: '8px 6px', fontWeight: 700 }}>Lot#</th>
-                    <th style={{ width: 100, padding: '8px 6px', fontWeight: 700 }}>Design#</th>
+                    <th style={{ width: 100, padding: '8px 6px', fontWeight: 700 }}>Lot#</th>
+                    <th style={{ width: 110, padding: '8px 6px', fontWeight: 700 }}>Design#</th>
                     <th style={{ width: 85, textAlign: 'center', padding: '8px 6px', fontWeight: 700 }}>Qty</th>
                     <th style={{ width: 95, textAlign: 'center', padding: '8px 6px', fontWeight: 700 }}>Rate</th>
-                    <th style={{ width: 120, textAlign: 'right', padding: '8px 8px', fontWeight: 700 }}>Amount (Rs)</th>
-                    <th style={{ padding: '8px 6px', fontWeight: 700 }}>Note / Suit Bazo</th>
+                    <th style={{ width: 125, textAlign: 'right', padding: '8px 8px', fontWeight: 700 }}>Amount (Rs)</th>
+                    <th style={{ minWidth: 120, padding: '8px 6px', fontWeight: 700 }}>Note / Suit Bazo</th>
                     <th style={{ width: 35, textAlign: 'center', padding: '8px 4px' }}></th>
                   </tr>
                 </thead>
                 <tbody>
                   {lots.length === 0 ? (
                     <tr>
-                      <td colSpan={8} style={{ textAlign: 'center', color: '#94a3b8', padding: '28px 14px' }}>
-                        {candidateLots.length === 0 ? (
+                      <td colSpan={8} style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: '28px 14px' }}>
+                        {billableCandidateCount === 0 ? (
                           <span>Is waqt koi nayi billable lot maujood nahi hai. Nayi row add karne ke liye &quot;+ Add Row&quot; karein.</span>
                         ) : (
                           <span>Click &quot;📦 Pick Lots&quot; above to select billable lots or click &quot;+ Add Row&quot;.</span>
@@ -1382,11 +1611,11 @@ export default function OwnerBillModal({
                       <tr
                         key={idx}
                         style={{
-                          borderBottom: '1px solid rgba(255, 255, 255, 0.05)',
-                          background: idx % 2 === 0 ? 'transparent' : 'rgba(255, 255, 255, 0.02)',
+                          borderBottom: '1px solid var(--border)',
+                          background: idx % 2 === 0 ? 'transparent' : 'var(--body-bg, rgba(0, 0, 0, 0.02))',
                         }}
                       >
-                        <td style={{ textAlign: 'center', verticalAlign: 'middle', fontWeight: 600, color: '#64748b' }}>
+                        <td style={{ textAlign: 'center', verticalAlign: 'middle', fontWeight: 600, color: 'var(--text-secondary)' }}>
                           {idx + 1}
                         </td>
                         <td style={{ padding: '6px 4px' }}>
@@ -1395,15 +1624,12 @@ export default function OwnerBillModal({
                             value={l.lotNo || ''}
                             onChange={(e) => updateLotRow(idx, 'lotNo', e.target.value)}
                             placeholder="Lot#"
+                            className="owner-bill-input"
                             style={{
                               width: '100%',
                               padding: '5px 8px',
                               fontSize: 12.5,
                               fontWeight: 700,
-                              borderRadius: 6,
-                              background: 'rgba(255,255,255,0.04)',
-                              border: '1px solid rgba(255,255,255,0.1)',
-                              color: '#f8fafc',
                             }}
                           />
                         </td>
@@ -1413,14 +1639,11 @@ export default function OwnerBillModal({
                             value={l.designNo || ''}
                             onChange={(e) => updateLotRow(idx, 'designNo', e.target.value)}
                             placeholder="Design#"
+                            className="owner-bill-input"
                             style={{
                               width: '100%',
                               padding: '5px 8px',
                               fontSize: 12,
-                              borderRadius: 6,
-                              background: 'rgba(255,255,255,0.04)',
-                              border: '1px solid rgba(255,255,255,0.1)',
-                              color: '#cbd5e1',
                             }}
                           />
                         </td>
@@ -1430,15 +1653,12 @@ export default function OwnerBillModal({
                             value={l.quantity || ''}
                             onChange={(e) => updateLotRow(idx, 'quantity', e.target.value)}
                             placeholder="Qty"
+                            className="owner-bill-input"
                             style={{
                               width: '100%',
                               padding: '5px 8px',
                               fontSize: 12.5,
                               textAlign: 'center',
-                              borderRadius: 6,
-                              background: 'rgba(255,255,255,0.04)',
-                              border: '1px solid rgba(255,255,255,0.1)',
-                              color: '#f8fafc',
                             }}
                           />
                         </td>
@@ -1449,15 +1669,12 @@ export default function OwnerBillModal({
                             value={l.rate || ''}
                             onChange={(e) => updateLotRow(idx, 'rate', e.target.value)}
                             placeholder="Rate"
+                            className="owner-bill-input"
                             style={{
                               width: '100%',
                               padding: '5px 8px',
                               fontSize: 12.5,
                               textAlign: 'center',
-                              borderRadius: 6,
-                              background: 'rgba(255,255,255,0.04)',
-                              border: '1px solid rgba(255,255,255,0.1)',
-                              color: '#f8fafc',
                             }}
                           />
                         </td>
@@ -1467,16 +1684,15 @@ export default function OwnerBillModal({
                             value={l.amount || ''}
                             onChange={(e) => updateLotRow(idx, 'amount', e.target.value)}
                             placeholder="Amount"
+                            className="owner-bill-input"
                             style={{
                               width: '100%',
                               padding: '5px 8px',
                               fontSize: 13,
                               fontWeight: 800,
                               textAlign: 'right',
-                              borderRadius: 6,
-                              background: 'rgba(37, 99, 235, 0.08)',
-                              border: '1px solid rgba(59, 130, 246, 0.25)',
-                              color: '#60a5fa',
+                              background: 'var(--primary-bg, #eff6ff)',
+                              color: 'var(--primary, #1e40af)',
                             }}
                           />
                         </td>
@@ -1486,14 +1702,11 @@ export default function OwnerBillModal({
                             value={l.note || ''}
                             onChange={(e) => updateLotRow(idx, 'note', e.target.value)}
                             placeholder="e.g. 2 suit bazo"
+                            className="owner-bill-input"
                             style={{
                               width: '100%',
                               padding: '5px 8px',
                               fontSize: 12,
-                              borderRadius: 6,
-                              background: 'rgba(255,255,255,0.04)',
-                              border: '1px solid rgba(255,255,255,0.1)',
-                              color: '#94a3b8',
                             }}
                           />
                         </td>
@@ -1504,10 +1717,10 @@ export default function OwnerBillModal({
                             style={{
                               border: 'none',
                               background: 'transparent',
-                              color: '#f87171',
+                              color: 'var(--danger, #dc2626)',
                               cursor: 'pointer',
-                              fontSize: 16,
-                              padding: '3px 6px',
+                              fontSize: 18,
+                              padding: '2px 6px',
                               borderRadius: 4,
                             }}
                             title="Remove row"
@@ -1525,15 +1738,14 @@ export default function OwnerBillModal({
 
           {/* Section 2: Multi-Payment Wasooli Card (Supports multiple online & cash payments) */}
           <div
+            className="owner-bill-surface"
             style={{
-              background: 'rgba(255, 255, 255, 0.03)',
-              border: '1px solid rgba(255, 255, 255, 0.08)',
-              borderRadius: 12,
               padding: '12px 16px',
             }}
           >
             {/* Wasooli Header */}
             <div
+              className="owner-bill-payments-toolbar"
               style={{
                 display: 'flex',
                 justifyContent: 'space-between',
@@ -1543,32 +1755,48 @@ export default function OwnerBillModal({
                 marginBottom: 10,
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span style={{ fontSize: 12, fontWeight: 800, color: '#10b981', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+              <div className="owner-bill-payments-header-info" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 12, fontWeight: 800, color: 'var(--success, #15803d)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                   − Payments Received (Cash & Online)
                 </span>
                 <span
                   style={{
-                    background: 'rgba(16, 185, 129, 0.15)',
-                    color: '#34d399',
+                    background: 'var(--success-bg, #f0fdf4)',
+                    color: 'var(--success, #15803d)',
                     fontWeight: 800,
                     fontSize: 12,
                     padding: '2px 8px',
                     borderRadius: 6,
-                    border: '1px solid rgba(16, 185, 129, 0.3)',
+                    border: '1px solid var(--border)',
                   }}
                 >
                   {paymentsList.length} Payments — Rs {totalWasooli.toLocaleString()}
                 </span>
               </div>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <div className="owner-bill-payments-btns" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                {unbilledAvailablePayments.length > 0 && paymentsList.length === 0 && (
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-xs owner-bill-payments-shamil-btn"
+                    onClick={() => handleAddPaymentsFromPicker(unbilledAvailablePayments)}
+                    style={{
+                      fontWeight: 700,
+                      color: 'var(--success, #15803d)',
+                      background: 'var(--success-bg, #f0fdf4)',
+                      borderColor: 'var(--border)',
+                    }}
+                    title="Shamil karein tamam unbilled online payments is bill ki wasooli mein"
+                  >
+                    ⚡ Shamil Karein ({unbilledAvailablePayments.length} Online — Rs {totalUnbilledAvailablePayments.toLocaleString()})
+                  </button>
+                )}
                 <button
                   type="button"
                   className="btn btn-secondary btn-xs"
                   onClick={() => setShowPaymentPicker(true)}
-                  style={{ fontWeight: 700, color: '#38bdf8', borderColor: 'rgba(56, 189, 248, 0.35)' }}
+                  style={{ fontWeight: 700, color: 'var(--primary, #1e40af)', borderColor: 'var(--border)' }}
                 >
-                  🔍 Select Payments ({candidatePayments.filter((p) => p.type === 'Received' && (!settledPaymentIds || !settledPaymentIds.has(String(p.id || p._id))) && !p.isLegacySettled && (!p.billedInBillNo || p.billedInBillNo === 'none')).length} available)
+                  🔍 Select Payments ({unbilledAvailablePayments.length} available)
                 </button>
                 <button
                   type="button"
@@ -1583,7 +1811,7 @@ export default function OwnerBillModal({
                     type="button"
                     className="btn btn-secondary btn-xs"
                     onClick={() => setPaymentsList([])}
-                    style={{ color: '#f87171', borderColor: 'rgba(248, 113, 113, 0.3)' }}
+                    style={{ color: 'var(--danger, #dc2626)', borderColor: 'var(--border)' }}
                   >
                     Clear
                   </button>
@@ -1593,101 +1821,117 @@ export default function OwnerBillModal({
 
             {/* Payments List (Multiple Rows) */}
             {paymentsList.length === 0 ? (
-              <div style={{ fontSize: 12, color: '#94a3b8', fontStyle: 'italic', padding: '6px 0' }}>
-                No payments added yet. Click &quot;🔍 Select Payments&quot; above to include received payments or click &quot;+ Add Cash / Manual&quot;.
+              <div style={{ fontSize: 12, color: 'var(--text-secondary)', fontStyle: 'italic', padding: '6px 0' }}>
+                No payments added yet. Click &quot;⚡ Shamil Karein&quot; or &quot;🔍 Select Payments&quot; above to include received payments or click &quot;+ Add Cash / Manual&quot;.
               </div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div
+                className="owner-bill-payments-list-container"
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 6,
+                  maxHeight: '340px',
+                  overflowY: 'auto',
+                  paddingRight: 2,
+                }}
+              >
                 {paymentsList.map((p, pIdx) => (
                   <div
                     key={pIdx}
+                    className="owner-bill-payment-row"
                     style={{
                       display: 'flex',
                       alignItems: 'center',
-                      gap: 8,
-                      background: 'rgba(255, 255, 255, 0.02)',
-                      padding: '4px 8px',
-                      borderRadius: 6,
-                      border: '1px solid rgba(255, 255, 255, 0.05)',
+                      gap: 6,
+                      background: 'var(--body-bg, rgba(0, 0, 0, 0.02))',
+                      padding: '5px 8px',
+                      borderRadius: 8,
+                      border: '1px solid var(--border)',
                     }}
                   >
-                    <input
-                      type="date"
-                      value={p.date}
-                      onChange={(e) => updatePaymentRow(pIdx, 'date', e.target.value)}
-                      style={{
-                        padding: '5px 8px',
-                        borderRadius: 6,
-                        fontSize: 12,
-                        background: 'rgba(255,255,255,0.04)',
-                        border: '1px solid rgba(255,255,255,0.1)',
-                        color: '#f8fafc',
-                        width: 125,
-                        minWidth: 0,
-                      }}
-                    />
-                    <input
-                      type="text"
-                      placeholder="Note / Payment details"
-                      value={p.note}
-                      onChange={(e) => updatePaymentRow(pIdx, 'note', e.target.value)}
-                      style={{
-                        flex: 1,
-                        minWidth: 0,
-                        padding: '5px 8px',
-                        fontSize: 12,
-                        borderRadius: 6,
-                        background: 'rgba(255,255,255,0.04)',
-                        border: '1px solid rgba(255,255,255,0.1)',
-                        color: '#cbd5e1',
-                      }}
-                    />
-                    <div
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        width: 135,
-                        minWidth: 0,
-                        background: 'rgba(16, 185, 129, 0.08)',
-                        border: '1px solid rgba(16, 185, 129, 0.3)',
-                        borderRadius: 6,
-                        padding: '0 8px',
-                      }}
-                    >
-                      <span style={{ fontSize: 11.5, color: '#10b981', marginRight: 4 }}>Rs</span>
+                    <div className="owner-bill-payment-col-date">
                       <input
-                        type="number"
-                        placeholder="0"
-                        value={p.amount || ''}
-                        onChange={(e) => updatePaymentRow(pIdx, 'amount', Number(e.target.value) || 0)}
+                        type="date"
+                        value={p.date}
+                        onChange={(e) => updatePaymentRow(pIdx, 'date', e.target.value)}
+                        className="owner-bill-input owner-bill-payment-date"
                         style={{
-                          width: '100%',
-                          minWidth: 0,
-                          padding: '5px 0',
-                          fontSize: 13,
-                          fontWeight: 800,
-                          background: 'transparent',
-                          border: 'none',
-                          color: '#34d399',
-                          textAlign: 'right',
+                          padding: '4px 6px',
+                          fontSize: 12,
+                          width: 120,
+                          height: 30,
                         }}
                       />
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => removePaymentRow(pIdx)}
-                      style={{
-                        border: 'none',
-                        background: 'transparent',
-                        color: '#f87171',
-                        cursor: 'pointer',
-                        fontSize: 15,
-                        padding: '2px 6px',
-                      }}
-                      title="Remove payment"
-                    >
-                      ×
-                    </button>
+                    <div className="owner-bill-payment-col-note" style={{ flex: '1 1 auto', minWidth: 0 }}>
+                      <input
+                        type="text"
+                        placeholder="Note (optional)"
+                        value={p.note}
+                        onChange={(e) => updatePaymentRow(pIdx, 'note', e.target.value)}
+                        className="owner-bill-input owner-bill-payment-note"
+                        style={{
+                          width: '100%',
+                          padding: '4px 8px',
+                          fontSize: 12,
+                          height: 30,
+                        }}
+                      />
+                    </div>
+                    <div className="owner-bill-payment-col-amount" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <div
+                        className="owner-bill-payment-amount"
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          width: 125,
+                          minWidth: 100,
+                          height: 30,
+                          background: 'var(--success-bg, #f0fdf4)',
+                          border: '1px solid var(--border)',
+                          borderRadius: 6,
+                          padding: '0 6px',
+                        }}
+                      >
+                        <span style={{ fontSize: 11, color: 'var(--success, #15803d)', marginRight: 3, fontWeight: 700 }}>Rs</span>
+                        <input
+                          type="number"
+                          placeholder="0"
+                          value={p.amount || ''}
+                          onChange={(e) => updatePaymentRow(pIdx, 'amount', Number(e.target.value) || 0)}
+                          style={{
+                            width: '100%',
+                            minWidth: 0,
+                            padding: '2px 0',
+                            fontSize: 12.5,
+                            fontWeight: 800,
+                            background: 'transparent',
+                            border: 'none',
+                            color: 'var(--success, #15803d)',
+                            textAlign: 'right',
+                          }}
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removePaymentRow(pIdx)}
+                        className="owner-bill-payment-del-btn"
+                        style={{
+                          border: 'none',
+                          background: 'transparent',
+                          color: 'var(--danger, #dc2626)',
+                          cursor: 'pointer',
+                          fontSize: 17,
+                          lineHeight: 1,
+                          padding: '2px 5px',
+                          fontWeight: 800,
+                        }}
+                        title="Remove payment"
+                      >
+                        ×
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -1698,20 +1942,18 @@ export default function OwnerBillModal({
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
               gap: 12,
             }}
           >
             {/* Box 1: Pichla Bill */}
             <div
+              className="owner-bill-surface"
               style={{
-                background: 'rgba(255, 255, 255, 0.03)',
-                border: '1px solid rgba(255, 255, 255, 0.08)',
-                borderRadius: 10,
                 padding: '10px 14px',
               }}
             >
-              <div style={{ fontSize: 11.5, fontWeight: 700, color: '#94a3b8', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+              <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.03em' }}>
                 + Pichla Bill (Optional)
               </div>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -1720,15 +1962,12 @@ export default function OwnerBillModal({
                   placeholder="Bill #71"
                   value={prevBillNo}
                   onChange={(e) => setPrevBillNo(e.target.value)}
+                  className="owner-bill-input"
                   style={{
                     width: 90,
                     minWidth: 0,
                     padding: '6px 8px',
                     fontSize: 12.5,
-                    borderRadius: 6,
-                    background: 'rgba(255,255,255,0.05)',
-                    border: '1px solid rgba(255,255,255,0.12)',
-                    color: '#ffffff',
                   }}
                 />
                 <div
@@ -1737,13 +1976,13 @@ export default function OwnerBillModal({
                     alignItems: 'center',
                     flex: 1,
                     minWidth: 0,
-                    background: 'rgba(255,255,255,0.05)',
-                    border: '1px solid rgba(255,255,255,0.12)',
+                    background: 'var(--body-bg, #f8fafc)',
+                    border: '1px solid var(--border)',
                     borderRadius: 6,
                     padding: '0 8px',
                   }}
                 >
-                  <span style={{ fontSize: 11.5, color: '#64748b', marginRight: 4 }}>Rs</span>
+                  <span style={{ fontSize: 11.5, color: 'var(--text-secondary)', marginRight: 4 }}>Rs</span>
                   <input
                     type="number"
                     placeholder="0"
@@ -1757,26 +1996,24 @@ export default function OwnerBillModal({
                       fontWeight: 700,
                       background: 'transparent',
                       border: 'none',
-                      color: '#ffffff',
+                      color: 'var(--text-primary)',
                     }}
                   />
                 </div>
               </div>
-              <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 5, lineHeight: 1.3 }}>
+              <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginTop: 5, lineHeight: 1.3 }}>
                 ℹ️ Sirf tab daalein agar pichle bill ka amount ooper &quot;Previous Balance&quot; mein shamil na ho.
               </div>
             </div>
 
             {/* Box 2: Katoti */}
             <div
+              className="owner-bill-surface"
               style={{
-                background: 'rgba(255, 255, 255, 0.03)',
-                border: '1px solid rgba(255, 255, 255, 0.08)',
-                borderRadius: 10,
                 padding: '10px 14px',
               }}
             >
-              <div style={{ fontSize: 11.5, fontWeight: 700, color: '#f87171', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+              <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--danger, #dc2626)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.03em' }}>
                 − Katoti (Dhaga / Kapra / Discount)
               </div>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -1785,15 +2022,12 @@ export default function OwnerBillModal({
                   placeholder="Dhaga Katoti"
                   value={katotiTitle}
                   onChange={(e) => setKatotiTitle(e.target.value)}
+                  className="owner-bill-input"
                   style={{
                     width: 120,
                     minWidth: 0,
                     padding: '6px 8px',
                     fontSize: 12,
-                    borderRadius: 6,
-                    background: 'rgba(255,255,255,0.05)',
-                    border: '1px solid rgba(255,255,255,0.12)',
-                    color: '#ffffff',
                   }}
                 />
                 <div
@@ -1802,13 +2036,13 @@ export default function OwnerBillModal({
                     alignItems: 'center',
                     flex: 1,
                     minWidth: 0,
-                    background: 'rgba(239, 68, 68, 0.08)',
-                    border: '1px solid rgba(239, 68, 68, 0.3)',
+                    background: 'var(--danger-bg, #fef2f2)',
+                    border: '1px solid var(--border)',
                     borderRadius: 6,
                     padding: '0 8px',
                   }}
                 >
-                  <span style={{ fontSize: 11.5, color: '#f87171', marginRight: 4 }}>Rs</span>
+                  <span style={{ fontSize: 11.5, color: 'var(--danger, #dc2626)', marginRight: 4, fontWeight: 700 }}>Rs</span>
                   <input
                     type="number"
                     placeholder="0"
@@ -1822,7 +2056,7 @@ export default function OwnerBillModal({
                       fontWeight: 700,
                       background: 'transparent',
                       border: 'none',
-                      color: '#f87171',
+                      color: 'var(--danger, #dc2626)',
                     }}
                   />
                 </div>
@@ -1831,14 +2065,12 @@ export default function OwnerBillModal({
 
             {/* Box 3: Special Remarks / Note */}
             <div
+              className="owner-bill-surface"
               style={{
-                background: 'rgba(255, 255, 255, 0.03)',
-                border: '1px solid rgba(255, 255, 255, 0.08)',
-                borderRadius: 10,
                 padding: '10px 14px',
               }}
             >
-              <div style={{ fontSize: 11.5, fontWeight: 700, color: '#94a3b8', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+              <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.03em' }}>
                 Special Remarks / Note
               </div>
               <input
@@ -1846,15 +2078,12 @@ export default function OwnerBillModal({
                 placeholder="e.g. Rate adjusted for design #2521"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
+                className="owner-bill-input"
                 style={{
                   width: '100%',
                   minWidth: 0,
                   padding: '6px 8px',
                   fontSize: 12.5,
-                  borderRadius: 6,
-                  background: 'rgba(255,255,255,0.05)',
-                  border: '1px solid rgba(255,255,255,0.12)',
-                  color: '#cbd5e1',
                 }}
               />
             </div>
@@ -1862,76 +2091,80 @@ export default function OwnerBillModal({
 
           {/* Section 4: High-Contrast Premium Final Summary Card */}
           <div
+            className="owner-bill-summary-card"
             style={{
-              background: 'linear-gradient(135deg, #101626 0%, #172033 100%)',
-              border: '1.5px solid rgba(59, 130, 246, 0.35)',
+              background: 'var(--card-bg)',
+              border: '1.5px solid var(--border)',
               borderRadius: 14,
               padding: '14px 18px',
-              boxShadow: '0 8px 24px -4px rgba(0, 0, 0, 0.45)',
+              boxShadow: 'var(--shadow-md)',
             }}
           >
             {/* Top Row: Mini pills of components */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 10, marginBottom: 12 }}>
-              <div style={{ background: 'rgba(255,255,255,0.04)', padding: '8px 10px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.06)' }}>
-                <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600 }}>Current Work</div>
-                <div style={{ fontSize: 15, fontWeight: 800, color: '#f8fafc', marginTop: 2 }}>Rs {currentBillTotal.toLocaleString()}</div>
+            <div className="owner-bill-summary-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 10, marginBottom: 12 }}>
+              <div style={{ background: 'var(--body-bg, #f8fafc)', padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border)' }}>
+                <div style={{ fontSize: 11, color: 'var(--text-secondary)', fontWeight: 600 }}>Current Work</div>
+                <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text-primary)', marginTop: 2 }}>Rs {currentBillTotal.toLocaleString()}</div>
               </div>
 
               {prevBillTotal > 0 && (
-                <div style={{ background: 'rgba(255,255,255,0.04)', padding: '8px 10px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.06)' }}>
-                  <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600 }}>+ Previous Bill</div>
-                  <div style={{ fontSize: 15, fontWeight: 800, color: '#38bdf8', marginTop: 2 }}>+Rs {prevBillTotal.toLocaleString()}</div>
+                <div style={{ background: 'var(--body-bg, #f8fafc)', padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border)' }}>
+                  <div style={{ fontSize: 11, color: 'var(--text-secondary)', fontWeight: 600 }}>+ Previous Bill</div>
+                  <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--primary, #1e40af)', marginTop: 2 }}>+Rs {prevBillTotal.toLocaleString()}</div>
                 </div>
               )}
 
-              <div style={{ background: 'rgba(245, 158, 11, 0.08)', padding: '8px 10px', borderRadius: 8, border: '1px solid rgba(245, 158, 11, 0.2)' }}>
-                <div style={{ fontSize: 11, color: '#fbbf24', fontWeight: 600 }}>+ Previous Balance</div>
-                <div style={{ fontSize: 15, fontWeight: 800, color: '#fbbf24', marginTop: 2 }}>+Rs {Number(sabqaBaqaya || 0).toLocaleString()}</div>
+              <div style={{ background: 'var(--warning-bg, #fffbeb)', padding: '8px 10px', borderRadius: 8, border: '1px solid var(--warning-border, #fde68a)' }}>
+                <div style={{ fontSize: 11, color: 'var(--warning-text, #92600a)', fontWeight: 600 }}>+ Previous Balance</div>
+                <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--warning-text, #92600a)', marginTop: 2 }}>+Rs {Number(sabqaBaqaya || 0).toLocaleString()}</div>
               </div>
 
-              <div style={{ background: 'rgba(16, 185, 129, 0.08)', padding: '8px 10px', borderRadius: 8, border: '1px solid rgba(16, 185, 129, 0.2)' }}>
-                <div style={{ fontSize: 11, color: '#34d399', fontWeight: 600 }}>− Received ({paymentsList.length})</div>
-                <div style={{ fontSize: 15, fontWeight: 800, color: '#34d399', marginTop: 2 }}>−Rs {totalWasooli.toLocaleString()}</div>
+              <div style={{ background: 'var(--success-bg, #f0fdf4)', padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border)' }}>
+                <div style={{ fontSize: 11, color: 'var(--success, #15803d)', fontWeight: 600 }}>− Received ({paymentsList.length})</div>
+                <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--success, #15803d)', marginTop: 2 }}>−Rs {totalWasooli.toLocaleString()}</div>
               </div>
 
-              <div style={{ background: 'rgba(239, 68, 68, 0.08)', padding: '8px 10px', borderRadius: 8, border: '1px solid rgba(239, 68, 68, 0.2)' }}>
-                <div style={{ fontSize: 11, color: '#f87171', fontWeight: 600 }}>− Deductions</div>
-                <div style={{ fontSize: 15, fontWeight: 800, color: '#f87171', marginTop: 2 }}>−Rs {totalKatoti.toLocaleString()}</div>
+              <div style={{ background: 'var(--danger-bg, #fef2f2)', padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border)' }}>
+                <div style={{ fontSize: 11, color: 'var(--danger, #dc2626)', fontWeight: 600 }}>− Deductions</div>
+                <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--danger, #dc2626)', marginTop: 2 }}>−Rs {totalKatoti.toLocaleString()}</div>
               </div>
             </div>
 
             {/* Big Grand Total Banner */}
             <div
+              className="owner-bill-grand-total-banner"
               style={{
                 display: 'flex',
                 justifyContent: 'space-between',
                 alignItems: 'center',
-                background: '#090d16',
-                border: '1.5px solid #2563eb',
+                background: grandTotalBaqaya < 0 ? 'var(--success, #15803d)' : 'var(--primary, #1e40af)',
+                border: '1.5px solid var(--border)',
                 borderRadius: 10,
                 padding: '12px 18px',
                 flexWrap: 'wrap',
                 gap: 10,
+                color: '#ffffff',
               }}
             >
               <div>
-                <div style={{ fontSize: 12, fontWeight: 800, color: '#93c5fd', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                  👉 NET PAYABLE (GRAND TOTAL):
+                <div style={{ fontSize: 12, fontWeight: 800, color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  {grandTotalBaqaya < 0 ? '👉 ADVANCE SURPLUS (PARTY ADVANCE):' : '👉 NET PAYABLE (GRAND TOTAL):'}
                 </div>
-                {formatLakhCrore(grandTotalBaqaya) && (
-                  <div style={{ fontSize: 12, color: '#94a3b8', fontStyle: 'italic', marginTop: 2 }}>
-                    ({formatLakhCrore(grandTotalBaqaya)})
+                {formatLakhCrore(Math.abs(grandTotalBaqaya)) && (
+                  <div style={{ fontSize: 12, color: 'rgba(255, 255, 255, 0.85)', fontStyle: 'italic', marginTop: 2 }}>
+                    ({formatLakhCrore(Math.abs(grandTotalBaqaya))} {grandTotalBaqaya < 0 ? 'Advance' : ''})
                   </div>
                 )}
               </div>
-              <div style={{ fontSize: 26, fontWeight: 900, color: '#ffffff', letterSpacing: '0.02em' }}>
-                Rs {grandTotalBaqaya.toLocaleString()}
+              <div style={{ fontSize: 24, fontWeight: 900, color: '#ffffff', letterSpacing: '0.02em' }}>
+                Rs {Math.abs(grandTotalBaqaya).toLocaleString()}
               </div>
             </div>
           </div>
 
           {/* Form Actions */}
           <div
+            className="owner-bill-bottom-actions"
             style={{
               display: 'flex',
               justifyContent: 'space-between',
@@ -1941,7 +2174,7 @@ export default function OwnerBillModal({
               gap: 10,
             }}
           >
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }} className="owner-bill-utility-btns">
               <button
                 type="button"
                 className="btn btn-secondary btn-sm"
@@ -1954,7 +2187,7 @@ export default function OwnerBillModal({
                 type="button"
                 className="btn btn-secondary btn-sm"
                 onClick={shareDirectWhatsApp}
-                style={{ fontWeight: 700, color: '#34d399', borderColor: 'rgba(52, 211, 153, 0.35)' }}
+                style={{ fontWeight: 700, color: 'var(--success, #15803d)', borderColor: 'var(--border)' }}
                 title="Direct WhatsApp khol kar summary send karein"
               >
                 📲 WhatsApp Share
@@ -1968,7 +2201,7 @@ export default function OwnerBillModal({
                 👁️ Bill Pad Preview
               </button>
             </div>
-            <div style={{ display: 'flex', gap: 10 }}>
+            <div style={{ display: 'flex', gap: 10 }} className="owner-bill-primary-actions">
               <button type="button" className="btn btn-secondary" onClick={onClose} disabled={saving} style={{ fontWeight: 600 }}>
                 Cancel
               </button>
@@ -1979,11 +2212,7 @@ export default function OwnerBillModal({
                 disabled={saving || !billNo}
                 style={{
                   fontWeight: 800,
-                  background: '#2563eb',
-                  borderColor: '#1d4ed8',
-                  color: '#ffffff',
                   padding: '8px 22px',
-                  boxShadow: '0 4px 14px rgba(37, 99, 235, 0.4)',
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: 6,
@@ -2003,191 +2232,321 @@ export default function OwnerBillModal({
         <div>
           {/* Action Toolbar on Top (Hidden during Print) */}
           <div
-            className="hide-print"
+            className="hide-print owner-bill-preview-toolbar"
             style={{
               display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              marginBottom: 14,
-              background: 'rgba(255, 255, 255, 0.04)',
-              padding: '10px 14px',
-              borderRadius: 8,
-              border: '1px solid var(--border)',
-              flexWrap: 'wrap',
+              flexDirection: 'column',
               gap: 10,
+              marginBottom: 14,
+              background: 'var(--card-bg)',
+              padding: '12px 16px',
+              borderRadius: 10,
+              border: '1px solid var(--border)',
+              boxShadow: '0 1px 4px rgba(0, 0, 0, 0.04)',
             }}
           >
-            <button
-              type="button"
-              className="btn btn-secondary btn-sm"
-              onClick={() => setActiveTab('form')}
-              style={{ fontWeight: 600 }}
+            {/* Tier 1: Navigation (Left) + View / Print Mode Controls (Right) */}
+            <div
+              className="owner-bill-toolbar-tier1"
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                gap: 12,
+                flexWrap: 'wrap',
+              }}
             >
-              ← Edit Bill Details
-            </button>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-              {/* Layout Switcher (A4 2 Bills vs A4 1 Bill vs Pre-Cut Slip) */}
-              <div style={{ display: 'inline-flex', alignItems: 'center', background: 'rgba(255, 255, 255, 0.08)', borderRadius: 6, padding: 2, border: '1px solid var(--border)' }}>
-                <button
-                  type="button"
-                  onClick={() => setPrintLayout('2-up')}
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm owner-bill-back-btn"
+                onClick={() => setActiveTab('form')}
+                style={{
+                  fontWeight: 700,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: '6px 14px',
+                  fontSize: 12.5,
+                }}
+              >
+                <span>←</span>
+                <span>Edit Bill Details</span>
+              </button>
+
+              {/* View / Print Controls Group (Clean Segmented Pill + Options) */}
+              <div
+                className="owner-bill-preview-controls-group"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  flexWrap: 'wrap',
+                }}
+              >
+                <div
+                  className="owner-bill-layout-switcher"
                   style={{
-                    fontSize: 11.5,
-                    fontWeight: 700,
-                    padding: '4px 10px',
-                    borderRadius: 4,
-                    border: 'none',
-                    background: printLayout === '2-up' ? '#2563eb' : 'transparent',
-                    color: printLayout === '2-up' ? '#ffffff' : '#94a3b8',
-                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    background: 'var(--body-bg, #f1f5f9)',
+                    borderRadius: 7,
+                    padding: 3,
+                    border: '1px solid var(--border)',
                   }}
-                  title="A4 page par aik hi click mein 2 bills (1 single cutting line ke saath) print karein — No double feed!"
                 >
-                  📄 A4 (2 Bills - Ek Sath)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPrintLayout('1-up-landscape')}
-                  style={{
-                    fontSize: 11.5,
-                    fontWeight: 700,
-                    padding: '4px 10px',
-                    borderRadius: 4,
-                    border: 'none',
-                    background: printLayout === '1-up-landscape' ? '#2563eb' : 'transparent',
-                    color: printLayout === '1-up-landscape' ? '#ffffff' : '#94a3b8',
-                    cursor: 'pointer',
-                  }}
-                  title="Print 1 bill on half A4 horizontally, saving the other half"
-                >
-                  📄 A4 (1 Bill / Half-Sheet)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPrintLayout('1-up-portrait')}
-                  style={{
-                    fontSize: 11.5,
-                    fontWeight: 700,
-                    padding: '4px 10px',
-                    borderRadius: 4,
-                    border: 'none',
-                    background: printLayout === '1-up-portrait' ? '#2563eb' : 'transparent',
-                    color: printLayout === '1-up-portrait' ? '#ffffff' : '#94a3b8',
-                    cursor: 'pointer',
-                  }}
-                  title="Print 1 bill directly on pre-cut 14.8 cm x 21 cm slip"
-                >
-                  📄 Pre-Cut 14.8×21cm Slip
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => setPrintLayout('1-up-landscape')}
+                    style={{
+                      fontSize: 12,
+                      fontWeight: 700,
+                      padding: '5px 12px',
+                      borderRadius: 5,
+                      border: 'none',
+                      background: printLayout === '1-up-landscape' ? 'var(--primary, #1e40af)' : 'transparent',
+                      color: printLayout === '1-up-landscape' ? '#ffffff' : 'var(--text-secondary)',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease',
+                    }}
+                    title="A4 page par 1 single bill horizontally print karein"
+                  >
+                    📄 Single Bill (A4 Half-Sheet)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPrintLayout('2-up')}
+                    style={{
+                      fontSize: 12,
+                      fontWeight: 700,
+                      padding: '5px 12px',
+                      borderRadius: 5,
+                      border: 'none',
+                      background: printLayout === '2-up' ? 'var(--primary, #1e40af)' : 'transparent',
+                      color: printLayout === '2-up' ? '#ffffff' : 'var(--text-secondary)',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease',
+                    }}
+                    title="A4 page par aik sath 2 bills print karein"
+                  >
+                    📑 Double Bill (1 Original + 1 Copy)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPrintLayout('1-up-portrait')}
+                    style={{
+                      fontSize: 12,
+                      fontWeight: 700,
+                      padding: '5px 12px',
+                      borderRadius: 5,
+                      border: 'none',
+                      background: printLayout === '1-up-portrait' ? 'var(--primary, #1e40af)' : 'transparent',
+                      color: printLayout === '1-up-portrait' ? '#ffffff' : 'var(--text-secondary)',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease',
+                    }}
+                    title="Pehle se kati hui 14.8×21cm slip par print karein"
+                  >
+                    🏷️ Pre-Cut Slip (14.8×21cm)
+                  </button>
+                </div>
+
                 <label
                   style={{
                     display: 'inline-flex',
                     alignItems: 'center',
-                    gap: 5,
-                    fontSize: 11.5,
+                    gap: 6,
+                    fontSize: 12,
                     fontWeight: 700,
-                    color: showCutLine ? '#60a5fa' : '#94a3b8',
+                    color: showCutLine ? 'var(--primary, #1e40af)' : 'var(--text-secondary)',
                     cursor: 'pointer',
-                    background: 'rgba(255, 255, 255, 0.05)',
-                    padding: '3px 8px',
-                    borderRadius: 4,
+                    background: 'var(--card-bg)',
+                    padding: '5px 10px',
+                    borderRadius: 6,
                     border: '1px solid var(--border)',
+                    height: 32,
+                    boxSizing: 'border-box',
                   }}
-                  title="A4 sheet ke darmiyan mein 1 single dashed cutting line print karni hai ya nahi"
+                  title="Center cut line show karein ya nahi"
                 >
                   <input
                     type="checkbox"
                     checked={showCutLine}
                     onChange={(e) => setShowCutLine(e.target.checked)}
-                    style={{ accentColor: '#2563eb', cursor: 'pointer' }}
+                    style={{ accentColor: 'var(--primary, #1e40af)', cursor: 'pointer' }}
                   />
                   ✂ Center Cut Line
                 </label>
-              </div>
 
-              {printLayout === '2-up' && (
+                {printLayout === '2-up' ? (
+                  <button
+                    type="button"
+                    className="owner-bill-badge-toggle"
+                    onClick={() => setDoubleBadgeType((prev) => (prev === 'original-factory' ? 'both-original' : 'original-factory'))}
+                    style={{
+                      fontSize: 12,
+                      fontWeight: 700,
+                      padding: '5px 10px',
+                      borderRadius: 6,
+                      border: '1px solid var(--border)',
+                      background: 'var(--card-bg)',
+                      color: 'var(--primary, #1e40af)',
+                      cursor: 'pointer',
+                      height: 32,
+                    }}
+                    title="Toggle: 1 Original + 1 Copy ya Dono Original"
+                  >
+                    🏷️ {doubleBadgeType === 'both-original' ? 'Badge: Dono ORIGINAL' : 'Badge: 1 Original + 1 Copy'}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="owner-bill-badge-toggle"
+                    onClick={() => setSingleBadge((prev) => (prev === 'ORIGINAL' ? 'FACTORY COPY' : 'ORIGINAL'))}
+                    style={{
+                      fontSize: 12,
+                      fontWeight: 700,
+                      padding: '5px 10px',
+                      borderRadius: 6,
+                      border: '1px solid var(--border)',
+                      background: 'var(--card-bg)',
+                      color: 'var(--primary, #1e40af)',
+                      cursor: 'pointer',
+                      height: 32,
+                    }}
+                    title="Toggle: ORIGINAL ya FACTORY COPY"
+                  >
+                    🏷️ Badge: {singleBadge}
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Tier 2: Action Bar (Full Width, Perfectly Balanced Edge to Edge) */}
+            <div
+              className="owner-bill-toolbar-tier2"
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                gap: 12,
+                borderTop: '1px solid var(--border)',
+                paddingTop: 10,
+                flexWrap: 'wrap',
+              }}
+            >
+              {/* Left: WhatsApp Sharing Suite */}
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                 <button
                   type="button"
-                  onClick={() => setBadgeType((prev) => (prev === 'both-original' ? 'party-office' : 'both-original'))}
-                  style={{
-                    fontSize: 11,
-                    fontWeight: 700,
-                    padding: '4px 8px',
-                    borderRadius: 5,
-                    border: '1px solid var(--border)',
-                    background: 'rgba(255, 255, 255, 0.06)',
-                    color: '#38bdf8',
-                    cursor: 'pointer',
-                  }}
-                  title="Click to toggle badges between 'Dono ORIGINAL' ya 'PARTY COPY + OFFICE COPY'"
+                  className="btn btn-secondary btn-sm"
+                  onClick={copyWhatsAppText}
+                  style={{ fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 14px' }}
                 >
-                  🏷️ {badgeType === 'both-original' ? 'Badge: Dono ORIGINAL' : 'Badge: Party + Office'}
+                  <span>📋</span>
+                  <span>Copy WhatsApp</span>
                 </button>
-              )}
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={shareDirectWhatsApp}
+                  style={{
+                    fontWeight: 700,
+                    color: 'var(--success, #15803d)',
+                    borderColor: 'var(--border)',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 5,
+                    padding: '6px 14px',
+                  }}
+                  title="Direct WhatsApp khol kar summary send karein"
+                >
+                  <span>📲</span>
+                  <span>WhatsApp Share</span>
+                </button>
+              </div>
 
-              <button
-                type="button"
-                className="btn btn-secondary btn-sm"
-                onClick={copyWhatsAppText}
-                style={{ fontWeight: 600 }}
-              >
-                📋 Copy WhatsApp
-              </button>
-              <button
-                type="button"
-                className="btn btn-secondary btn-sm"
-                onClick={shareDirectWhatsApp}
-                style={{ fontWeight: 700, color: '#34d399', borderColor: 'rgba(52, 211, 153, 0.35)' }}
-                title="Direct WhatsApp khol kar summary send karein"
-              >
-                📲 WhatsApp Share
-              </button>
-              <button
-                type="button"
-                className="btn btn-secondary btn-sm"
-                onClick={handlePrint}
-                style={{ fontWeight: 700 }}
-              >
-                🖨️ Print Bill / PDF
-              </button>
-              <button
-                type="button"
-                className="btn btn-primary btn-sm"
-                onClick={handleSaveBill}
-                disabled={saving}
-                style={{
-                  fontWeight: 800,
-                  background: '#2563eb',
-                  borderColor: '#1d4ed8',
-                  color: '#ffffff',
-                }}
-              >
-                {saving ? 'Saving...' : `💾 Save Bill #${billNo}`}
-              </button>
+              {/* Right: Print & Finalize Save */}
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm btn-print-action"
+                  onClick={handlePrint}
+                  style={{
+                    fontWeight: 800,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    padding: '7px 18px',
+                    fontSize: 12.5,
+                    borderColor: 'var(--border)',
+                  }}
+                >
+                  <span>🖨️</span>
+                  <span>Print Bill / PDF</span>
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm btn-save-action"
+                  onClick={handleSaveBill}
+                  disabled={saving}
+                  style={{
+                    fontWeight: 800,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    padding: '7px 22px',
+                    fontSize: 13,
+                    boxShadow: '0 2px 8px rgba(37, 99, 235, 0.3)',
+                  }}
+                >
+                  {saving ? <Loader /> : <span>💾</span>}
+                  <span>{saving ? 'Saving...' : `Save Bill #${billNo}`}</span>
+                </button>
+              </div>
             </div>
           </div>
 
-          {/* Printable Hard-Form Bill Pad Area */}
+          {/* Mobile-Only Indicator */}
           <div
-            ref={printAreaRef}
-            className="official-bill-landscape-sheet"
+            className="owner-bill-mobile-preview-note"
             style={{
-              display: 'flex',
-              flexDirection: 'row',
-              justifyContent: printLayout === '1-up-portrait' ? 'center' : 'space-between',
-              alignItems: 'stretch',
-              width: '100%',
-              maxWidth: printLayout === '1-up-portrait' ? '490px' : '1020px',
-              minHeight: printLayout === '1-up-portrait' ? '680px' : '710px',
-              margin: '0 auto',
-              boxSizing: 'border-box',
-              position: 'relative',
+              display: 'none',
+              background: 'var(--primary-bg, #eff6ff)',
+              color: 'var(--primary, #1e40af)',
+              padding: '6px 10px',
+              borderRadius: 6,
+              fontSize: 11.5,
+              fontWeight: 700,
+              marginBottom: 10,
+              textAlign: 'center',
+              border: '1px solid var(--border)',
             }}
           >
+            📱 Mobile Fit View (Full Width) — Print par A4 Half-Sheet aayega
+          </div>
+
+          {/* Printable Hard-Form Bill Pad Area (Mobile Horizontally Scrollable) */}
+          <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', width: '100%', paddingBottom: 10 }}>
+            <div
+              ref={printAreaRef}
+              className="official-bill-landscape-sheet"
+              style={{
+                display: 'flex',
+                flexDirection: 'row',
+                justifyContent: printLayout === '1-up-portrait' ? 'center' : 'space-between',
+                alignItems: 'stretch',
+                width: '100%',
+                maxWidth: printLayout === '1-up-portrait' ? '490px' : '1020px',
+                minHeight: printLayout === '1-up-portrait' ? '680px' : '710px',
+                margin: '0 auto',
+                boxSizing: 'border-box',
+                position: 'relative',
+              }}
+            >
             {printLayout === '2-up' && (
               <>
                 <div className="official-bill-half-pane" style={{ flex: '0 0 50%', width: '50%', minWidth: 0, display: 'flex', padding: '0 4px', boxSizing: 'border-box', height: '100%' }}>
-                  {renderBillSlip(badgeType === 'both-original' ? 'ORIGINAL' : 'PARTY COPY')}
+                  {renderBillSlip('ORIGINAL')}
                 </div>
                 {showCutLine && (
                   <div
@@ -2208,7 +2567,7 @@ export default function OwnerBillModal({
                   </div>
                 )}
                 <div className="official-bill-half-pane" style={{ flex: '0 0 50%', width: '50%', minWidth: 0, display: 'flex', padding: '0 4px', boxSizing: 'border-box', height: '100%' }}>
-                  {renderBillSlip(badgeType === 'both-original' ? 'ORIGINAL' : 'OFFICE COPY')}
+                  {renderBillSlip(doubleBadgeType === 'both-original' ? 'ORIGINAL' : 'FACTORY COPY')}
                 </div>
               </>
             )}
@@ -2216,7 +2575,7 @@ export default function OwnerBillModal({
             {printLayout === '1-up-landscape' && (
               <>
                 <div className="official-bill-half-pane" style={{ flex: '0 0 50%', width: '50%', minWidth: 0, display: 'flex', padding: '0 4px', boxSizing: 'border-box', height: '100%' }}>
-                  {renderBillSlip('ORIGINAL')}
+                  {renderBillSlip(singleBadge)}
                 </div>
                 {showCutLine && (
                   <div
@@ -2246,10 +2605,10 @@ export default function OwnerBillModal({
                     flexDirection: 'column',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    border: '1.5px dashed rgba(255, 255, 255, 0.2)',
+                    border: '1.5px dashed var(--border, #cbd5e1)',
                     borderRadius: 4,
-                    background: 'rgba(255, 255, 255, 0.02)',
-                    color: '#94a3b8',
+                    background: 'var(--body-bg, rgba(0, 0, 0, 0.02))',
+                    color: 'var(--text-secondary, #64748b)',
                     padding: 20,
                     textAlign: 'center',
                     margin: '0 4px',
@@ -2257,9 +2616,9 @@ export default function OwnerBillModal({
                   }}
                 >
                   <span style={{ fontSize: 28, marginBottom: 8 }}>📄</span>
-                  <strong style={{ fontSize: 13, color: '#e2e8f0' }}>Blank Half-Sheet</strong>
-                  <span style={{ fontSize: 11, color: '#94a3b8', marginTop: 4, maxWidth: 220 }}>
-                    Cut along the center dashed line (50%) to keep this half-sheet for your next bill.
+                  <strong style={{ fontSize: 13, color: 'var(--text-primary, #0f172a)' }}>Blank Half-Sheet (Saaf Kaghaz)</strong>
+                  <span style={{ fontSize: 11, color: 'var(--text-secondary, #64748b)', marginTop: 4, maxWidth: 220 }}>
+                    Center dashed line se cut karke ye aadhi sheet agle bill ke liye istemal kar sakte hain.
                   </span>
                 </div>
               </>
@@ -2267,9 +2626,10 @@ export default function OwnerBillModal({
 
             {printLayout === '1-up-portrait' && (
               <div style={{ flex: 1, minWidth: 0, display: 'flex', width: '100%', maxWidth: '490px' }}>
-                {renderBillSlip('ORIGINAL')}
+                {renderBillSlip(singleBadge)}
               </div>
             )}
+          </div>
           </div>
         </div>
       )}
@@ -2312,7 +2672,8 @@ function LotPickerModal({ availableLots, currentlySelectedLotIds, currentBillNo 
     return (availableLots || []).filter((l) => {
       const id = String(l.id || l._id);
       if (selectedSet.has(id)) return true;
-      return !l.ownerBillId && !l.billedInBillNo;
+      const isReceivedBack = l.status === 'received back' || !l.status;
+      return isReceivedBack && !l.ownerBillId && !l.billedInBillNo;
     });
   }, [availableLots, currentlySelectedLotIds]);
 
@@ -2369,7 +2730,7 @@ function LotPickerModal({ availableLots, currentlySelectedLotIds, currentBillNo 
   return (
     <Modal title={`📦 Select Lots from Inventory (Standard Bill: ${STANDARD_BILL_LOTS_LIMIT} Lots)`} onClose={onClose}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {availableLots.length > STANDARD_BILL_LOTS_LIMIT && (
+        {unbilledLots.length > STANDARD_BILL_LOTS_LIMIT && (
           <div
             style={{
               background: 'rgba(59, 130, 246, 0.1)',
@@ -2381,7 +2742,7 @@ function LotPickerModal({ availableLots, currentlySelectedLotIds, currentBillNo 
               lineHeight: 1.4,
             }}
           >
-            ℹ️ <strong>Standard Bill Book Size ({STANDARD_BILL_LOTS_LIMIT} Lots/Page):</strong> Total {availableLots.length} billable lots hain. Pehle {STANDARD_BILL_LOTS_LIMIT} lots ka Bill #{currentBillNo || 1} banayein, baqi lots agle bill mein jayeingi.
+            ℹ️ <strong>Standard Bill Book Size ({STANDARD_BILL_LOTS_LIMIT} Lots/Page):</strong> Total {unbilledLots.length} billable lots hain. Pehle {STANDARD_BILL_LOTS_LIMIT} lots ka Bill #{currentBillNo || 1} banayein, baqi lots agle bill mein jayeingi.
           </div>
         )}
 
@@ -2419,9 +2780,9 @@ function LotPickerModal({ availableLots, currentlySelectedLotIds, currentBillNo 
           </div>
         </div>
 
-        <div style={{ maxHeight: '340px', overflowY: 'auto', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8 }}>
+        <div style={{ maxHeight: '340px', overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 8, background: 'var(--card-bg)' }}>
           {filtered.length === 0 ? (
-            <div style={{ padding: 24, textAlign: 'center', color: '#94a3b8' }}>
+            <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-secondary)' }}>
               Koi lot nahi mili.
             </div>
           ) : (
@@ -2445,9 +2806,10 @@ function LotPickerModal({ availableLots, currentlySelectedLotIds, currentBillNo 
                     alignItems: 'center',
                     justifyContent: 'space-between',
                     padding: '8px 12px',
-                    borderBottom: '1px solid rgba(255,255,255,0.06)',
+                    borderBottom: '1px solid var(--border)',
                     cursor: 'pointer',
-                    background: checked ? 'rgba(37, 99, 235, 0.12)' : 'transparent',
+                    background: checked ? 'var(--primary-bg, #eff6ff)' : 'transparent',
+                    transition: 'background 0.15s ease',
                   }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -2458,17 +2820,17 @@ function LotPickerModal({ availableLots, currentlySelectedLotIds, currentBillNo 
                       style={{ width: 16, height: 16, cursor: 'pointer' }}
                     />
                     <div>
-                      <div style={{ fontWeight: 700, fontSize: 13, color: '#f8fafc' }}>
-                        <span style={{ color: '#94a3b8', fontSize: 11, marginRight: 4 }}>#{lIdx + 1}</span>
+                      <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--text-primary)' }}>
+                        <span style={{ color: 'var(--text-secondary)', fontSize: 11, marginRight: 4 }}>#{lIdx + 1}</span>
                         Lot #{l.lotNumber || l.lotNo || '—'} &nbsp;
-                        <span style={{ fontWeight: 400, color: '#94a3b8' }}>(Design: {l.designNo || '—'})</span>
+                        <span style={{ fontWeight: 400, color: 'var(--text-secondary)' }}>(Design: {l.designNo || '—'})</span>
                       </div>
-                      <div style={{ fontSize: 11, color: '#64748b' }}>
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
                         {qty} pcs {rate > 0 ? `@ Rs ${rate}` : ''} {l.fabric ? `• ${l.fabric}` : ''}
                       </div>
                     </div>
                   </div>
-                  <div style={{ fontWeight: 800, fontSize: 13, color: '#60a5fa' }}>
+                  <div style={{ fontWeight: 800, fontSize: 13, color: 'var(--primary, #1e40af)' }}>
                     Rs {amt.toLocaleString()}
                   </div>
                 </div>
@@ -2478,7 +2840,7 @@ function LotPickerModal({ availableLots, currentlySelectedLotIds, currentBillNo 
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
-          <span style={{ fontSize: 12.5, fontWeight: 700, color: selectedIds.size === STANDARD_BILL_LOTS_LIMIT ? '#34d399' : '#cbd5e1' }}>
+          <span style={{ fontSize: 12.5, fontWeight: 700, color: selectedIds.size === STANDARD_BILL_LOTS_LIMIT ? 'var(--success, #15803d)' : 'var(--text-primary)' }}>
             Selected: {selectedIds.size} / {STANDARD_BILL_LOTS_LIMIT} Lots {selectedIds.size === STANDARD_BILL_LOTS_LIMIT ? ' (Standard Bill Full)' : ''}
           </span>
           <div style={{ display: 'flex', gap: 8 }}>
@@ -2593,9 +2955,9 @@ function PaymentPickerModal({ payments, currentlySelectedPaymentIds, settledPaym
           </div>
         </div>
 
-        <div style={{ maxHeight: '340px', overflowY: 'auto', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8 }}>
+        <div style={{ maxHeight: '340px', overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 8, background: 'var(--card-bg)' }}>
           {filtered.length === 0 ? (
-            <div style={{ padding: 24, textAlign: 'center', color: '#94a3b8' }}>
+            <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-secondary)' }}>
               Abhi koi nayi unbilled payment moojood nahi hai. Nayi payment record hone par yahan show hogi.
             </div>
           ) : (
@@ -2614,10 +2976,10 @@ function PaymentPickerModal({ payments, currentlySelectedPaymentIds, settledPaym
                     alignItems: 'center',
                     justifyContent: 'space-between',
                     padding: '10px 14px',
-                    borderBottom: '1px solid rgba(255,255,255,0.06)',
+                    borderBottom: '1px solid var(--border)',
                     cursor: isSettled ? 'not-allowed' : 'pointer',
                     opacity: isSettled ? 0.6 : 1,
-                    background: checked ? 'rgba(16, 185, 129, 0.12)' : (isSettled ? 'rgba(239, 68, 68, 0.04)' : 'transparent'),
+                    background: checked ? 'var(--success-bg, #f0fdf4)' : (isSettled ? 'var(--danger-bg, #fef2f2)' : 'transparent'),
                     transition: 'background 0.15s ease',
                   }}
                 >
@@ -2627,13 +2989,13 @@ function PaymentPickerModal({ payments, currentlySelectedPaymentIds, settledPaym
                       checked={checked}
                       disabled={isSettled}
                       onChange={() => { }}
-                      style={{ width: 17, height: 17, cursor: isSettled ? 'not-allowed' : 'pointer', accentColor: '#10b981' }}
+                      style={{ width: 17, height: 17, cursor: isSettled ? 'not-allowed' : 'pointer', accentColor: 'var(--success, #15803d)' }}
                     />
                     <div>
-                      <div style={{ fontWeight: 800, fontSize: 14, color: isSettled ? '#94a3b8' : '#34d399' }}>
+                      <div style={{ fontWeight: 800, fontSize: 14, color: isSettled ? 'var(--text-muted)' : 'var(--success, #15803d)' }}>
                         Rs {amt.toLocaleString()}
                       </div>
-                      <div style={{ fontSize: 11.5, color: '#94a3b8', marginTop: 1 }}>
+                      <div style={{ fontSize: 11.5, color: 'var(--text-secondary)', marginTop: 1 }}>
                         {formatDisplayDate(p.date)} {p.note ? `• ${p.note}` : ''}
                       </div>
                     </div>
@@ -2646,9 +3008,9 @@ function PaymentPickerModal({ payments, currentlySelectedPaymentIds, settledPaym
                           fontWeight: 700,
                           padding: '3px 8px',
                           borderRadius: 12,
-                          background: 'rgba(239, 68, 68, 0.15)',
-                          color: '#f87171',
-                          border: '1px solid rgba(239, 68, 68, 0.3)',
+                          background: 'var(--danger-bg, #fef2f2)',
+                          color: 'var(--danger, #dc2626)',
+                          border: '1px solid var(--border)',
                         }}
                       >
                         Settled in Bill
@@ -2660,8 +3022,9 @@ function PaymentPickerModal({ payments, currentlySelectedPaymentIds, settledPaym
                           fontWeight: 700,
                           padding: '3px 8px',
                           borderRadius: 12,
-                          background: checked ? 'rgba(16, 185, 129, 0.25)' : 'rgba(255,255,255,0.06)',
-                          color: checked ? '#6ee7b7' : '#94a3b8',
+                          background: checked ? 'var(--success-bg, #f0fdf4)' : 'var(--body-bg, #f8fafc)',
+                          color: checked ? 'var(--success, #15803d)' : 'var(--text-secondary)',
+                          border: '1px solid var(--border)',
                         }}
                       >
                         {checked ? '✓ Selected' : 'Tap to pick'}
@@ -2677,11 +3040,11 @@ function PaymentPickerModal({ payments, currentlySelectedPaymentIds, settledPaym
         {/* Footer Summary */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4, flexWrap: 'wrap', gap: 10 }}>
           <div>
-            <span style={{ fontSize: 12.5, fontWeight: 700, color: '#f8fafc' }}>
+            <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text-primary)' }}>
               Selected: {selectedIds.size} Payments
             </span>
             {selectedTotal > 0 && (
-              <span style={{ fontSize: 13, fontWeight: 800, color: '#34d399', marginLeft: 8 }}>
+              <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--success, #15803d)', marginLeft: 8 }}>
                 (Total: Rs {selectedTotal.toLocaleString()})
               </span>
             )}

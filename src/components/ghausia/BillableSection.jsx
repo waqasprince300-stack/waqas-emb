@@ -97,7 +97,7 @@ export default function BillableSection({
           )}
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'nowrap', flexShrink: 0 }}>
           {onOpenBillHistory && (
             <button
               type="button"
@@ -116,6 +116,8 @@ export default function BillableSection({
                 alignItems: 'center',
                 gap: 5,
                 cursor: 'pointer',
+                whiteSpace: 'nowrap',
+                flexShrink: 0,
               }}
             >
               <span>📋</span>
@@ -141,6 +143,8 @@ export default function BillableSection({
                 gap: 6,
                 boxShadow: '0 2px 10px rgba(37, 99, 235, 0.35)',
                 cursor: 'pointer',
+                whiteSpace: 'nowrap',
+                flexShrink: 0,
               }}
             >
               <span>🧾</span>
@@ -152,11 +156,25 @@ export default function BillableSection({
               type="button"
               className="btn btn-sm"
               onClick={() => setBillableCollapsed((v) => !v)}
+              title={billableCollapsed ? 'Show billable lots' : 'Hide billable lots'}
               style={{
                 background: 'transparent',
                 border: '1px solid var(--border)',
                 color: 'var(--text-secondary)',
                 fontSize: 12,
+                fontWeight: 600,
+                width: 64,
+                minWidth: 64,
+                height: 31,
+                padding: '0 8px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                textAlign: 'center',
+                boxSizing: 'border-box',
+                whiteSpace: 'nowrap',
+                flexShrink: 0,
+                cursor: 'pointer',
               }}
             >
               {billableCollapsed ? 'Show' : 'Hide'}

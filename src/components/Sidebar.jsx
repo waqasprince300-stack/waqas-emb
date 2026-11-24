@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { useApp } from '../context/AppContext';
 import { Modal } from './UI';
 import { countPendingBillRevisionRequests } from '../utils/partyLedgerNotifications';
+import { preloadRoute } from '../utils/routePreloader';
 
 const navItems = [
   {
@@ -338,6 +339,8 @@ export default function Sidebar({ sidebarOpen: _sidebarOpen, setSidebarOpen }) {
               to={item.to}
               end={item.exact}
               onClick={handleNavClick}
+              onMouseEnter={() => preloadRoute(item.to)}
+              onTouchStart={() => preloadRoute(item.to)}
               style={({ isActive }) => ({
                 display: 'flex',
                 alignItems: 'center',

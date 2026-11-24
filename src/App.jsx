@@ -14,6 +14,7 @@ import MarqueeBanner from './components/MarqueeBanner';
 import BroadcastModal from './components/BroadcastModal';
 import PartyMotivationBanner from './components/PartyMotivationBanner';
 import PartyPushNotificationBanner from './components/PartyPushNotificationBanner';
+import { preloadCoreRoutes } from './utils/routePreloader';
 
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const GhausiaCollection = lazy(() => import('./pages/GhausiaCollection'));
@@ -391,6 +392,12 @@ function AppRoutes() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { isAuthenticated } = useAuth();
   usePushNotifications({ isAuthenticated });
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      preloadCoreRoutes();
+    }
+  }, [isAuthenticated]);
 
   return (
     <SuperAdminShell>
