@@ -28,6 +28,7 @@ export default function PLMobileCards({
   getPartyAllotDate,
   showWorkspaceColForLot,
   workspaceNameForLot,
+  highlightLotId,
   // Action callbacks from parent
   openEdit,
   handleRowStatusChange,
@@ -51,7 +52,16 @@ export default function PLMobileCards({
           const displayComplete = getDisplayCompleteDate(l, pe);
 
           return (
-            <div key={`pl-mob-${l.id}`} className="party-ledger-mobile-card modern-lot-card stagger-item">
+            <div
+              key={`pl-mob-${l.id}`}
+              data-pl-lot-id={l.id}
+              className="party-ledger-mobile-card modern-lot-card stagger-item"
+              style={
+                String(highlightLotId) === String(l.id)
+                  ? { background: 'var(--warning-bg, #fef3c7)', outline: '2px solid var(--warning, #f59e0b)' }
+                  : undefined
+              }
+            >
               <div className="pl-mob-header">
                 <div>
                   <span className="pl-mob-lot-no">Lot #{l.lotNo || l.lotNumber}</span>
@@ -82,6 +92,12 @@ export default function PLMobileCards({
                     <div>Allot Date: {getPartyAllotDate(l) ? formatDisplayDate(getPartyAllotDate(l)) : '\u2014'}</div>
                     <div>Complete Date: {displayComplete ? formatDisplayDate(displayComplete) : '\u2014'}</div>
                     {l.description && <div>Note: {l.description}</div>}
+                    {pe.notes && <div>Party Note: {pe.notes}</div>}
+                    {l.rejectionNote && displayStatus === 'Rejected' && (
+                      <div style={{ color: 'var(--danger, #dc2626)', fontWeight: 600 }}>
+                        Rejected: {l.rejectionNote}
+                      </div>
+                    )}
                   </div>
                   
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>

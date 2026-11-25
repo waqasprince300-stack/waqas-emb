@@ -43,7 +43,21 @@ export default function LotTableDesktop({
   return (
     <div className="table-wrapper desktop-only-table">
       <div className="table-scroll">
-        <table className="ledger-table">
+        <table className="ledger-table fixed-grid-table ghausia-lots-table">
+          <colgroup>
+            <col style={{ width: '15%' }} />
+            <col style={{ width: '5.5%' }} />
+            <col style={{ width: '10.5%' }} />
+            <col style={{ width: '6.5%' }} />
+            <col style={{ width: '4.3%' }} />
+            <col style={{ width: '4.7%' }} />
+            <col style={{ width: '7.5%' }} />
+            <col style={{ width: '8%' }} />
+            <col style={{ width: '9.5%' }} />
+            <col style={{ width: '11.5%' }} />
+            <col style={{ width: '7.5%' }} />
+            <col style={{ width: '9.5%' }} />
+          </colgroup>
           <thead>
             <tr>
               <th>Lot No</th>
@@ -92,26 +106,26 @@ export default function LotTableDesktop({
             ) : (
               paginatedLots.map((l) => (
                 <tr key={l.id} className={`stagger-item ${l.suitComponent === 'dupatta' ? 'lot-row-dupatta' : l.suitComponent === 'main' && l.suitType === '3-piece' ? 'lot-row-main' : ''}`}>
-                  <td style={{ fontWeight: 700, color: 'var(--primary, #1e40af)', whiteSpace: 'nowrap' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <td style={{ fontWeight: 700, color: 'var(--primary, #1e40af)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
                       {l.lotNumber ? <HighlightText text={l.lotNumber} query={search} /> : <span style={{ color: 'var(--text-muted, #94a3b8)', fontStyle: 'italic', fontWeight: 500 }}>(No Lot)</span>}
                       {l.suitComponent === 'dupatta' && (
-                        <button type="button" onClick={() => openEdit(l)} style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', background: 'var(--primary-bg, #fdf4ff)', color: 'var(--primary, #a21caf)', border: '1px solid var(--border, #f5d0fe)', borderRadius: 4, cursor: 'pointer' }}>Dupatta</button>
+                        <button type="button" onClick={() => openEdit(l)} style={{ fontSize: 11, fontWeight: 700, padding: '2px 6px', background: 'var(--primary-bg, #fdf4ff)', color: 'var(--primary, #a21caf)', border: '1px solid var(--border, #f5d0fe)', borderRadius: 4, cursor: 'pointer', whiteSpace: 'nowrap' }}>Dupatta</button>
                       )}
                       {l.suitComponent === 'main' && l.suitType === '3-piece' && (
-                        <button type="button" onClick={() => openEdit(l)} style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', background: 'var(--primary-bg, #eff6ff)', color: 'var(--primary, #1d4ed8)', border: '1px solid var(--border, #bfdbfe)', borderRadius: 4, cursor: 'pointer' }}>Main Lot</button>
+                        <button type="button" onClick={() => openEdit(l)} style={{ fontSize: 11, fontWeight: 700, padding: '2px 6px', background: 'var(--primary-bg, #eff6ff)', color: 'var(--primary, #1d4ed8)', border: '1px solid var(--border, #bfdbfe)', borderRadius: 4, cursor: 'pointer', whiteSpace: 'nowrap' }}>Main Lot</button>
                       )}
                       {l.isRework && (
-                        <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', background: 'var(--primary-bg, #fffbeb)', color: 'var(--primary, #b45309)', border: '1px solid var(--border, #fde68a)', borderRadius: 4 }}>Rework</span>
+                        <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 6px', background: 'var(--primary-bg, #fffbeb)', color: 'var(--primary, #b45309)', border: '1px solid var(--border, #fde68a)', borderRadius: 4, whiteSpace: 'nowrap' }}>Rework</span>
                       )}
                       {l.linkedLotId && (
                         <div title="Jump to linked lot">
                           <button
                             type="button"
                             onClick={() => openLinkedLot(l.linkedLotId)}
-                            style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', background: 'var(--primary-bg, #f8fafc)', color: 'var(--text-secondary, #334155)', border: '1px solid var(--border, #cbd5e1)', borderRadius: 4, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}
+                            style={{ fontSize: 11, fontWeight: 700, padding: '2px 6px', background: 'var(--primary-bg, #f8fafc)', color: 'var(--text-secondary, #334155)', border: '1px solid var(--border, #cbd5e1)', borderRadius: 4, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 3, whiteSpace: 'nowrap' }}
                           >
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
                             {l.suitComponent === 'main' ? 'View Dupatta' : 'View Main'}
                           </button>
                         </div>
@@ -119,7 +133,11 @@ export default function LotTableDesktop({
                     </div>
                   </td>
                   <td style={{ fontWeight: 600, whiteSpace: 'nowrap' }}><HighlightText text={l.designNo} query={search} /></td>
-                  <td className="desc-col"><HighlightText text={l.description} query={search} /></td>
+                  <td className="desc-col">
+                    <div className="table-cell-clamp-2" title={l.description || ''}>
+                      <HighlightText text={l.description} query={search} />
+                    </div>
+                  </td>
                   <td>
                     <span
                       style={{
@@ -127,8 +145,10 @@ export default function LotTableDesktop({
                         color: 'var(--primary, #0369a1)',
                         border: '1px solid var(--border, #BAE6FD)',
                         borderRadius: 6,
-                        padding: '2px 8px',
+                        padding: '2px 7px',
                         fontSize: 12,
+                        whiteSpace: 'nowrap',
+                        display: 'inline-block',
                       }}
                     >
                       {l.itemType || l.fabric}
@@ -136,9 +156,16 @@ export default function LotTableDesktop({
                   </td>
                   <td>{l.colors}</td>
                   <td>{l.pieces}</td>
-                  <td>{formatDisplayDate(l.allotDate)}</td>
-                  <td style={{ color: 'var(--text-secondary)', fontSize: 13, maxWidth: 160 }}>
-                    {workspaceDisplayTitleForLot(l, businessOwners)}
+                  <td style={{ whiteSpace: 'nowrap' }}>{formatDisplayDate(l.allotDate)}</td>
+                  <td style={{ color: 'var(--text-secondary)', fontSize: 13 }}>
+                    {(() => {
+                      const bizTitle = workspaceDisplayTitleForLot(l, businessOwners);
+                      return (
+                        <span className="table-cell-ellipsis" title={typeof bizTitle === 'string' ? bizTitle : ''}>
+                          {bizTitle}
+                        </span>
+                      );
+                    })()}
                   </td>
                   <td>
                     <select
@@ -215,10 +242,12 @@ export default function LotTableDesktop({
                         {l.dispatchDate && l.status !== 'pending' && (
                           <div
                             style={{
-                              fontSize: 12,
+                              fontSize: 11,
+                              lineHeight: 1.25,
                               color: 'var(--danger, #dc2626)',
-                              marginTop: 3,
+                              marginTop: 2,
                               fontWeight: '500',
+                              whiteSpace: 'nowrap',
                             }}
                           >
                             Dispatch: {formatDisplayDate(l.dispatchDate)}
@@ -227,10 +256,12 @@ export default function LotTableDesktop({
                         {l.receivedBackDate && ['received back', 'pending approval'].includes(l.status) && (
                           <div
                             style={{
-                              fontSize: 12,
+                              fontSize: 11,
+                              lineHeight: 1.25,
                               color: 'green',
                               marginTop: 1,
                               fontWeight: '500',
+                              whiteSpace: 'nowrap',
                             }}
                           >
                             Received: {formatDisplayDate(l.receivedBackDate)}
@@ -239,10 +270,12 @@ export default function LotTableDesktop({
                         {l.rejectedDate && l.status === 'rejected' && (
                           <div
                             style={{
-                              fontSize: 12,
+                              fontSize: 11,
+                              lineHeight: 1.25,
                               color: 'var(--danger, #b91c1c)',
                               marginTop: 1,
                               fontWeight: '500',
+                              whiteSpace: 'nowrap',
                             }}
                           >
                             Rejected: {formatDisplayDate(l.rejectedDate)}
@@ -251,10 +284,12 @@ export default function LotTableDesktop({
                         {l.pendingReviewSubmittedAt && l.status === 'pending approval' && (
                           <div
                             style={{
-                              fontSize: 12,
+                              fontSize: 11,
+                              lineHeight: 1.25,
                               color: 'var(--warning, #ca8a04)',
                               marginTop: 1,
                               fontWeight: '500',
+                              whiteSpace: 'nowrap',
                             }}
                           >
                             Pending: {formatDisplayDate(l.pendingReviewSubmittedAt)}
@@ -263,11 +298,11 @@ export default function LotTableDesktop({
                       </>
                     )}
                   </td>
-                  <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--primary, #1e40af)' }}>
+                  <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--primary, #1e40af)', whiteSpace: 'nowrap' }}>
                     {renderOwnerBillableAmount(l)}
                   </td>
-                  <td>
-                    <div style={{ display: 'flex', gap: 6 }}>
+                  <td style={{ whiteSpace: 'nowrap' }}>
+                    <div style={{ display: 'flex', gap: 5, flexWrap: 'nowrap', alignItems: 'center' }}>
                       <ActionBtn variant="edit" onClick={() => openEdit(l)} />
                       <ActionBtn variant="delete" onClick={() => setDeleteTarget(l)} />
                     </div>

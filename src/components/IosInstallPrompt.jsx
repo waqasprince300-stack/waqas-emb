@@ -41,16 +41,16 @@ export default function IosInstallPrompt() {
         transform: 'translateX(-50%)',
         width: '90%',
         maxWidth: 400,
-        backgroundColor: 'var(--bg-card, #2c2928)',
-        color: '#fff',
+        backgroundColor: 'var(--card-bg, #1e293b)',
+        color: 'var(--text-primary, #f8fafc)',
         padding: '16px',
         borderRadius: '12px',
-        boxShadow: '0 10px 25px rgba(0,0,0,0.5)',
-        zIndex: 9999,
+        boxShadow: '0 10px 25px rgba(0,0,0,0.4)',
+        zIndex: 600,
         display: 'flex',
         flexDirection: 'column',
         gap: '12px',
-        border: '1px solid var(--border-color, #3e3a39)'
+        border: '1px solid var(--border, #3e3a39)'
       }}
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

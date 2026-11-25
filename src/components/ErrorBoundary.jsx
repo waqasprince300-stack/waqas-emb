@@ -14,13 +14,24 @@ class ErrorBoundary extends React.Component {
     console.error("ErrorBoundary caught an error", error, errorInfo);
 
     // ChunkLoadError means stale cached HTML referencing old JS chunks.
-    // Auto-reload once to fetch the latest build.
-    if (
-      error?.name === 'ChunkLoadError' &&
-      !window.__chunkReloadAttempted
-    ) {
-      window.__chunkReloadAttempted = true;
-      window.location.reload();
+    // Auto-reload once per 30s to fetch the latest build without infinite reload loops.
+    const msg = String(error?.message || '');
+    const isChunkErr =
+      error?.name === 'ChunkLoadError' ||
+      /Failed to fetch dynamically imported module|Importing a module script failed/i.test(msg);
+    if (isChunkErr) {
+      try {
+        const last = Number(sessionStorage.getItem('__chunk_reload_at') || 0);
+        if (!Number.isFinite(last) || Date.now() - last > 30000) {
+          sessionStorage.setItem('__chunk_reload_at', String(Date.now()));
+          window.location.reload();
+        }
+      } catch {
+        if (!window.__chunkReloadAttempted) {
+          window.__chunkReloadAttempted = true;
+          window.location.reload();
+        }
+      }
     }
   }
 

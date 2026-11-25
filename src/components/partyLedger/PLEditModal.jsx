@@ -305,6 +305,11 @@ export default function PLEditModal({
                 setLedgerFormErrors({});
               }}
             >
+              {editForm.status === 'Rejected' && (
+                <option value="Rejected" disabled>
+                  {partyFacingStatusLabel('Rejected', isParty)}
+                </option>
+              )}
               {!(isParty && editingLot && getDisplayStatus(editingLot) === 'In Progress') ? (
                 <option value="Pending">{partyFacingStatusLabel('Pending', isParty)}</option>
               ) : null}

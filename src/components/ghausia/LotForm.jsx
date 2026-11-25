@@ -116,7 +116,34 @@ function LotForm({
       suitType: initial.suitType || '2-piece',
       isRework: initial.isRework || false,
       ownerBillingChoice: initial.ownerBillingChoice || 'separate',
-      dupattaDetails: initial.dupattaDetails || { partyId: '', partyName: '', rate: '', fabric: '', quantity: '', billAmount: '' },
+      dupattaDetails: initial.dupattaDetails
+        ? {
+            partyId: '',
+            partyName: '',
+            rate: '',
+            customFabric: '',
+            billAmount: '',
+            ...initial.dupattaDetails,
+            itemType:
+              initial.dupattaDetails.itemType ||
+              initial.dupattaDetails.fabric ||
+              '',
+            fabric:
+              initial.dupattaDetails.fabric ||
+              initial.dupattaDetails.itemType ||
+              '',
+            quantity: initial.dupattaDetails.quantity ?? '',
+          }
+        : {
+            partyId: '',
+            partyName: '',
+            rate: '',
+            fabric: '',
+            itemType: '',
+            customFabric: '',
+            quantity: '',
+            billAmount: '',
+          },
     };
   });
   const [errors, setErrors] = useState({});
@@ -282,18 +309,27 @@ function LotForm({
       if (!confirm.isConfirmed) return;
     }
     
+    const quantityValue = Number(form.pieces || 0);
     const finalType = form.itemType === '__custom' ? form.customFabric : form.itemType;
     let finalDupattaDetails = form.dupattaDetails;
     if (form.suitType === '3-piece') {
-      const dFinalType = form.dupattaDetails.itemType === '__custom' ? form.dupattaDetails.customFabric : form.dupattaDetails.itemType;
+      const selectedItemType =
+        form.dupattaDetails.itemType || form.dupattaDetails.fabric || '';
+      const dFinalType =
+        selectedItemType === '__custom'
+          ? form.dupattaDetails.customFabric
+          : selectedItemType;
+      const rawDQty = form.dupattaDetails.quantity;
+      const resolvedDQty =
+        rawDQty !== '' && rawDQty != null ? String(rawDQty) : String(quantityValue);
       finalDupattaDetails = {
         ...form.dupattaDetails,
         fabric: dFinalType,
         itemType: dFinalType,
+        quantity: resolvedDQty,
       };
     }
-    
-    const quantityValue = Number(form.pieces || 0);
+
     const selectedParty = parties.find((p) => p.id === form.partyId);
     const partyName = selectedParty?.name || form.partyName || '';
     const partyId = form.partyId || '';
@@ -1207,8 +1243,15 @@ function LotForm({
             <FormGroup label="Fabric">
               <select
                 className="form-select"
-                value={form.dupattaDetails.itemType}
-                onChange={(e) => set('dupattaDetails', { ...form.dupattaDetails, itemType: e.target.value })}
+                value={form.dupattaDetails.itemType || form.dupattaDetails.fabric || ''}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  set('dupattaDetails', {
+                    ...form.dupattaDetails,
+                    itemType: val,
+                    fabric: val === '__custom' ? form.dupattaDetails.customFabric : val,
+                  });
+                }}
               >
                 <option value="">— Select Fabric —</option>
                 {itemTypeOptions.map((f) => (

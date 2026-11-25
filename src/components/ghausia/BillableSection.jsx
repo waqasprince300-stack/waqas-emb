@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import Loader from '../Loader';
+import { PaginationFooter } from '../UI';
 import { formatDisplayDate } from '../../utils/dateFilters';
 import { getBusinessBillAmount } from '../../utils/partyBillPrivacy';
 import { formatLakhCrore } from '../../utils/numberToWords';
@@ -31,8 +32,10 @@ export default function BillableSection({
   onOpenBillModal,
   onOpenBillHistory,
 }) {
+  const sectionTopRef = useRef(null);
+
   return (
-    <div className="card" style={{ marginBottom: 22 }}>
+    <div ref={sectionTopRef} className="card" style={{ marginBottom: 22 }}>
       <div
         className="card-header"
         style={{
@@ -511,55 +514,18 @@ export default function BillableSection({
               </div>
 
                 {billablePageCount > 1 && (
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      gap: 10,
-                      flexWrap: 'wrap',
-                      marginTop: 12,
-                    }}
-                  >
-                    <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                      Showing {(billableSafePage - 1) * BILLABLE_PAGE_SIZE + 1}–
-                      {Math.min(billableSafePage * BILLABLE_PAGE_SIZE, billableFiltered.length)} of{' '}
-                      {billableFiltered.length}
-                    </span>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <button
-                        type="button"
-                        className="btn btn-sm"
-                        disabled={billableSafePage <= 1}
-                        onClick={() => setBillablePage((p) => Math.max(1, p - 1))}
-                        style={{
-                          background: 'var(--card-bg)',
-                          border: '1px solid var(--border)',
-                          color: 'var(--text-primary)',
-                          opacity: billableSafePage <= 1 ? 0.5 : 1,
-                        }}
-                      >
-                        ‹ Prev
-                      </button>
-                      <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-primary)' }}>
-                        {billableSafePage} / {billablePageCount}
-                      </span>
-                      <button
-                        type="button"
-                        className="btn btn-sm"
-                        disabled={billableSafePage >= billablePageCount}
-                        onClick={() => setBillablePage((p) => Math.min(billablePageCount, p + 1))}
-                        style={{
-                          background: 'var(--card-bg)',
-                          border: '1px solid var(--border)',
-                          color: 'var(--text-primary)',
-                          opacity: billableSafePage >= billablePageCount ? 0.5 : 1,
-                        }}
-                      >
-                        Next ›
-                      </button>
-                    </div>
-                  </div>
+                  <PaginationFooter
+                    currentPage={billableSafePage}
+                    totalPages={billablePageCount}
+                    totalItems={billableFiltered.length}
+                    pageStart={(billableSafePage - 1) * BILLABLE_PAGE_SIZE}
+                    pageSize={BILLABLE_PAGE_SIZE}
+                    onPageChange={setBillablePage}
+                    scrollTargetRef={sectionTopRef}
+                    compact
+                    prevLabel="‹ Prev"
+                    nextLabel="Next ›"
+                  />
                 )}
             </>
           )}

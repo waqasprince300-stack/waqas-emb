@@ -3,7 +3,7 @@ import Swal from 'sweetalert2';
 import { useLocation } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
-import { Modal, FormGroup, EmptyState, SearchBar } from '../components/UI';
+import { Modal, FormGroup, EmptyState, SearchBar, PaginationFooter } from '../components/UI';
 import Loader from '../components/Loader';
 import LoaderDashboard from '../components/LoaderDashboard';
 import ImageUploader from '../components/ImageUploader';
@@ -137,6 +137,7 @@ export default function Payments() {
     partyCrossLots,
     partyCrossPartyEdits,
     reportingPartyEdits,
+    refreshData,
     markNotificationsReadByContext,
   } = useApp();
   const { isAdmin, isParty, user } = useAuth();
@@ -168,6 +169,7 @@ export default function Payments() {
   const [errors, setErrors] = useState({});
   const [paymentSaving, setPaymentSaving] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
+  const listTopRef = useRef(null);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -183,11 +185,11 @@ export default function Payments() {
 
   useEffect(() => {
     const handleScroll = () => {
-      if (!isScrolling) setIsScrolling(true);
+      setIsScrolling(true);
       if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
       scrollTimeoutRef.current = setTimeout(() => {
         setIsScrolling(false);
-      }, 400); // Wait 400ms after scrolling stops
+      }, 400);
     };
 
     window.addEventListener('scroll', handleScroll, { passive: true });
@@ -195,7 +197,7 @@ export default function Payments() {
       window.removeEventListener('scroll', handleScroll);
       if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
     };
-  }, [isScrolling]);
+  }, []);
 
   const visibleDbPayments = useMemo(() => {
     if (!isParty) return reportingPayments;
@@ -224,8 +226,7 @@ export default function Payments() {
     );
     const rows = [];
     for (const l of lotsPool) {
-      const match = String(l.partyId || '') === pid || String(l.partyName || '').trim() === pname;
-      if (!match) continue;
+      if (!partyRecordMatchesUser(l.partyId, l.partyName, pid, pname)) continue;
       if (!isLotPartyBillableStatus(l.status)) continue;
       const ref = lotDisplayRef(l);
       if (ref && linkedLotKeys.has(normalizeLotKey(ref))) continue;
@@ -560,7 +561,12 @@ export default function Payments() {
 
   const validateForm = () => {
     const newErrors = {};
-    if (!form.amount) newErrors.amount = 'Amount is required';
+    const numAmt = Number(form.amount);
+    if (!form.amount || String(form.amount).trim() === '') {
+      newErrors.amount = 'Amount is required';
+    } else if (!Number.isFinite(numAmt) || numAmt <= 0) {
+      newErrors.amount = 'Amount must be greater than zero';
+    }
     if (!form.date) newErrors.date = 'Date is required';
     if (form.type === 'Paid' && !form.party) newErrors.party = 'Please select a party';
     // Business / collection is required ONLY when money is received from the Owner (capital in).
@@ -1141,23 +1147,38 @@ export default function Payments() {
         </span>
       </div>
 
+      <div ref={listTopRef} />
+
       {/* Table for Desktop & Tablet */}
       <div className="table-wrapper desktop-only-table">
         <div className="table-scroll">
-          <table>
+          <table className="fixed-grid-table payments-table">
+            <colgroup>
+              <col style={{ width: 46 }} />
+              <col style={{ width: 96 }} />
+              <col style={{ width: 148 }} />
+              {!isParty && <col style={{ width: '15%' }} />}
+              {isAdmin && <col style={{ width: '13%' }} />}
+              <col style={{ width: '17%' }} />
+              <col />
+              <col style={{ width: 124 }} />
+              {isParty && <col style={{ width: 134 }} />}
+              <col style={{ width: 74 }} />
+              {!isParty && <col style={{ width: 78 }} />}
+            </colgroup>
             <thead>
               <tr>
-                <th style={{ width: 44 }}>#</th>
-                <th style={{ width: 110 }}>Date</th>
-                <th style={{ width: 140 }}>Type</th>
+                <th>#</th>
+                <th>Date</th>
+                <th>Type</th>
                 {!isParty && <th>Party / From</th>}
                 {isAdmin && <th>Owner Name</th>}
                 <th>Lot · Design</th>
                 <th>Note</th>
-                <th style={{ textAlign: 'right', width: 130 }}>Amount (₨)</th>
-                {isParty && <th style={{ textAlign: 'right', width: 140 }}>Kul Baqaya (Balance)</th>}
-                <th style={{ width: 70, textAlign: 'center' }}>Slip</th>
-                {!isParty && <th style={{ width: 70, textAlign: 'center' }}>Actions</th>}
+                <th style={{ textAlign: 'right' }}>Amount (₨)</th>
+                {isParty && <th style={{ textAlign: 'right' }}>Kul Baqaya (Balance)</th>}
+                <th style={{ textAlign: 'center' }}>Slip</th>
+                {!isParty && <th style={{ textAlign: 'center' }}>Actions</th>}
               </tr>
             </thead>
             <tbody>
@@ -1247,10 +1268,23 @@ export default function Payments() {
                           {typeLabel}
                         </span>
                       </td>
-                      {!isParty && <td style={{ fontWeight: 500 }}>{partyLabel}</td>}
+                      {!isParty && (
+                        <td style={{ fontWeight: 500 }}>
+                          <span className="table-cell-ellipsis" title={partyLabel}>
+                            {partyLabel}
+                          </span>
+                        </td>
+                      )}
                       {isAdmin && (
                         <td style={{ color: 'var(--text-secondary)', fontSize: 13 }}>
-                          {p._synthetic ? '—' : paymentOwnerColumn(p)}
+                          {(() => {
+                            const ownerLabel = p._synthetic ? '—' : paymentOwnerColumn(p);
+                            return (
+                              <span className="table-cell-ellipsis" title={typeof ownerLabel === 'string' ? ownerLabel : ''}>
+                                {ownerLabel}
+                              </span>
+                            );
+                          })()}
                         </td>
                       )}
                       <td>
@@ -1296,7 +1330,9 @@ export default function Payments() {
                         )}
                       </td>
                       <td style={{ color: 'var(--text-secondary)', fontSize: 13 }}>
-                        {p.note || '—'}
+                        <div className="table-cell-clamp-2" title={p.note || ''}>
+                          {p.note || '—'}
+                        </div>
                       </td>
                       <td
                         style={{
@@ -1559,42 +1595,15 @@ export default function Payments() {
           })
         )}
       </div>
-      {filtered.length > 0 && (
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            gap: 12,
-            marginTop: 12,
-            flexWrap: 'wrap',
-          }}
-        >
-          <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-            Showing {pageStart + 1}-{Math.min(pageStart + PAGE_SIZE, filtered.length)} of{' '}
-            {filtered.length}
-          </span>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <button
-              className="btn btn-ghost btn-sm"
-              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-              disabled={safeCurrentPage === 1}
-            >
-              Prev
-            </button>
-            <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-              Page {safeCurrentPage} of {totalPages}
-            </span>
-            <button
-              className="btn btn-ghost btn-sm"
-              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-              disabled={safeCurrentPage === totalPages}
-            >
-              Next
-            </button>
-          </div>
-        </div>
-      )}
+      <PaginationFooter
+        currentPage={safeCurrentPage}
+        totalPages={totalPages}
+        totalItems={filtered.length}
+        pageStart={pageStart}
+        pageSize={PAGE_SIZE}
+        onPageChange={setCurrentPage}
+        scrollTargetRef={listTopRef}
+      />
 
       {/* Add Payment Modal */}
       {modal && (
@@ -1828,7 +1837,7 @@ export default function Payments() {
                 }}
                 disabled={
                   (form.type === 'Paid' && !form.party) ||
-                  (isAdmin && !String(form.ownerWorkspaceId || '').trim())
+                  (form.type === 'Received' && isAdmin && !String(form.ownerWorkspaceId || '').trim())
                 }
               >
                 <option value="">None</option>
@@ -2035,6 +2044,7 @@ export default function Payments() {
           ownerName={businessOwnerDisplayName(businessOwners.find(o => String(o.id ?? o._id) === String(ownerNameFilter)))}
           payments={reportingPayments}
           lots={reportingLots}
+          onRefresh={() => refreshData?.({ force: true })}
           onClose={() => setShowOwnerLedger(false)}
         />
       )}

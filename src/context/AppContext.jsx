@@ -1113,11 +1113,23 @@ export function AppProvider({ children }) {
     setAdminReportingLots(applyUpdates);
   }, []);
 
-  const revertLotsBilledLocally = useCallback((billId, billNo) => {
+  const revertLotsBilledLocally = useCallback((billId, billNo, bookNo, businessOwnerId) => {
     const applyUpdates = (arr) =>
       arr.map((lot) => {
         const matchBillId = billId && String(lot.ownerBillId || '') === String(billId);
-        const matchBillNo = billNo && String(lot.billedInBillNo || '') === String(billNo);
+        const sameBiz =
+          !businessOwnerId ||
+          !lot.businessOwnerId ||
+          String(lot.businessOwnerId) === String(businessOwnerId);
+        const sameBook =
+          !bookNo ||
+          !lot.billedInBookNo ||
+          String(lot.billedInBookNo) === String(bookNo);
+        const matchBillNo =
+          billNo &&
+          String(lot.billedInBillNo || '') === String(billNo) &&
+          sameBook &&
+          sameBiz;
         if (matchBillId || matchBillNo) {
           return {
             ...lot,

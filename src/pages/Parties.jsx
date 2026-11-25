@@ -1,6 +1,6 @@
-import React, { useMemo, useState, useEffect, useCallback } from 'react';
+import React, { useMemo, useState, useEffect, useCallback, useRef } from 'react';
 import { useApp } from '../context/AppContext';
-import { Modal, FormGroup, SearchBar, EmptyState, ConfirmDialog, HighlightText } from '../components/UI';
+import { Modal, FormGroup, SearchBar, EmptyState, ConfirmDialog, HighlightText, PaginationFooter } from '../components/UI';
 import { apiService } from '../services/api';
 import Loader from '../components/Loader';
 import LoaderDashboard from '../components/LoaderDashboard';
@@ -277,7 +277,7 @@ function TrashView({ trashedParties, trashedOwners, loading, onRestoreParty, onP
         {trashedParties.length === 0 ? (
           <EmptyState message="No parties in the recycle bin" />
         ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 16 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 300px), 1fr))', gap: 16 }}>
             {trashedParties.map((party) => (
               <div key={party._id} style={{ background: 'var(--card-bg, #fff)', border: '1px solid var(--border)', borderRadius: 12, padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
@@ -299,7 +299,7 @@ function TrashView({ trashedParties, trashedOwners, loading, onRestoreParty, onP
         {trashedOwners.length === 0 ? (
           <EmptyState message="No workspaces in the recycle bin" />
         ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 16 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 300px), 1fr))', gap: 16 }}>
             {trashedOwners.map((owner) => (
               <div key={owner._id} style={{ background: 'var(--card-bg, #fff)', border: '1px solid var(--border)', borderRadius: 12, padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
@@ -349,6 +349,7 @@ export default function Parties() {
   );
   const [transactionParty, setTransactionParty] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
+  const listTopRef = useRef(null);
   const [hideAmounts, setHideAmounts] = useState(false);
   const [activeTab, setActiveTab] = useState('active'); // 'active' | 'trash'
   const [trashedParties, setTrashedParties] = useState([]);
@@ -611,7 +612,7 @@ export default function Parties() {
   const avatarColors = [
     ['var(--primary-bg, #eff6ff)', 'var(--primary, #1e40af)'],
     ['var(--success-bg, #f0fdf4)', 'var(--success, #15803d)'],
-    ['var(--card-bg, #ffffff)7ED', 'var(--warning, #c2410c)'],
+    ['var(--warning-bg, #fff7ed)', 'var(--warning, #c2410c)'],
     ['#F5F3FF', '#6d28d9'],
     ['var(--danger-bg, #fef2f2)', 'var(--danger, #991b1b)'],
     ['var(--primary-bg, #f0f9ff)', '#075985'],
@@ -845,8 +846,11 @@ export default function Parties() {
             setCustomEnd(end);
           }}
           className="pl-toolbar-filter pl-toolbar-filter--date"
+          containerClassName="pl-toolbar-filter pl-toolbar-filter--date"
         />
       </div>
+
+      <div ref={listTopRef} />
 
       {/* Cards Grid */}
       {filtered.length === 0 ? (
@@ -855,7 +859,7 @@ export default function Parties() {
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 300px), 1fr))',
             gap: 16,
           }}
         >
@@ -1077,42 +1081,15 @@ export default function Parties() {
           })}
         </div>
       )}
-      {filtered.length > 0 && (
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            gap: 12,
-            marginTop: 12,
-            flexWrap: 'wrap',
-          }}
-        >
-          <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-            Showing {pageStart + 1}-{Math.min(pageStart + PAGE_SIZE, filtered.length)} of{' '}
-            {filtered.length}
-          </span>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <button
-              className="btn btn-ghost btn-sm"
-              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-              disabled={safeCurrentPage === 1}
-            >
-              Prev
-            </button>
-            <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-              Page {safeCurrentPage} of {totalPages}
-            </span>
-            <button
-              className="btn btn-ghost btn-sm"
-              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-              disabled={safeCurrentPage === totalPages}
-            >
-              Next
-            </button>
-          </div>
-        </div>
-      )}
+      <PaginationFooter
+        currentPage={safeCurrentPage}
+        totalPages={totalPages}
+        totalItems={filtered.length}
+        pageStart={pageStart}
+        pageSize={PAGE_SIZE}
+        onPageChange={setCurrentPage}
+        scrollTargetRef={listTopRef}
+      />
 
       {modal === 'form' && (
         <Modal

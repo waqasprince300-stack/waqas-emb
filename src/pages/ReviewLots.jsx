@@ -394,7 +394,7 @@ export default function ReviewLots() {
             <tbody>
               {pendingLots.length === 0 ? (
                 <tr>
-                  <td colSpan={9}>
+                  <td colSpan={11}>
                     <EmptyState message="No lots are waiting for review" />
                   </td>
                 </tr>

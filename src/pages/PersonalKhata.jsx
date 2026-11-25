@@ -64,6 +64,11 @@ function normalizeKhataState(raw) {
 const fmtMoney = (n) =>
   `₨${Math.abs(Number(n) || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
 
+const fmtSignedMoney = (n) => {
+  const num = Number(n) || 0;
+  return `${num < 0 ? '-' : ''}₨${Math.abs(num).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+};
+
 const fmtWhen = (iso) => formatDisplayDateTime(iso);
 
 function initials(name) {
@@ -390,8 +395,8 @@ export default function PersonalKhata({ standalone = false } = {}) {
 
     // Logged-in: show the cached ledger instantly (no blocking spinner), then reconcile with server
     const cached = loadKhataState(khataStorageScope);
-    if (cached.contacts.length > 0 || cached.entries.length > 0) {
-      applyState(cached);
+    if (cached) {
+      void applyState(cached);
     }
 
         // Logged-in Personal Khata: server is the single source of truth, but don't overwrite if local changes are pending!
@@ -406,15 +411,16 @@ export default function PersonalKhata({ standalone = false } = {}) {
             const compressed = await compressState(localCached);
             await apiService.savePersonalKhata(compressed);
             localStorage.removeItem(`pk_pending_sync_${khataStorageScope}`);
-            setSyncStatus('saved');
+            if (!cancelled) { setKhataHydrated(true); setSyncStatus('saved'); }
             return;
           } catch (syncErr) {
             console.warn('Could not push pending local changes to server:', syncErr);
-            setSyncStatus('error');
+            if (!cancelled) { setKhataHydrated(true); setSyncStatus('error'); }
             return;
           }
         }
         const remote = await apiService.getPersonalKhata();
+        if (cancelled) return;
         const state = normalizeKhataState(remote);
         try {
           saveKhataState(state, khataStorageScope);
@@ -460,6 +466,7 @@ export default function PersonalKhata({ standalone = false } = {}) {
             }
           }
           const remote = await apiService.getPersonalKhata();
+          if (isSavingRef.current || Date.now() - lastLocalEditAtRef.current < 3000) return;
           const state = normalizeKhataState(remote);
           saveKhataState(state, khataStorageScope);
           stateRef.current = state;
@@ -494,6 +501,7 @@ export default function PersonalKhata({ standalone = false } = {}) {
         void (async () => {
           try {
             const remote = await apiService.getPersonalKhata();
+            if (isSavingRef.current || Date.now() - lastLocalEditAtRef.current < 2000) return;
             const state = normalizeKhataState(remote);
             saveKhataState(state, khataStorageScope);
             stateRef.current = state;
@@ -976,7 +984,7 @@ export default function PersonalKhata({ standalone = false } = {}) {
       style={{
         position: 'fixed',
         inset: 0,
-        zIndex: 250,
+        zIndex: 1150,
         background: 'rgba(15,23,42,0.55)',
         display: 'flex',
         alignItems: 'center',
@@ -1223,7 +1231,7 @@ export default function PersonalKhata({ standalone = false } = {}) {
                   className={`pk-balance-amt ${net >= 0 ? 'pk-balance-amt--in' : 'pk-balance-amt--out'}`}
                   style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' }}
                 >
-                  <span>{fmtMoney(net)}</span>
+                  <span>{fmtSignedMoney(net)}</span>
                   {formatLakhCrore(net) && (
                     <span
                       style={{
@@ -1245,7 +1253,7 @@ export default function PersonalKhata({ standalone = false } = {}) {
                   {net > 0 ? 'They owe you' : net < 0 ? 'You owe them' : 'Settled up'}
                 </div>
               </div>
-              <div style={{ color: net >= 0 ? 'var(--danger, #dc2626)' : 'var(--success, #059669)' }}>
+              <div style={{ color: net >= 0 ? 'var(--success, #059669)' : 'var(--danger, #dc2626)' }}>
                 {net >= 0 ? <ArrowDownLeft size={28} /> : <ArrowUpRight size={28} />}
               </div>
             </div>
@@ -1268,7 +1276,7 @@ export default function PersonalKhata({ standalone = false } = {}) {
                     <div className="pk-tx-time">{fmtWhen(e.updatedAt || e.createdAt)}</div>
                     <div className="pk-tx-desc">{e.description}</div>
                     <div className="pk-tx-row-actions">
-                      <span className="pk-pill">Bal. {fmtMoney(runMap.get(e.id) ?? 0)}</span>
+                      <span className="pk-pill">Bal. {fmtSignedMoney(runMap.get(e.id) ?? 0)}</span>
                       {e.billImage && /^data:image\//i.test(String(e.billImage)) ? (
                         <button
                           type="button"
@@ -1369,7 +1377,7 @@ export default function PersonalKhata({ standalone = false } = {}) {
               style={{
                 position: 'fixed',
                 inset: 0,
-                zIndex: 280,
+                zIndex: 1200,
                 background: 'rgba(15,23,42,0.78)',
                 display: 'flex',
                 alignItems: 'center',
@@ -1601,7 +1609,7 @@ export default function PersonalKhata({ standalone = false } = {}) {
               position: 'fixed',
               inset: 0,
               background: 'rgba(15,23,42,0.45)',
-              zIndex: 100,
+              zIndex: 1100,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -1751,7 +1759,7 @@ export default function PersonalKhata({ standalone = false } = {}) {
               position: 'fixed',
               inset: 0,
               background: 'rgba(15,23,42,0.45)',
-              zIndex: 100,
+              zIndex: 1100,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -1919,7 +1927,7 @@ function EntryOverlay({
         position: 'fixed',
         inset: 0,
         background: 'rgba(15,23,42,0.5)',
-        zIndex: 100,
+        zIndex: 1100,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',

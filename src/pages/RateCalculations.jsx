@@ -88,13 +88,13 @@ export default function StitchCalculator() {
   const grandTotal = useMemo(() => grandStitchTotal(rows), [rows]);
 
   const onePieceRate = useMemo(
-    () => (rate ? (grandTotal * Number(rate)) / 1000 : 0),
+    () => (rate ? (grandTotal * Math.max(0, Number(rate) || 0)) / 1000 : 0),
 
     [grandTotal, rate]
   );
 
   const totalCost = useMemo(
-    () => onePieceRate * Number(pieces || 0),
+    () => onePieceRate * Math.max(0, Number(pieces) || 0),
 
     [onePieceRate, pieces]
   );
@@ -231,9 +231,26 @@ export default function StitchCalculator() {
   };
 
   const loadDesign = (design) => {
-    const loaded = (design.rows || []).map((row) => normalizeStitchRow(row, customParts));
+    const rawRows = Array.isArray(design?.rows) ? design.rows : [];
+    const missingCustom = rawRows
+      .filter((r) => {
+        const pid = String(r?.part || '').trim();
+        const plabel = String(r?.label || r?.partLabel || '').trim();
+        return pid && pid !== 'custom' && plabel && !findStitchPart(pid, customParts);
+      })
+      .map((r) => ({ id: String(r.part).trim(), label: String(r.label || r.partLabel).trim() }));
 
-    setRows(loaded.length > 0 ? loaded : [emptyStitchRow('', customParts)]);
+    let nextCustom = customParts;
+    if (missingCustom.length) {
+      for (const m of missingCustom) {
+        nextCustom = saveCustomStitchPart(m.label);
+      }
+      setCustomParts(nextCustom);
+    }
+
+    const loaded = rawRows.map((row) => normalizeStitchRow(row, nextCustom));
+
+    setRows(loaded.length > 0 ? loaded : [emptyStitchRow('', nextCustom)]);
 
     setRate(design.rate ?? '');
 
@@ -374,7 +391,10 @@ export default function StitchCalculator() {
                 <input
                   type="number"
                   value={normalized.baseStitches}
-                  onChange={(e) => updateRow(index, { baseStitches: e.target.value })}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    updateRow(index, { baseStitches: v === '' ? '' : Math.max(0, Number(v) || 0) });
+                  }}
                   placeholder="e.g. 10000"
                   className="input"
                   min={0}
@@ -386,10 +406,10 @@ export default function StitchCalculator() {
                 <input
                   type="number"
                   list="repeat-options-list"
-                  value={normalized.repeat === 0 ? '' : normalized.repeat}
+                  value={normalized.repeat ?? ''}
                   onChange={(e) => {
                     const val = e.target.value;
-                    updateRow(index, { repeat: val === '' ? 0 : Number(val) });
+                    updateRow(index, { repeat: val === '' ? '' : Math.max(0, Number(val)) });
                   }}
                   className="input"
                   min="0"
@@ -436,7 +456,10 @@ export default function StitchCalculator() {
 
               value={rate}
 
-              onChange={(e) => setRate(e.target.value)}
+              onChange={(e) => {
+                const v = e.target.value;
+                setRate(v === '' ? '' : String(Math.max(0, Number(v) || 0)));
+              }}
 
               placeholder="Rate per 1000"
 
@@ -454,7 +477,10 @@ export default function StitchCalculator() {
 
               value={pieces}
 
-              onChange={(e) => setPieces(e.target.value)}
+              onChange={(e) => {
+                const v = e.target.value;
+                setPieces(v === '' ? '' : String(Math.max(1, Number(v) || 1)));
+              }}
 
               placeholder="Pieces"
 

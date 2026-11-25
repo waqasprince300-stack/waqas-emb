@@ -57,7 +57,7 @@ export const normalizeLotData = (lot) => {
     dispatchDate: normalizeDateString(lot.dispatchDate),
     receivedBackDate: normalizeDateString(lot.receivedBackDate),
     receivedDate: normalizeDateString(lot.receivedDate),
-    status: status || 'Pending',
+    status: status || 'pending',
     notes: lot.notes || '',
     rejectionNote: lot.rejectionNote ? String(lot.rejectionNote).trim() : '',
     embeddedWorkspaceName: workspaceLabelEmbeddedInLot(lot),
@@ -103,36 +103,50 @@ export const mergePartyEditsFromRemote = (remotePartyEdits, prev = {}) => {
     const remote = incoming[lotId];
     const existing = prev[lotId];
     const remoteReceipt = remote.receipt;
+    const remoteClearedReceipt =
+      remote.hasReceipt === false && (remoteReceipt == null || String(remoteReceipt).trim() === '');
     const keptReceipt =
-      remoteReceipt != null && remoteReceipt !== '' ? remoteReceipt : (existing?.receipt ?? '');
+      remoteClearedReceipt
+        ? ''
+        : remoteReceipt != null && remoteReceipt !== ''
+          ? remoteReceipt
+          : (existing?.receipt ?? '');
 
     const remoteHasLotImagesArray = Array.isArray(remote.lotImages);
     const remoteLotImages = remoteHasLotImagesArray ? remote.lotImages : undefined;
     const remoteCount = Number(remote.lotImagesCount);
+    const remoteClearedLotImages =
+      remote.hasLotImages === false && (!remoteHasLotImagesArray || remoteLotImages.length === 0);
     const existingCount = Number(existing?.lotImagesCount);
     const hydratedCount = Array.isArray(existing?.lotImages) ? existing.lotImages.length : 0;
 
-    const lotImagesCount = remoteHasLotImagesArray
-      ? remoteLotImages.length
-      : Number.isFinite(remoteCount)
-        ? remoteCount
-        : Number.isFinite(existingCount)
-          ? existingCount
-          : hydratedCount;
+    const lotImagesCount = remoteClearedLotImages
+      ? 0
+      : remoteHasLotImagesArray
+        ? remoteLotImages.length
+        : Number.isFinite(remoteCount)
+          ? remoteCount
+          : Number.isFinite(existingCount)
+            ? existingCount
+            : hydratedCount;
 
     const merged = {
       ...remote,
       receipt: keptReceipt,
       lotImagesCount,
-      hasLotImages:
-        remote.hasLotImages === true || lotImagesCount > 0 || existing?.hasLotImages === true,
-      hasReceipt:
-        remote.hasReceipt === true ||
-        (typeof keptReceipt === 'string' && keptReceipt.trim() !== '') ||
-        existing?.hasReceipt === true,
+      hasLotImages: remoteClearedLotImages
+        ? false
+        : remote.hasLotImages === true || lotImagesCount > 0 || existing?.hasLotImages === true,
+      hasReceipt: remoteClearedReceipt
+        ? false
+        : remote.hasReceipt === true ||
+          (typeof keptReceipt === 'string' && keptReceipt.trim() !== '') ||
+          existing?.hasReceipt === true,
     };
 
-    if (remoteLotImages !== undefined) {
+    if (remoteClearedLotImages) {
+      merged.lotImages = [];
+    } else if (remoteLotImages !== undefined) {
       merged.lotImages = remoteLotImages;
     } else if (Array.isArray(existing?.lotImages) && existing.lotImages.length > 0) {
       merged.lotImages = existing.lotImages;

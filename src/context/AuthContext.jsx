@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import apiService, { registerSessionExpiredHandler } from '../services/api';
+import { disconnectRealtime } from '../services/realtime';
 import { getDeviceId, getDeviceLabel } from '../utils/deviceId';
 
 const AuthContext = createContext(null);
@@ -80,6 +81,7 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     registerSessionExpiredHandler(() => {
+      disconnectRealtime();
       localStorage.removeItem(SESSION_KEY);
       setSession(null);
       try {
@@ -217,6 +219,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   const logout = useCallback(() => {
+    disconnectRealtime();
     localStorage.removeItem(SESSION_KEY);
     try {
       localStorage.removeItem(BUSINESS_OWNER_STORAGE_KEY);

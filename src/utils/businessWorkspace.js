@@ -117,8 +117,13 @@ export function workspaceDisplayTitleForLot(lot, ownersRows, opts = {}) {
     const ov = p.workspaceOverrides?.find(
       (o) => normalizedBusinessOwnerId(o.businessOwnerId) === lotWid
     );
-    if (ov && ov.showWorkspace && ov.alias && ov.alias.trim()) {
-      return ov.alias.trim();
+    if (ov) {
+      if (ov.showWorkspace && ov.alias && ov.alias.trim()) {
+        return ov.alias.trim();
+      }
+      if (ov.showWorkspace === false) {
+        return p.workspaceAlias && p.workspaceAlias.trim() ? p.workspaceAlias.trim() : '—';
+      }
     }
     if (p.workspaceAlias && p.workspaceAlias.trim()) {
       return p.workspaceAlias.trim();

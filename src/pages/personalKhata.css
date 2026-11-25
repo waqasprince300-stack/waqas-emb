@@ -657,8 +657,8 @@
 }
 
 .pk-tx-out {
-  background: var(--primary-bg, var(--text-primary-inv, #fff)bfb);
-  color: var(--primary, #b91c1c);
+  background: var(--danger-bg, #fef2f2);
+  color: var(--danger, #b91c1c);
 }
 .pk-tx-in {
   background: var(--success-bg, #fafffb);
@@ -705,7 +705,7 @@
   right: 0;
   bottom: 0;
   padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
-  background: linear-gradient(180deg, transparent, rgba(240, 242, 245, 0.92) 30%, var(--primary-bg, #f0f2f5));
+  background: linear-gradient(180deg, transparent, var(--bg, #f0f2f5) 35%);
   display: flex;
   justify-content: center;
   z-index: 50;

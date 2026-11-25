@@ -50,7 +50,11 @@ export default function CompleteBillModal({
             Cancel
           </button>
           <button type="submit" className="btn btn-primary">
-            {fromBillable ? 'Complete & settle' : 'Complete & record payment'}
+            {!isCombDup && completeBillModal.unpaidBalance === 0
+              ? 'Complete'
+              : fromBillable
+                ? 'Complete & settle'
+                : 'Complete & record payment'}
           </button>
         </>
       }
@@ -114,7 +118,7 @@ export default function CompleteBillModal({
             color: 'var(--text-secondary)',
           }}
         >
-          Is lot ka total bill <strong>₨{amountBill}</strong> hai, aur baqi <strong>₨{completeBillModal.unpaidBalance.toLocaleString()}</strong> udhaar rehta hai. Isay complete karne par Payment Management mein (<strong>Received</strong>) ki payment record hogi jo amount aap neechay confirm karenge.
+          Is lot ka total bill <strong>₨{amountBill}</strong> hai, aur baqi <strong>₨{completeBillModal.unpaidBalance.toLocaleString()}</strong> udhaar rehta hai. Isay complete karne par Payment Management mein (<strong>Bill → Owner / Paid</strong>) ki settlement entry record hogi jo amount aap neechay confirm karenge.
         </p>
       ) : (
         <p
@@ -125,7 +129,7 @@ export default function CompleteBillModal({
             color: 'var(--text-secondary)',
           }}
         >
-          Is lot ka koi bill save nahi hai. Owner se jo amount aap ne li hai wo neechay likhein taa k lot mukammal ho aur Payment Management mein (<strong>Received</strong>) ki entry save ho jaye.
+          Is lot ka koi bill save nahi hai. Owner ka bill settlement amount neechay likhein taa k lot mukammal ho aur Payment Management mein (<strong>Bill → Owner / Paid</strong>) ki entry save ho jaye.
         </p>
       )}
       <div

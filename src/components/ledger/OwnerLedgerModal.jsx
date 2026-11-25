@@ -10,8 +10,16 @@ import { useApp } from '../../context/AppContext';
 import OwnerBillModal from './OwnerBillModal';
 import OwnerBillsListModal from './OwnerBillsListModal';
 
+const localTodayISO = () => {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+};
+
 function TallyModal({ ownerId, ownerName, onClose, onAdded }) {
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [date, setDate] = useState(() => localTodayISO());
   const [note, setNote] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -52,7 +60,7 @@ function TallyModal({ ownerId, ownerName, onClose, onAdded }) {
             <button
               type="button"
               onClick={() => {
-                setDate(new Date().toISOString().slice(0, 10));
+                setDate(localTodayISO());
               }}
               style={{
                 position: 'absolute',
@@ -151,13 +159,34 @@ export default function OwnerLedgerModal({ ownerId, ownerName, payments, lots, o
     return null;
   };
 
-  // Extract all lot numbers that have been billed (i.e. have an AutoBill payment or billed in an Owner Bill)
-  const billedLotNumbers = new Set();
+  const isAutoOwnerLotSettlement = (p) => {
+    if (!p || p.type !== 'Paid') return false;
+    if (p.ownerBillId) return true;
+    if (p.billedInBillNo && p.billedInBillNo !== 'none') return true;
+    const note = String(p.note || '').trim();
+    if (note.includes('billed to owner')) return true;
+    return /^(Billable lot settled|Defective lot settled|Lot completed|Rework lot settled|Rework lot completed)/i.test(
+      note
+    );
+  };
+
+  // Map finalized bills by ID so lots billed inside an OwnerBill sort cleanly right BEFORE that bill's Tally marker
+  const billsById = new Map();
+  (bills || []).forEach((b) => {
+    const bid = String(b.id || b._id || '').trim();
+    if (bid) billsById.set(bid, b);
+  });
+
+  // Extract lot keys (lotNo::reworkFlag) that have been billed so legacy rows still resolve without colliding with unbilled rework lots
+  const billedLotKeys = new Set();
+  const lotKeyFor = (lotNo, isRework) =>
+    `${String(lotNo || '').trim().toLowerCase()}::${isRework ? '1' : '0'}`;
+
   lots.forEach((l) => {
     const lotBizId = normalizedBusinessOwnerId(l.businessOwnerId) || normalizedBusinessOwnerId(l.ownerWorkspaceId);
-    if (lotBizId === normalizedOwnerId && (l.ownerBillId || l.billedInBillNo || l.status === 'completed')) {
+    if (lotBizId === normalizedOwnerId && (l.ownerBillId || l.billedInBillNo || String(l.status || '').toLowerCase() === 'completed')) {
       const lotNum = String(l.lotNo || l.lotNumber || '').trim();
-      if (lotNum) billedLotNumbers.add(lotNum);
+      if (lotNum) billedLotKeys.add(lotKeyFor(lotNum, Boolean(l.isRework)));
     }
   });
 
@@ -169,15 +198,15 @@ export default function OwnerLedgerModal({ ownerId, ownerName, payments, lots, o
     const pWid = normalizedBusinessOwnerId(p.businessOwnerId) || normalizedBusinessOwnerId(p.ownerWorkspaceId) || normalizedBusinessOwnerId(p.ownerWorkspace);
     const matchesWorkspace = pWid === normalizedOwnerId;
 
-    const isAutoBill =
-      (p.type === 'Paid' && String(p.note || '').trim().startsWith('Billable lot settled')) ||
-      (p.type === 'Paid' && Boolean(p.ownerBillId)) ||
-      (p.type === 'Paid' && String(p.note || '').includes('billed to owner'));
-
-    if (matchesWorkspace && isOwnerParty && isAutoBill && p.linkedLot) {
-      billedLotNumbers.add(String(p.linkedLot).trim());
+    if (matchesWorkspace && isOwnerParty && isAutoOwnerLotSettlement(p) && p.linkedLot) {
+      const cleanNo = String(p.linkedLot).replace(/\s*\(rework\)\s*/i, '').trim();
+      const payRework = /rework/i.test(p.linkedLot || '') || /rework/i.test(p.note || '');
+      if (cleanNo) billedLotKeys.add(lotKeyFor(cleanNo, payRework));
     }
   });
+
+  // Track ownerBillId -> Tally sort timestamp so lots inside a bill never sort AFTER that bill's Tally
+  const tallyTimestampByBillId = new Map();
 
   // Filter payments for this owner
   // Only payments where type === 'Received' or 'Paid' or 'Tally' and party === 'Owner' (or blank, or matching owner name)
@@ -194,10 +223,7 @@ export default function OwnerLedgerModal({ ownerId, ownerName, payments, lots, o
     const matchesWorkspace = pWid === normalizedOwnerId;
     
     // Ignore auto-generated payments for settled lots because we already iterate over lots separately.
-    const isAutoBill =
-      (p.type === 'Paid' && String(p.note || '').trim().startsWith('Billable lot settled')) ||
-      (p.type === 'Paid' && Boolean(p.ownerBillId)) ||
-      (p.type === 'Paid' && String(p.note || '').includes('billed to owner'));
+    const isAutoBill = isAutoOwnerLotSettlement(p);
     
     // Tally markers don't have amounts but we want to show them
     if (p.type === 'Tally' && (p.businessOwnerId === ownerId || matchesWorkspace)) {
@@ -210,13 +236,17 @@ export default function OwnerLedgerModal({ ownerId, ownerName, payments, lots, o
   ownerPayments.forEach((p) => {
     let when = parseDateValue(p.date) || parseDateValue(p.createdAt);
     if (when && String(p.date || '').length === 10) {
-      // Inject the actual creation time so it doesn't show 12:00 AM and sorts properly
       const created = parseDateValue(p.createdAt);
       if (created) {
-        when.setHours(created.getHours(), created.getMinutes(), created.getSeconds());
+        when.setHours(created.getHours(), created.getMinutes(), created.getSeconds(), created.getMilliseconds());
+      } else if (p.type === 'Tally') {
+        when.setHours(23, 59, 59, 0);
       }
     }
     const sortMs = when ? when.getTime() : 0;
+    if (p.type === 'Tally' && p.ownerBillId) {
+      tallyTimestampByBillId.set(String(p.ownerBillId), sortMs);
+    }
     const amt = Number(p.amount || 0);
     const isReceived = p.type === 'Received'; // Received from owner
     const isTally = p.type === 'Tally';
@@ -238,13 +268,17 @@ export default function OwnerLedgerModal({ ownerId, ownerName, payments, lots, o
     });
   });
 
-  // Filter lots for this owner (already billed / settled for timeline)
+  // Filter lots for this owner (already billed / settled for timeline — never pull unbilled 'received back' lots)
   const ownerLots = lots.filter((l) => {
     const lotBizId = normalizedBusinessOwnerId(l.businessOwnerId) || normalizedBusinessOwnerId(l.ownerWorkspaceId);
     const matchesWorkspace = lotBizId === normalizedOwnerId;
-    const lotNum = String(l.lotNo || l.lotNumber || '').trim();
+    if (!matchesWorkspace) return false;
+    const statusLower = String(l.status || '').toLowerCase().trim();
     const isBilledInBill = Boolean(l.ownerBillId || l.billedInBillNo);
-    return matchesWorkspace && (billedLotNumbers.has(lotNum) || isBilledInBill);
+    if (isBilledInBill || statusLower === 'completed') return true;
+    if (statusLower === 'received back') return false;
+    const lotNum = String(l.lotNo || l.lotNumber || '').trim();
+    return Boolean(lotNum && billedLotKeys.has(lotKeyFor(lotNum, Boolean(l.isRework))));
   });
 
   // Billable lots for this owner (status === 'received back' and ready to be billed)
@@ -256,15 +290,31 @@ export default function OwnerLedgerModal({ ownerId, ownerName, payments, lots, o
 
   ownerLots.forEach((l) => {
     const bill = getBusinessBillAmount(l) || Number(l.billAmount || 0);
-    const when = latestDateFrom(l, [
-      'updatedAt',
-      'createdAt',
-      'receivedBackDate',
-      'dispatchDate',
-      'allotDate',
-      'receivedDate',
-    ]);
-    const sortMs = when ? when.getTime() : 0;
+    const linkedBill = l.ownerBillId ? billsById.get(String(l.ownerBillId)) : null;
+    let when = null;
+    if (linkedBill?.date) {
+      when = parseDateValue(linkedBill.date);
+    }
+    if (!when) {
+      when = latestDateFrom(l, [
+        'completionApprovedAt',
+        'receivedBackDate',
+        'createdAt',
+        'dispatchDate',
+        'allotDate',
+        'receivedDate',
+        'updatedAt',
+      ]);
+    }
+    let sortMs = when ? when.getTime() : 0;
+    if (l.ownerBillId && tallyTimestampByBillId.has(String(l.ownerBillId))) {
+      const tallyMs = tallyTimestampByBillId.get(String(l.ownerBillId));
+      // Guarantee billed lots inside a bill always sort strictly BEFORE that bill's Tally marker
+      if (sortMs >= tallyMs) {
+        sortMs = tallyMs - 1000;
+        when = new Date(sortMs);
+      }
+    }
 
     raw.push({
       rowKey: `lot-${l.id || l._id}`,
@@ -282,10 +332,12 @@ export default function OwnerLedgerModal({ ownerId, ownerName, payments, lots, o
     });
   });
 
-  // Sort by date oldest first to calculate running balance
+  // Sort by date oldest first to calculate running balance (Tally always runs after same-timestamp rows)
   raw.sort((a, b) => {
     const d = (a.sortMs || 0) - (b.sortMs || 0);
     if (d !== 0) return d;
+    if (a.paymentType === 'Tally' && b.paymentType !== 'Tally') return 1;
+    if (b.paymentType === 'Tally' && a.paymentType !== 'Tally') return -1;
     return String(a.rowKey).localeCompare(String(b.rowKey));
   });
 
@@ -781,7 +833,34 @@ export default function OwnerLedgerModal({ ownerId, ownerName, payments, lots, o
         <OwnerBillModal
           ownerId={ownerId}
           ownerName={ownerName}
-          candidateLots={billableLotsForOwner}
+          candidateLots={
+            selectedBillToView
+              ? [
+                  ...(selectedBillToView.lots || []).map((bLot) => {
+                    const found = lots.find(
+                      (l) => String(l.id || l._id) === String(bLot.lotId || bLot._id || bLot.id)
+                    );
+                    return (
+                      found || {
+                        _id: bLot.lotId,
+                        id: bLot.lotId,
+                        lotNo: bLot.lotNo,
+                        lotNumber: bLot.lotNo,
+                        designNo: bLot.designNo,
+                        suitComponent: bLot.suitComponent || 'main',
+                        suitQuantity: bLot.quantity,
+                        rate: bLot.rate,
+                        billAmount: bLot.amount,
+                        status: 'completed',
+                        ownerBillId: selectedBillToView.id || selectedBillToView._id,
+                        billedInBillNo: selectedBillToView.billNo,
+                      }
+                    );
+                  }),
+                  ...billableLotsForOwner,
+                ]
+              : billableLotsForOwner
+          }
           candidatePayments={ownerPayments}
           existingBill={selectedBillToView}
           initialPreviousBalance={billsDefaults?.lastSabqaBaqaya != null ? Number(billsDefaults.lastSabqaBaqaya) : netBalance}
@@ -791,6 +870,14 @@ export default function OwnerLedgerModal({ ownerId, ownerName, payments, lots, o
           }}
           onSaved={(savedBill) => {
             const billedLots = savedBill?.lots || billableLotsForOwner;
+            if (selectedBillToView) {
+              revertLotsBilledLocally?.(
+                selectedBillToView.id || selectedBillToView._id,
+                selectedBillToView.billNo,
+                selectedBillToView.bookNo,
+                ownerId
+              );
+            }
             markLotsBilledLocally?.(billedLots, savedBill);
             onRefresh?.();
             fetchBills();
@@ -811,7 +898,7 @@ export default function OwnerLedgerModal({ ownerId, ownerName, payments, lots, o
             setShowBillModal(true);
           }}
           onBillDeleted={(b) => {
-            revertLotsBilledLocally?.(b?.id || b?._id, b?.billNo);
+            revertLotsBilledLocally?.(b?.id || b?._id, b?.billNo, b?.bookNo, ownerId);
             onRefresh?.();
             fetchBills();
           }}

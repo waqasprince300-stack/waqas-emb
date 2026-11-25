@@ -285,3 +285,109 @@ export function ConfirmDialog({ message, onConfirm, onCancel, confirming }) {
     </div>
   );
 }
+
+/** Smoothly scroll a paginated section back into view after page updates. */
+export function scrollToSectionTop(refOrEl, topOffset = 72) {
+  const el = refOrEl && typeof refOrEl === 'object' && 'current' in refOrEl ? refOrEl.current : refOrEl;
+  if (!el || typeof window === 'undefined') return;
+  const run = () => {
+    const rect = el.getBoundingClientRect();
+    const isMobile = window.innerWidth <= 768;
+    // Keep desktop steady when the section top is already visible so headers don't jump per page height.
+    if (!isMobile && rect.top >= 16) return;
+    const effectiveOffset = isMobile ? topOffset : 20;
+    const targetY = Math.max(0, window.scrollY + rect.top - effectiveOffset);
+    window.scrollTo({ top: targetY, behavior: 'smooth' });
+  };
+  if (typeof window.requestAnimationFrame === 'function') {
+    window.requestAnimationFrame(() => window.requestAnimationFrame(run));
+  } else {
+    run();
+  }
+}
+
+/** Shared Prev/Next pagination bar that scrolls back to `scrollTargetRef` on page changes. */
+export function PaginationFooter({
+  currentPage,
+  totalPages,
+  totalItems,
+  pageStart,
+  pageSize,
+  onPageChange,
+  scrollTargetRef,
+  compact = false,
+  prevLabel = 'Prev',
+  nextLabel = 'Next',
+}) {
+  if (!totalItems || totalItems <= 0) return null;
+
+  const goToPage = (nextPage) => {
+    if (nextPage === currentPage) return;
+    onPageChange(nextPage);
+    scrollToSectionTop(scrollTargetRef);
+  };
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        gap: compact ? 10 : 12,
+        marginTop: 12,
+        flexWrap: 'wrap',
+      }}
+    >
+      <span style={{ fontSize: compact ? 12 : 13, color: 'var(--text-secondary)' }}>
+        Showing {pageStart + 1}–{Math.min(pageStart + pageSize, totalItems)} of {totalItems}
+      </span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <button
+          type="button"
+          className={compact ? 'btn btn-sm' : 'btn btn-ghost btn-sm'}
+          disabled={currentPage <= 1}
+          onClick={() => goToPage(Math.max(1, currentPage - 1))}
+          style={
+            compact
+              ? {
+                  background: 'var(--card-bg)',
+                  border: '1px solid var(--border)',
+                  color: 'var(--text-primary)',
+                  opacity: currentPage <= 1 ? 0.5 : 1,
+                }
+              : undefined
+          }
+        >
+          {prevLabel}
+        </button>
+        <span
+          style={{
+            fontSize: compact ? 12.5 : 13,
+            fontWeight: compact ? 600 : undefined,
+            color: compact ? 'var(--text-primary)' : 'var(--text-secondary)',
+          }}
+        >
+          {compact ? `${currentPage} / ${totalPages}` : `Page ${currentPage} of ${totalPages}`}
+        </span>
+        <button
+          type="button"
+          className={compact ? 'btn btn-sm' : 'btn btn-ghost btn-sm'}
+          disabled={currentPage >= totalPages}
+          onClick={() => goToPage(Math.min(totalPages, currentPage + 1))}
+          style={
+            compact
+              ? {
+                  background: 'var(--card-bg)',
+                  border: '1px solid var(--border)',
+                  color: 'var(--text-primary)',
+                  opacity: currentPage >= totalPages ? 0.5 : 1,
+                }
+              : undefined
+          }
+        >
+          {nextLabel}
+        </button>
+      </div>
+    </div>
+  );
+}

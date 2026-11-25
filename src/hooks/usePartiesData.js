@@ -9,7 +9,12 @@ export function usePartiesData() {
 
   const addParty = useCallback(async (p) => {
     const created = normalizeParty(await apiService.createParty(p));
-    setParties((arr) => [...arr, created]);
+    const cid = String(created.id);
+    setParties((arr) =>
+      arr.some((x) => String(x.id) === cid)
+        ? arr.map((x) => (String(x.id) === cid ? created : x))
+        : [...arr, created]
+    );
     return created;
   }, []);
 

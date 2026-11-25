@@ -22,6 +22,11 @@ function fmtRs(n) {
   return `Rs ${Math.abs(v).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
 }
 
+function fmtSignedRs(n) {
+  const v = Number(n) || 0;
+  return `${v < 0 ? '-' : ''}Rs ${Math.abs(v).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+}
+
 function fmtDt(iso) {
   return formatDisplayDateTime(iso);
 }
@@ -191,7 +196,7 @@ export function buildContactLedgerPdf(contact, entries) {
       desc,
       e.type === 'given' ? fmtRs(n) : '—',
       e.type === 'received' ? fmtRs(n) : '—',
-      fmtRs(bal),
+      fmtSignedRs(bal),
     ]);
   }
   if (body.length === 0) {

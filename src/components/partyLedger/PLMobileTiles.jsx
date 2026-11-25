@@ -28,6 +28,7 @@ export default function PLMobileTiles({
   getPartyAllotDate,
   showWorkspaceColForLot,
   workspaceNameForLot,
+  highlightLotId,
   // Action callbacks from parent
   openEdit,
   handleRowStatusChange,
@@ -51,7 +52,16 @@ export default function PLMobileTiles({
           const displayComplete = getDisplayCompleteDate(l, pe);
 
           return (
-            <div key={`pl-tile-${l.id}`} className="lot-tile-card modern-lot-card stagger-item">
+            <div
+              key={`pl-tile-${l.id}`}
+              data-pl-lot-id={l.id}
+              className="lot-tile-card modern-lot-card stagger-item"
+              style={
+                String(highlightLotId) === String(l.id)
+                  ? { background: 'var(--warning-bg, #fef3c7)', outline: '2px solid var(--warning, #f59e0b)' }
+                  : undefined
+              }
+            >
               <div className="lot-tile-header">
                 <div>
                   <div className="lot-tile-number">Lot #{l.lotNo || l.lotNumber}</div>
@@ -81,6 +91,12 @@ export default function PLMobileTiles({
                   <div>Allot Date: {getPartyAllotDate(l) ? formatDisplayDate(getPartyAllotDate(l)) : '\u2014'}</div>
                   <div>Complete Date: {displayComplete ? formatDisplayDate(displayComplete) : '\u2014'}</div>
                   {l.description && <div>Note: {l.description}</div>}
+                  {pe.notes && <div>Party Note: {pe.notes}</div>}
+                  {l.rejectionNote && displayStatus === 'Rejected' && (
+                    <div style={{ color: 'var(--danger, #dc2626)', fontWeight: 600 }}>
+                      Rejected: {l.rejectionNote}
+                    </div>
+                  )}
                 </div>
 
                 <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 4 }}>

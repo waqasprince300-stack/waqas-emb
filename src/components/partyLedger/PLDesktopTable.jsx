@@ -50,7 +50,24 @@ export default function PLDesktopTable({
   return (
     <div className="table-wrapper desktop-only-table">
       <div className="table-scroll">
-        <table className="ledger-table">
+        <table className="ledger-table fixed-grid-table pl-lots-table">
+          <colgroup>
+            <col style={{ width: 88 }} />
+            <col style={{ width: 74 }} />
+            <col style={{ width: 132 }} />
+            <col style={{ width: 78 }} />
+            <col style={{ width: 56 }} />
+            <col style={{ width: 60 }} />
+            <col style={{ width: 88 }} />
+            <col style={{ width: 94 }} />
+            {showPartyNameCol ? <col style={{ width: 118 }} /> : null}
+            {showWorkspaceCol ? <col style={{ width: 118 }} /> : null}
+            <col style={{ width: 158 }} />
+            <col style={{ width: 96 }} />
+            <col style={{ width: 152 }} />
+            <col style={{ width: 150 }} />
+            <col style={{ width: 118 }} />
+          </colgroup>
           <thead>
             <tr>
               <th>Lot No</th>
@@ -63,7 +80,7 @@ export default function PLDesktopTable({
               <th>Complete Date</th>
               {showPartyNameCol ? <th>Party Name</th> : null}
               {showWorkspaceCol && (
-                <th style={{ minWidth: 120 }} title="Business workspace">
+                <th title="Business workspace">
                   {isParty ? 'Business' : 'Workspace'}
                 </th>
               )}
@@ -93,6 +110,7 @@ export default function PLDesktopTable({
                   <tr
                     key={l.id}
                     id={`pl-lot-row-${l.id}`}
+                    data-pl-lot-id={l.id}
                     className="stagger-item"
                     style={
                       String(highlightLotId) === String(l.id)
@@ -104,7 +122,11 @@ export default function PLDesktopTable({
                       {l.lotNo || l.lotNumber}
                     </td>
                     <td style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{l.designNo}</td>
-                    <td className="desc-col">{l.description}</td>
+                    <td className="desc-col">
+                      <div className="table-cell-clamp-2" title={l.description || ''}>
+                        {l.description}
+                      </div>
+                    </td>
                     <td>
                       <span
                         style={{
@@ -136,7 +158,11 @@ export default function PLDesktopTable({
                       )}
                     </td>
                     {showPartyNameCol ? (
-                      <td>{getPartyNameLocal(l.partyId, l.partyName)}</td>
+                      <td>
+                        <span className="table-cell-ellipsis" title={getPartyNameLocal(l.partyId, l.partyName)}>
+                          {getPartyNameLocal(l.partyId, l.partyName)}
+                        </span>
+                      </td>
                     ) : null}
                     {showWorkspaceCol && (
                       <td
@@ -146,7 +172,9 @@ export default function PLDesktopTable({
                           color: 'var(--text-secondary)',
                         }}
                       >
-                        {showWorkspaceColForLot(l) ? workspaceNameForLot(l) : '\u2014'}
+                        <span className="table-cell-ellipsis" title={showWorkspaceColForLot(l) ? workspaceNameForLot(l) : ''}>
+                          {showWorkspaceColForLot(l) ? workspaceNameForLot(l) : '\u2014'}
+                        </span>
                       </td>
                     )}
                     <td>
@@ -199,8 +227,8 @@ export default function PLDesktopTable({
                         <select
                           className="form-select"
                           style={{
-                            width: 150,
-                            minWidth: 150,
+                            width: '100%',
+                            minWidth: 0,
                             fontSize: 12,
                             padding: '5px 8px',
                           }}
@@ -257,9 +285,8 @@ export default function PLDesktopTable({
                         style={{
                           display: 'flex',
                           flexDirection: 'column',
-                          gap: 8,
-                          minWidth: 132,
-                          maxWidth: 200,
+                          gap: 6,
+                          width: '100%',
                         }}
                       >
                         <div
@@ -350,7 +377,11 @@ export default function PLDesktopTable({
                       </div>
                     </td>
                     <td>
-                      {pe.notes}
+                      {pe.notes ? (
+                        <div className="table-cell-clamp-2" title={pe.notes}>
+                          {pe.notes}
+                        </div>
+                      ) : null}
                       {displayStatus === 'Rejected' && l.rejectionNote ? (
                         <div
                           style={{

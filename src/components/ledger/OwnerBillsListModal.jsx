@@ -137,11 +137,11 @@ export default function OwnerBillsListModal({
           </div>
         ) : (
           <>
-            {/* Desktop / Tablet: Fixed layout table with ZERO horizontal scroll */}
-            <div className="bills-history-desktop-table" style={{ border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
-              <table className="table" style={{ width: '100%', tableLayout: 'fixed', fontSize: 12, marginBottom: 0 }}>
+            {/* Desktop / Tablet: Horizontally scrollable inside bordered wrapper on narrow tablets */}
+            <div className="bills-history-desktop-table" style={{ border: '1px solid var(--border)', borderRadius: 10, overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+              <table className="table" style={{ width: '100%', minWidth: 720, tableLayout: 'auto', fontSize: 12, marginBottom: 0 }}>
                 <thead>
-                  <tr style={{ background: 'var(--table-header-bg, #f8fafc)' }}>
+                  <tr style={{ background: 'var(--primary-bg, #f8fafc)' }}>
                     <th style={{ width: '14%', padding: '10px 8px' }}>Bill #</th>
                     <th style={{ width: '12%', padding: '10px 8px' }}>Tareekh</th>
                     <th style={{ width: '8%', padding: '10px 8px' }}>Lots</th>

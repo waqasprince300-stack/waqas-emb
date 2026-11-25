@@ -93,7 +93,10 @@ export default function PLReceiptPreviewModal({
             className="btn btn-ghost"
             style={{ color: 'var(--danger, #dc2626)', fontWeight: 600 }}
             onClick={() => {
-              const lotToEdit = ledgerLots.find((l) => (l.lotNo || l.lotNumber) === receiptPreview.title || l.id === receiptPreview.lotId);
+              const lotToEdit =
+                (receiptPreview.lotId &&
+                  ledgerLots.find((l) => String(l.id) === String(receiptPreview.lotId))) ||
+                ledgerLots.find((l) => (l.lotNo || l.lotNumber) === receiptPreview.title);
               setReceiptPreview(null);
               if (lotToEdit) {
                 openEdit(lotToEdit, getDisplayStatus(lotToEdit));

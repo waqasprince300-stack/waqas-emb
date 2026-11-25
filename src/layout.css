@@ -9,6 +9,9 @@
   width: 230px;
   min-height: 100vh;
   min-height: 100dvh;
+  max-height: 100dvh;
+  overflow-y: auto;
+  overflow-x: hidden;
   background: var(--sidebar-bg, #1e1e2e);
   display: flex;
   flex-direction: column;

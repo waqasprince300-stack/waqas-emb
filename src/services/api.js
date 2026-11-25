@@ -39,10 +39,11 @@ function metaPartySkipTenant(filtersOrOpts = {}) {
 function isPublicAuthEndpoint(endpoint) {
   const path = String(endpoint || '').split('?')[0];
   return (
-    /^\/login$/i.test(path) ||
-    /^\/signup$/i.test(path) ||
-    /^\/forgot-password$/i.test(path) ||
-    /^\/reset-password\//i.test(path)
+    /^\/(auth\/)?login(\/|$)/i.test(path) ||
+    /^\/(auth\/)?signup$/i.test(path) ||
+    /^\/(auth\/)?forgot-password$/i.test(path) ||
+    /^\/(auth\/)?reset-password\//i.test(path) ||
+    /^\/(auth\/)?password-reset\//i.test(path)
   );
 }
 

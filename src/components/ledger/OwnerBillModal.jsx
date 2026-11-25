@@ -21,6 +21,14 @@ import { formatLakhCrore } from '../../utils/numberToWords';
 const STANDARD_BILL_ROWS = 15;
 const STANDARD_BILL_LOTS_LIMIT = 15;
 
+const localTodayISO = () => {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+};
+
 const formatShortWasooliNote = (note) => {
   if (!note) return '';
   const s = String(note).trim();
@@ -86,18 +94,18 @@ const toStandardDateIso = (dateVal) => {
 
 const getPaymentSortScore = (p, originalIdx = 0) => {
   if (!p) return 0;
-  // 1. Check MongoDB ObjectId (timestamp is encoded in first 8 hex characters)
-  const idStr = String(p.paymentId || p.id || p._id || '').trim();
-  if (/^[0-9a-fA-F]{24}$/.test(idStr)) {
-    return parseInt(idStr.slice(0, 8), 16);
-  }
-  // 2. Check createdAt or timestamp
+  // 1. Check createdAt timestamp (ms)
   if (p.createdAt) {
     const t = new Date(p.createdAt).getTime();
-    if (!isNaN(t)) return t;
+    if (!Number.isNaN(t) && t > 0) return t;
   }
-  // 3. Check numeric installment in note, e.g. "1st", "2nd", "14th"
-  const noteMatch = String(p.note || '').match(/(\d+)(?:st|nd|rd|th)?/i);
+  // 2. Check MongoDB ObjectId (first 8 hex chars encode Unix seconds → convert to ms for consistent scale)
+  const idStr = String(p.paymentId || p.id || p._id || '').trim();
+  if (/^[0-9a-fA-F]{24}$/.test(idStr)) {
+    return parseInt(idStr.slice(0, 8), 16) * 1000;
+  }
+  // 3. Fallback ordinal installment at start of note (e.g. "1st", "2nd", "14th")
+  const noteMatch = String(p.note || '').trim().match(/^(\d+)(?:st|nd|rd|th)?\b/i);
   if (noteMatch) {
     return parseInt(noteMatch[1], 10);
   }
@@ -153,7 +161,7 @@ export default function OwnerBillModal({
   const [bookNo, setBookNo] = useState(existingBill?.bookNo || 1);
   const [billNo, setBillNo] = useState(existingBill?.billNo || 1);
   const [billDate, setBillDate] = useState(
-    existingBill?.date || new Date().toISOString().slice(0, 10)
+    existingBill?.date || localTodayISO()
   );
 
   // 1. Lots in this Bill (Initialized immediately from existingBill or candidateLots — 0ms wait!)
@@ -172,9 +180,15 @@ export default function OwnerBillModal({
       }));
     }
     const currentCandidateLots = candidateLots || [];
-    const unbilledLots = currentCandidateLots.filter(
-      (l) => (l.status === 'received back' || !l.status) && !l.ownerBillId && !l.billedInBillNo
-    );
+    const unbilledLots = currentCandidateLots.filter((l) => {
+      if (!((l.status === 'received back' || !l.status) && !l.ownerBillId && !l.billedInBillNo)) {
+        return false;
+      }
+      // Exclude Rs 0 combined dupatta lots from auto-prefill so they don't consume 15-lot slots
+      const amtVal = Number(l.businessBillAmount ?? l.billAmount ?? 0);
+      const isCombDup = l.suitComponent === 'dupatta' && (l.ownerBillingChoice === 'combined' || amtVal === 0);
+      return !isCombDup;
+    });
     return unbilledLots.slice(0, STANDARD_BILL_LOTS_LIMIT).map((l) => {
       const qty = Number(l.suitQuantity || l.pieces || l.quantity || 0);
       const amt = Number(l.businessBillAmount || l.billAmount || 0);
@@ -207,12 +221,20 @@ export default function OwnerBillModal({
     existingBill?.unpaidPreviousBills?.[0]?.amount || 0
   );
 
-  // 3. Sabqa Baqaya (Previous Balance brought forward)
-  const [sabqaBaqaya, setSabqaBaqaya] = useState(
-    existingBill?.sabqaBaqaya != null
-      ? Number(existingBill.sabqaBaqaya)
-      : Number(initialPreviousBalance || 0)
-  );
+  // 3. Sabqa Baqaya (Previous Balance brought forward — supports negative Advance Surplus via string input)
+  const [sabqaInput, setSabqaInput] = useState(() => {
+    const initial =
+      existingBill?.sabqaBaqaya != null
+        ? Number(existingBill.sabqaBaqaya)
+        : Number(initialPreviousBalance || 0);
+    return Number.isFinite(initial) ? String(initial) : '0';
+  });
+  const sabqaBaqaya = useMemo(() => {
+    const s = String(sabqaInput || '').trim();
+    if (!s || s === '-') return 0;
+    const n = Number(s);
+    return Number.isFinite(n) ? n : 0;
+  }, [sabqaInput]);
   const [lastBillInfo, setLastBillInfo] = useState('');
 
   // 4. Multiple Online / Cash Payments Received (Wasooli)
@@ -220,7 +242,7 @@ export default function OwnerBillModal({
     if (existingBill?.paymentsReceived && existingBill.paymentsReceived.length > 0) {
       return existingBill.paymentsReceived.map((p) => ({
         paymentId: String(p.paymentId || p.id || p._id || ''),
-        date: p.date ? String(p.date).slice(0, 10) : new Date().toISOString().slice(0, 10),
+        date: p.date ? String(p.date).slice(0, 10) : localTodayISO(),
         amount: Number(p.amount || 0),
         note: String(p.note || 'Online / Cash received'),
       }));
@@ -241,10 +263,10 @@ export default function OwnerBillModal({
   const candidateLotsRef = useRef(candidateLots);
   candidateLotsRef.current = candidateLots;
   const defaultsLoadedRef = useRef(false);
+  const dismissedRolloverRef = useRef(false);
 
-  // Background Defaults Sync (Non-blocking: Modal opens immediately!)
+  // Background Defaults & Settled Payments Sync (Runs cleanly for both new and edit mode)
   useEffect(() => {
-    if (isEditing) return;
     if (defaultsLoadedRef.current) return;
 
     let isMounted = true;
@@ -255,22 +277,31 @@ export default function OwnerBillModal({
         defaultsLoadedRef.current = true;
 
         const next = res?.nextDefaults || {};
+        // Save settledPaymentIds so picker marks payments already used in OTHER bills
+        const currentBillPayIds = new Set(
+          (existingBill?.paymentsReceived || [])
+            .map((p) => String(p.paymentId || p.id || p._id || '').trim())
+            .filter(Boolean)
+        );
+        const billedIds = new Set(
+          (next?.billedPaymentIds || []).filter((id) => !currentBillPayIds.has(String(id)))
+        );
+        setSettledPaymentIds(billedIds);
+
+        if (isEditing) return;
+
         if (next.nextBookNo) setBookNo(next.nextBookNo);
         if (next.nextBillNo) setBillNo(next.nextBillNo);
         if (res?.bills && res.bills.length > 0) {
           if (next.lastSabqaBaqaya !== undefined) {
-            setSabqaBaqaya(Number(next.lastSabqaBaqaya || 0));
+            setSabqaInput(String(Number(next.lastSabqaBaqaya || 0)));
           }
         } else if (initialPreviousBalance > 0) {
-          setSabqaBaqaya(initialPreviousBalance);
+          setSabqaInput(String(initialPreviousBalance));
         }
         if (next.lastBillDate) {
           setLastBillInfo(`Pichla bill ${formatDisplayDate(next.lastBillDate)} ko finalize hua tha.`);
         }
-
-        // Save settledPaymentIds so picker can mark them as settled
-        const billedIds = new Set(next?.billedPaymentIds || []);
-        setSettledPaymentIds(billedIds);
       } catch (err) {
         console.warn('Could not load bill defaults in background:', err.message);
       }
@@ -280,7 +311,7 @@ export default function OwnerBillModal({
     return () => {
       isMounted = false;
     };
-  }, [isEditing, ownerId, initialPreviousBalance]);
+  }, [isEditing, existingBill, ownerId, initialPreviousBalance]);
 
   // Unbilled payments available for this owner (Online & Cash)
   const unbilledAvailablePayments = useMemo(() => {
@@ -325,10 +356,15 @@ export default function OwnerBillModal({
     [kulKaamTotal, sabqaBaqaya]
   );
 
+  const validPayments = useMemo(
+    () => paymentsList.filter((p) => p && Number(p.amount || 0) > 0),
+    [paymentsList]
+  );
+
   // Total Wasooli from multiple payments
   const totalWasooli = useMemo(
-    () => paymentsList.reduce((sum, p) => sum + Number(p.amount || 0), 0),
-    [paymentsList]
+    () => validPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0),
+    [validPayments]
   );
 
   // Group payments by date (format: DD-MM-YY, e.g. 20-11-26), sorted chronologically (earliest date on top, earliest payments first)
@@ -439,11 +475,18 @@ export default function OwnerBillModal({
     setLots((arr) => arr.filter((_, idx) => idx !== index));
   };
 
-  // Add lots from Inventory picker (capped at standard 15 lots)
+  // Add lots from Inventory picker (capped at standard 15 lots; preserves manual edits on already-picked lots)
   const handleAddLotsFromInventory = (selectedCandidateLots) => {
     const existingManualLots = lots.filter((l) => !l.lotId);
+    const existingById = new Map(
+      lots.filter((l) => l.lotId).map((l) => [String(l.lotId), l])
+    );
     const availableSlotsForPicked = Math.max(0, STANDARD_BILL_LOTS_LIMIT - existingManualLots.length);
     const formatted = selectedCandidateLots.slice(0, availableSlotsForPicked).map((l) => {
+      const idKey = String(l.id || l._id || '');
+      if (idKey && existingById.has(idKey)) {
+        return existingById.get(idKey);
+      }
       const qty = Number(l.suitQuantity || l.pieces || l.quantity || 0);
       const amt = Number(l.businessBillAmount || l.billAmount || 0);
       let rate = Number(l.ownerRate || l.rate || 0);
@@ -454,7 +497,7 @@ export default function OwnerBillModal({
       const finalAmt = amt || (qty && rate ? Math.round(qty * rate) : 0);
 
       return {
-        lotId: String(l.id || l._id || ''),
+        lotId: idKey,
         lotNo: String(l.lotNo || l.lotNumber || ''),
         designNo: String(l.designNo || ''),
         suitComponent: String(l.suitComponent || 'main'),
@@ -492,14 +535,23 @@ export default function OwnerBillModal({
     setPaymentsList((arr) => arr.filter((_, idx) => idx !== index));
   };
 
-  // Add multiple payments from Payment Picker Modal
+  // Add multiple payments from Payment Picker Modal (preserves edits made to already-included payments)
   const handleAddPaymentsFromPicker = (selectedPayments) => {
-    const formatted = selectedPayments.map((p) => ({
-      paymentId: String(p.id || p._id || ''),
-      date: p.date ? String(p.date).slice(0, 10) : new Date().toISOString().slice(0, 10),
-      amount: Number(p.amount || 0),
-      note: String(p.note || (p.paymentMethod ? `${p.paymentMethod} transfer` : 'Online transfer')).trim(),
-    }));
+    const existingById = new Map(
+      paymentsList.filter((p) => p.paymentId).map((p) => [String(p.paymentId), p])
+    );
+    const formatted = selectedPayments.map((p) => {
+      const pid = String(p.id || p._id || '');
+      if (pid && existingById.has(pid)) {
+        return existingById.get(pid);
+      }
+      return {
+        paymentId: pid,
+        date: p.date ? String(p.date).slice(0, 10) : localTodayISO(),
+        amount: Number(p.amount || 0),
+        note: String(p.note || (p.paymentMethod ? `${p.paymentMethod} transfer` : 'Online transfer')).trim(),
+      };
+    });
     const existingManuals = paymentsList.filter((p) => !p.paymentId);
     setPaymentsList([...formatted, ...existingManuals]);
     setShowPaymentPicker(false);
@@ -509,7 +561,12 @@ export default function OwnerBillModal({
   const handleBillNoChange = (val) => {
     const num = Number(val || 0);
     setBillNo(num);
-    if (num > 100) {
+    if (num <= 100) {
+      dismissedRolloverRef.current = false;
+      return;
+    }
+    if (num > 100 && !dismissedRolloverRef.current) {
+      dismissedRolloverRef.current = true;
       Swal.fire({
         title: 'Bill #100 Mukammal!',
         text: `1 bill book mein 100 bills hote hain. Kya aap Book ${Number(bookNo) + 1} shuru karke Bill #1 banana chahte hain?`,
@@ -519,6 +576,7 @@ export default function OwnerBillModal({
         cancelButtonText: 'Nahi, yahi serial chalne dein',
       }).then((res) => {
         if (res.isConfirmed) {
+          dismissedRolloverRef.current = false;
           setBookNo((b) => Number(b) + 1);
           setBillNo(1);
         }
@@ -602,15 +660,20 @@ export default function OwnerBillModal({
         savedResult = await apiService.createOwnerBill(payload, ownerId);
       }
 
-      const remainingCount = Math.max(0, candidateLots.length - lots.length);
+      const billedCandidateLotsCount = validLots.filter((l) => Boolean(l.lotId)).length;
+      const remainingCount = Math.max(0, billableCandidateCount - billedCandidateLotsCount);
       Swal.fire({
         toast: true,
         position: 'top-end',
         icon: 'success',
         title: `Bill #${billNo} kamiyabi se save ho gaya!`,
-        text: remainingCount > 0 && !isEditing
-          ? `${lots.length} lots settle ho gayi hain. Baqi ${remainingCount} lots ka agla bill banayein.`
-          : `${lots.length} lots completed status mein shift ho gayi hain.`,
+        text: isEditing
+          ? `${validLots.length} lots aur hisab update ho gaya hai.`
+          : remainingCount > 0
+            ? `${billedCandidateLotsCount} lots settle ho gayi hain. Baqi ${remainingCount} lots ka agla bill banayein.`
+            : validLots.length > 0
+              ? `${validLots.length} lots completed status mein shift ho gayi hain.`
+              : 'Hisab aur wasooli record save ho gayi hai.',
         showConfirmButton: false,
         timer: 3200,
       });
@@ -660,7 +723,6 @@ export default function OwnerBillModal({
     }
     text += `*Gross Total:* Rs ${grossTotal.toLocaleString()}\n\n`;
 
-    const validPayments = paymentsList.filter((p) => Number(p.amount || 0) > 0);
     if (validPayments.length > 0) {
       text += `*− Payments Received:*\n`;
       groupedPaymentsByDate.forEach(([dateKey, items]) => {
@@ -680,6 +742,10 @@ export default function OwnerBillModal({
 
     if (totalKatoti > 0) {
       text += `*− Deductions (${katotiTitle}):* −Rs ${totalKatoti.toLocaleString()}\n`;
+    }
+
+    if (notes && String(notes).trim()) {
+      text += `*📝 Note:* ${String(notes).trim()}\n`;
     }
 
     text += `\n=============================\n`;
@@ -740,7 +806,9 @@ export default function OwnerBillModal({
     const printEl = printAreaRef.current;
     if (printEl) {
       try {
+        document.querySelectorAll('iframe[data-owner-bill-print="1"]').forEach((el) => el.remove());
         const iframe = document.createElement('iframe');
+        iframe.setAttribute('data-owner-bill-print', '1');
         iframe.style.position = 'fixed';
         iframe.style.right = '0';
         iframe.style.bottom = '0';
@@ -786,8 +854,9 @@ export default function OwnerBillModal({
                   align-items: stretch !important;
                   width: 100% !important;
                   max-width: 100% !important;
-                  height: ${isLandscape ? '192mm' : '100%'} !important;
-                  max-height: ${isLandscape ? '194mm' : 'none'} !important;
+                  height: ${isLandscape ? '194mm' : '100%'} !important;
+                  max-height: ${isLandscape ? '196mm' : 'none'} !important;
+                  overflow: ${isLandscape ? 'hidden' : 'visible'} !important;
                   margin: 0 !important;
                   padding: 0 !important;
                   box-sizing: border-box !important;
@@ -819,7 +888,7 @@ export default function OwnerBillModal({
                   color: #000000 !important;
                   width: 100% !important;
                   height: 100% !important;
-                  padding: 8px 10px !important;
+                  padding: 7px 9px !important;
                 }
                 .official-bill-top-section {
                   display: flex !important;
@@ -839,7 +908,8 @@ export default function OwnerBillModal({
                 }
                 .official-bill-table tbody tr,
                 .official-bill-table tbody tr td {
-                  height: calc((100% - 22px) / 15) !important;
+                  padding: 2px 5px !important;
+                  line-height: 1.15 !important;
                   vertical-align: middle !important;
                 }
                 .official-bill-bottom-section {
@@ -903,14 +973,17 @@ export default function OwnerBillModal({
         `);
         doc.close();
 
+        const removeIframe = () => {
+          if (document.body.contains(iframe)) {
+            document.body.removeChild(iframe);
+          }
+        };
+
         setTimeout(() => {
+          iframe.contentWindow.onafterprint = removeIframe;
           iframe.contentWindow.focus();
           iframe.contentWindow.print();
-          setTimeout(() => {
-            if (document.body.contains(iframe)) {
-              document.body.removeChild(iframe);
-            }
-          }, 2000);
+          setTimeout(removeIframe, 60000);
         }, 250);
         return;
       } catch (err) {
@@ -934,6 +1007,17 @@ export default function OwnerBillModal({
       executePrint();
     }
   };
+
+  const validSlipLots = useMemo(
+    () =>
+      lots.filter(
+        (l) =>
+          (l.lotNo && String(l.lotNo).trim()) ||
+          Number(l.amount || 0) > 0 ||
+          Number(l.quantity || 0) > 0
+      ),
+    [lots]
+  );
 
   const renderBillSlip = (copyBadge = 'PARTY COPY') => (
     <div
@@ -970,7 +1054,7 @@ export default function OwnerBillModal({
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11, fontWeight: 800, color: '#000000', marginBottom: 2 }}>
             <span style={{ fontSize: 12.5, fontWeight: 900, letterSpacing: '0.02em', textTransform: 'uppercase' }}>Mian Waqas</span>
             <span
-              className="bill-badge-premium"
+              className={`bill-badge-premium ${copyBadge === 'ORIGINAL' ? 'bill-badge-premium--original' : 'bill-badge-premium--factory'}`}
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -1075,7 +1159,7 @@ export default function OwnerBillModal({
             </tr>
           </thead>
           <tbody style={{ height: '100%' }}>
-            {lots.length === 0 ? (
+            {validSlipLots.length === 0 ? (
               <>
                 <tr style={{ height: 'calc((100% - 22px) / 15)', minHeight: 24, background: '#ffffff' }}>
                   <td style={{ padding: '3px 2px', textAlign: 'center', border: '1px solid #cbd5e1', color: '#94a3b8', fontWeight: 600, verticalAlign: 'middle' }}>1</td>
@@ -1096,7 +1180,7 @@ export default function OwnerBillModal({
               </>
             ) : (
               <>
-                {lots.map((l, idx) => (
+                {validSlipLots.map((l, idx) => (
                   <tr key={idx} style={{ height: 'calc((100% - 22px) / 15)', minHeight: 24, background: idx % 2 === 0 ? '#ffffff' : '#f8fafc' }}>
                     <td style={{ padding: '3px 2px', textAlign: 'center', border: '1px solid #cbd5e1', color: '#000000', fontWeight: 700, fontSize: 10, verticalAlign: 'middle' }}>
                       {idx + 1}
@@ -1119,9 +1203,9 @@ export default function OwnerBillModal({
                     </td>
                   </tr>
                 ))}
-                {Array.from({ length: Math.max(0, STANDARD_BILL_ROWS - lots.length) }).map((_, emptyIdx) => {
-                  const rowNum = lots.length + emptyIdx + 1;
-                  const isEven = (lots.length + emptyIdx) % 2 !== 0;
+                {Array.from({ length: Math.max(0, STANDARD_BILL_ROWS - validSlipLots.length) }).map((_, emptyIdx) => {
+                  const rowNum = validSlipLots.length + emptyIdx + 1;
+                  const isEven = (validSlipLots.length + emptyIdx) % 2 !== 0;
                   return (
                     <tr key={`empty-${emptyIdx}`} style={{ height: 'calc((100% - 22px) / 15)', minHeight: 24, background: isEven ? '#f8fafc' : '#ffffff' }}>
                       <td style={{ padding: '3px 2px', textAlign: 'center', border: '1px solid #cbd5e1', color: '#94a3b8', fontWeight: 600, fontSize: 9.5, verticalAlign: 'middle' }}>
@@ -1178,7 +1262,7 @@ export default function OwnerBillModal({
             </div>
           )}
 
-          {/* Row 4: Gross Total */}
+          {/* Row 4: Gross Total (or Net Advance when negative with no payments/katoti) */}
           <div
             style={{
               display: 'flex',
@@ -1193,19 +1277,27 @@ export default function OwnerBillModal({
               color: '#000000',
             }}
           >
-            <span>= Gross Total:</span>
             <span>
-              Rs {grossTotal.toLocaleString()}
-              {formatLakhCrore(grossTotal) && (
-                <span style={{ fontSize: 10, color: '#475569', fontStyle: 'italic', fontWeight: 700, marginLeft: 6 }}>
-                  ({formatLakhCrore(grossTotal)})
+              {grossTotal < 0 && validPayments.length === 0 && totalKatoti === 0
+                ? '= Net Advance:'
+                : '= Gross Total:'}
+            </span>
+            <span style={{ display: 'inline-flex', alignItems: 'baseline', justifyContent: 'flex-end', gap: 6, flexWrap: 'wrap' }}>
+              {formatLakhCrore(Math.abs(grossTotal)) && (
+                <span style={{ fontSize: 10, color: '#475569', fontStyle: 'italic', fontWeight: 700 }}>
+                  ({formatLakhCrore(Math.abs(grossTotal))}
+                  {grossTotal < 0 ? ' Advance' : ''})
                 </span>
               )}
+              <span>
+                {grossTotal < 0 && (validPayments.length > 0 || totalKatoti > 0) ? '−' : ''}Rs{' '}
+                {Math.abs(grossTotal).toLocaleString()}
+              </span>
             </span>
           </div>
 
           {/* Row 5: Payments Received (if any) */}
-          {paymentsList.length > 0 && (
+          {validPayments.length > 0 && (
             <div
               style={{
                 padding: '3px 0',
@@ -1215,7 +1307,7 @@ export default function OwnerBillModal({
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontSize: 11, fontWeight: 700, color: '#000000' }}>
-                  − Payments Received ({paymentsList.length === 1 ? formatShortDateYY(paymentsList[0].date) : `${paymentsList.length} Payments`}):
+                  − Payments Received ({validPayments.length === 1 ? formatShortDateYY(validPayments[0].date) : `${validPayments.length} Payments`}):
                 </span>
                 <span style={{ fontSize: 11.5, fontWeight: 800, color: '#000000' }}>
                   −Rs {totalWasooli.toLocaleString()}
@@ -1260,7 +1352,7 @@ export default function OwnerBillModal({
           )}
 
           {/* Row 7: Net Total (shown cleanly when deductions or wasooli exist) */}
-          {(paymentsList.length > 0 || totalKatoti > 0) && (
+          {(validPayments.length > 0 || totalKatoti > 0) && (
             <div
               style={{
                 display: 'flex',
@@ -1276,20 +1368,26 @@ export default function OwnerBillModal({
               }}
             >
               <span>{grandTotalBaqaya < 0 ? '= Net Advance:' : '= Net Total:'}</span>
-              <span>
-                Rs {Math.abs(grandTotalBaqaya).toLocaleString()}
-                {formatLakhCrore(grandTotalBaqaya) && (
-                  <span style={{ fontSize: 10, color: '#475569', fontStyle: 'italic', fontWeight: 700, marginLeft: 6 }}>
-                    ({formatLakhCrore(Math.abs(grandTotalBaqaya))} {grandTotalBaqaya < 0 ? 'Advance' : ''})
+              <span style={{ display: 'inline-flex', alignItems: 'baseline', justifyContent: 'flex-end', gap: 6, flexWrap: 'wrap' }}>
+                {formatLakhCrore(Math.abs(grandTotalBaqaya)) && (
+                  <span style={{ fontSize: 10, color: '#475569', fontStyle: 'italic', fontWeight: 700 }}>
+                    ({formatLakhCrore(Math.abs(grandTotalBaqaya))}{grandTotalBaqaya < 0 ? ' Advance' : ''})
                   </span>
                 )}
+                <span>Rs {Math.abs(grandTotalBaqaya).toLocaleString()}</span>
               </span>
+            </div>
+          )}
+
+          {notes && String(notes).trim() && (
+            <div style={{ fontSize: 9.5, color: '#1e293b', paddingTop: 2, fontWeight: 600 }}>
+              <strong>Note:</strong> {String(notes).trim()}
             </div>
           )}
         </div>
 
         {/* Footer Area: Prepared By (Left) + Write-able Lines for Manual Calculation (Right) */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: 14, paddingTop: 4, color: '#000000' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: 8, paddingTop: 4, color: '#000000' }}>
           <div style={{ fontSize: 11, color: '#000000', fontWeight: 700, paddingBottom: 2 }}>
             <div>Prepared By: ____________</div>
           </div>
@@ -1381,7 +1479,13 @@ export default function OwnerBillModal({
                   type="number"
                   min="1"
                   value={bookNo}
-                  onChange={(e) => setBookNo(Number(e.target.value) || 1)}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setBookNo(v === '' ? '' : Math.max(1, Number(v) || 1));
+                  }}
+                  onBlur={() => {
+                    if (!bookNo || Number(bookNo) < 1) setBookNo(1);
+                  }}
                   className="owner-bill-input"
                   style={{
                     width: 55,
@@ -1452,10 +1556,17 @@ export default function OwnerBillModal({
               </span>
               <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)' }}>Rs</span>
               <input
-                type="number"
-                value={sabqaBaqaya}
-                onChange={(e) => setSabqaBaqaya(Number(e.target.value) || 0)}
-                placeholder="0"
+                type="text"
+                inputMode="numeric"
+                value={sabqaInput}
+                onChange={(e) => {
+                  const cleaned = e.target.value.replace(/[^0-9.-]/g, '');
+                  setSabqaInput(cleaned);
+                }}
+                onBlur={() => {
+                  if (sabqaInput === '' || sabqaInput === '-') setSabqaInput('0');
+                }}
+                placeholder="0 (or -5000 advance)"
                 style={{
                   width: 120,
                   padding: '2px 0',
@@ -1770,7 +1881,7 @@ export default function OwnerBillModal({
                     border: '1px solid var(--border)',
                   }}
                 >
-                  {paymentsList.length} Payments — Rs {totalWasooli.toLocaleString()}
+                  {validPayments.length} Payments — Rs {totalWasooli.toLocaleString()}
                 </span>
               </div>
               <div className="owner-bill-payments-btns" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -1897,9 +2008,10 @@ export default function OwnerBillModal({
                         <span style={{ fontSize: 11, color: 'var(--success, #15803d)', marginRight: 3, fontWeight: 700 }}>Rs</span>
                         <input
                           type="number"
+                          min="0"
                           placeholder="0"
                           value={p.amount || ''}
-                          onChange={(e) => updatePaymentRow(pIdx, 'amount', Number(e.target.value) || 0)}
+                          onChange={(e) => updatePaymentRow(pIdx, 'amount', Math.max(0, Number(e.target.value) || 0))}
                           style={{
                             width: '100%',
                             minWidth: 0,
@@ -1985,9 +2097,10 @@ export default function OwnerBillModal({
                   <span style={{ fontSize: 11.5, color: 'var(--text-secondary)', marginRight: 4 }}>Rs</span>
                   <input
                     type="number"
+                    min="0"
                     placeholder="0"
                     value={prevBillAmount || ''}
-                    onChange={(e) => setPrevBillAmount(Number(e.target.value) || 0)}
+                    onChange={(e) => setPrevBillAmount(Math.max(0, Number(e.target.value) || 0))}
                     style={{
                       width: '100%',
                       minWidth: 0,
@@ -2045,9 +2158,10 @@ export default function OwnerBillModal({
                   <span style={{ fontSize: 11.5, color: 'var(--danger, #dc2626)', marginRight: 4, fontWeight: 700 }}>Rs</span>
                   <input
                     type="number"
+                    min="0"
                     placeholder="0"
                     value={katotiAmount || ''}
-                    onChange={(e) => setKatotiAmount(Number(e.target.value) || 0)}
+                    onChange={(e) => setKatotiAmount(Math.max(0, Number(e.target.value) || 0))}
                     style={{
                       width: '100%',
                       minWidth: 0,
@@ -2114,13 +2228,20 @@ export default function OwnerBillModal({
                 </div>
               )}
 
-              <div style={{ background: 'var(--warning-bg, #fffbeb)', padding: '8px 10px', borderRadius: 8, border: '1px solid var(--warning-border, #fde68a)' }}>
-                <div style={{ fontSize: 11, color: 'var(--warning-text, #92600a)', fontWeight: 600 }}>+ Previous Balance</div>
-                <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--warning-text, #92600a)', marginTop: 2 }}>+Rs {Number(sabqaBaqaya || 0).toLocaleString()}</div>
-              </div>
+              {Number(sabqaBaqaya || 0) < 0 ? (
+                <div style={{ background: 'var(--success-bg, #f0fdf4)', padding: '8px 10px', borderRadius: 8, border: '1px solid var(--success, #15803d)' }}>
+                  <div style={{ fontSize: 11, color: 'var(--success, #15803d)', fontWeight: 600 }}>− Advance Surplus</div>
+                  <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--success, #15803d)', marginTop: 2 }}>−Rs {Math.abs(Number(sabqaBaqaya || 0)).toLocaleString()}</div>
+                </div>
+              ) : (
+                <div style={{ background: 'var(--warning-bg, #fffbeb)', padding: '8px 10px', borderRadius: 8, border: '1px solid var(--warning-border, #fde68a)' }}>
+                  <div style={{ fontSize: 11, color: 'var(--warning-text, #92600a)', fontWeight: 600 }}>+ Previous Balance</div>
+                  <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--warning-text, #92600a)', marginTop: 2 }}>+Rs {Number(sabqaBaqaya || 0).toLocaleString()}</div>
+                </div>
+              )}
 
               <div style={{ background: 'var(--success-bg, #f0fdf4)', padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border)' }}>
-                <div style={{ fontSize: 11, color: 'var(--success, #15803d)', fontWeight: 600 }}>− Received ({paymentsList.length})</div>
+                <div style={{ fontSize: 11, color: 'var(--success, #15803d)', fontWeight: 600 }}>− Received ({validPayments.length})</div>
                 <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--success, #15803d)', marginTop: 2 }}>−Rs {totalWasooli.toLocaleString()}</div>
               </div>
 
@@ -2639,6 +2760,8 @@ export default function OwnerBillModal({
         <LotPickerModal
           availableLots={candidateLots}
           currentlySelectedLotIds={lots.map((l) => l.lotId).filter(Boolean)}
+          existingBillId={existingBill?.id || existingBill?._id || ''}
+          manualLotsCount={lots.filter((l) => !l.lotId).length}
           currentBillNo={billNo}
           onClose={() => setShowLotPicker(false)}
           onConfirm={handleAddLotsFromInventory}
@@ -2663,19 +2786,29 @@ export default function OwnerBillModal({
  * Clean & Simple Lot Picker Modal
  * Lets user select up to standard 12 lots (Standard physical bill book size)
  */
-function LotPickerModal({ availableLots, currentlySelectedLotIds, currentBillNo = 1, onClose, onConfirm }) {
+function LotPickerModal({
+  availableLots,
+  currentlySelectedLotIds,
+  existingBillId = '',
+  manualLotsCount = 0,
+  currentBillNo = 1,
+  onClose,
+  onConfirm,
+}) {
   const [selectedIds, setSelectedIds] = useState(new Set(currentlySelectedLotIds));
   const [search, setSearch] = useState('');
+  const maxSelectable = Math.max(0, STANDARD_BILL_LOTS_LIMIT - Number(manualLotsCount || 0));
 
   const unbilledLots = useMemo(() => {
     const selectedSet = new Set(currentlySelectedLotIds || []);
     return (availableLots || []).filter((l) => {
       const id = String(l.id || l._id);
       if (selectedSet.has(id)) return true;
+      if (existingBillId && String(l.ownerBillId || '') === String(existingBillId)) return true;
       const isReceivedBack = l.status === 'received back' || !l.status;
       return isReceivedBack && !l.ownerBillId && !l.billedInBillNo;
     });
-  }, [availableLots, currentlySelectedLotIds]);
+  }, [availableLots, currentlySelectedLotIds, existingBillId]);
 
   const filtered = useMemo(() => {
     if (!search.trim()) return unbilledLots;
@@ -2692,13 +2825,16 @@ function LotPickerModal({ availableLots, currentlySelectedLotIds, currentBillNo 
       if (next.has(id)) {
         next.delete(id);
       } else {
-        if (next.size >= STANDARD_BILL_LOTS_LIMIT) {
+        if (next.size >= maxSelectable) {
           Swal.fire({
             toast: true,
             position: 'top-end',
             icon: 'info',
             title: `Standard Bill Capacity: Maximum ${STANDARD_BILL_LOTS_LIMIT} lots!`,
-            text: `Ek standard physical bill par ${STANDARD_BILL_LOTS_LIMIT} lots aati hain. Baqi lots ka agla bill banayein.`,
+            text:
+              manualLotsCount > 0
+                ? `${manualLotsCount} manual row pehle se add hai, is liye ${maxSelectable} inventory lots select ho sakti hain.`
+                : `Ek standard physical bill par ${STANDARD_BILL_LOTS_LIMIT} lots aati hain. Baqi lots ka agla bill banayein.`,
             timer: 3200,
             showConfirmButton: false,
           });
@@ -2711,12 +2847,12 @@ function LotPickerModal({ availableLots, currentlySelectedLotIds, currentBillNo 
   };
 
   const selectFirstBatch = () => {
-    const first = filtered.slice(0, STANDARD_BILL_LOTS_LIMIT).map((l) => String(l.id || l._id));
+    const first = filtered.slice(0, maxSelectable).map((l) => String(l.id || l._id));
     setSelectedIds(new Set(first));
   };
 
   const selectNextBatch = () => {
-    const next = filtered.slice(STANDARD_BILL_LOTS_LIMIT, STANDARD_BILL_LOTS_LIMIT * 2).map((l) => String(l.id || l._id));
+    const next = filtered.slice(maxSelectable, maxSelectable * 2).map((l) => String(l.id || l._id));
     setSelectedIds(new Set(next));
   };
 
@@ -2738,7 +2874,7 @@ function LotPickerModal({ availableLots, currentlySelectedLotIds, currentBillNo 
               borderRadius: 8,
               padding: '7px 12px',
               fontSize: 12,
-              color: '#93c5fd',
+              color: 'var(--primary, #1d4ed8)',
               lineHeight: 1.4,
             }}
           >
@@ -2760,18 +2896,18 @@ function LotPickerModal({ availableLots, currentlySelectedLotIds, currentBillNo 
               type="button"
               className="btn btn-secondary btn-xs"
               onClick={selectFirstBatch}
-              style={{ fontWeight: 700, color: '#38bdf8', borderColor: 'rgba(56, 189, 248, 0.35)' }}
+              style={{ fontWeight: 700, color: 'var(--primary, #1d4ed8)', borderColor: 'var(--border)' }}
             >
-              ⚡ Pehle {STANDARD_BILL_LOTS_LIMIT} Lots (Bill #1)
+              ⚡ Pehle {maxSelectable} Lots (Bill #{currentBillNo || 1})
             </button>
-            {filtered.length > STANDARD_BILL_LOTS_LIMIT && (
+            {filtered.length > maxSelectable && maxSelectable > 0 && (
               <button
                 type="button"
                 className="btn btn-secondary btn-xs"
                 onClick={selectNextBatch}
-                style={{ fontWeight: 700, color: '#a78bfa', borderColor: 'rgba(167, 139, 250, 0.35)' }}
+                style={{ fontWeight: 700, color: 'var(--purple, #7c3aed)', borderColor: 'var(--border)' }}
               >
-                ⚡ Agle Lots (Lots {STANDARD_BILL_LOTS_LIMIT + 1}-{Math.min(STANDARD_BILL_LOTS_LIMIT * 2, filtered.length)})
+                ⚡ Agle Lots (Lots {maxSelectable + 1}-{Math.min(maxSelectable * 2, filtered.length)})
               </button>
             )}
             <button type="button" className="btn btn-secondary btn-xs" onClick={clearAll}>

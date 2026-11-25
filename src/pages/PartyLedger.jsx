@@ -4,6 +4,7 @@ import { useSearchParams } from 'react-router-dom';
 import Swal from 'sweetalert2';
 import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
+import { PaginationFooter } from '../components/UI';
 import LoaderDashboard from '../components/LoaderDashboard';
 import apiService from '../services/api';
 import {
@@ -227,6 +228,7 @@ export default function PartyLedger() {
   const [picsLoading, setPicsLoading] = useState(false);
   const [picsSaving, setPicsSaving] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
+  const listTopRef = useRef(null);
   /** Split view: non-completed vs completed (same for admin & party) */
   const [ledgerLotsTab, setLedgerLotsTab] = useState('other');
   const [viewMode, setViewMode] = useState('tile');
@@ -946,7 +948,9 @@ export default function PartyLedger() {
     const shouldOpenReview = isAdmin && (openBillReview || hasPendingBillRevisionRequest(pe));
 
     const t = setTimeout(() => {
-      const el = document.getElementById(`pl-lot-row-${lotId}`);
+      const escaped = typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(String(lotId)) : String(lotId);
+      const nodes = document.querySelectorAll(`[data-pl-lot-id="${escaped}"]`);
+      const el = Array.from(nodes).find((n) => n.offsetParent !== null) || nodes[0] || document.getElementById(`pl-lot-row-${lotId}`);
       if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
       if (shouldOpenReview) {
         setRevisionReview({
@@ -1097,14 +1101,17 @@ export default function PartyLedger() {
           };
         }
 
+        const nowD = new Date();
+        const fallbackToday = `${nowD.getFullYear()}-${String(nowD.getMonth() + 1).padStart(2, '0')}-${String(nowD.getDate()).padStart(2, '0')}`;
         const reviewTasks = [
           updatePartyEdit(
             editingId,
             {
-              completeDate: editForm.completeDate || new Date().toISOString().slice(0, 10),
+              completeDate: editForm.completeDate || fallbackToday,
               partyBillAmount: nextLedgerAmount,
               receipt: receiptToSave,
-              pendingRevision: pendingRevisionPayload,
+              notes: editForm.notes ?? '',
+              pendingRevision: pendingRevisionPayload ?? prevPe.pendingRevision ?? null,
             },
             lotWorkspaceOpts(lot)
           ),
@@ -1772,6 +1779,8 @@ export default function PartyLedger() {
         isParty={isParty}
       />
 
+      <div ref={listTopRef} />
+
       {/* Desktop Table */}
       <PLDesktopTable
         filtered={filtered}
@@ -1817,6 +1826,7 @@ export default function PartyLedger() {
           getPartyAllotDate={getPartyAllotDate}
           showWorkspaceColForLot={showWorkspaceColForLot}
           workspaceNameForLot={workspaceNameForLot}
+          highlightLotId={highlightLotId}
           openEdit={openEdit}
           handleRowStatusChange={handleRowStatusChange}
           handleDirectBillUpload={handleDirectBillUpload}
@@ -1840,6 +1850,7 @@ export default function PartyLedger() {
           getPartyAllotDate={getPartyAllotDate}
           showWorkspaceColForLot={showWorkspaceColForLot}
           workspaceNameForLot={workspaceNameForLot}
+          highlightLotId={highlightLotId}
           openEdit={openEdit}
           handleRowStatusChange={handleRowStatusChange}
           handleDirectBillUpload={handleDirectBillUpload}
@@ -1852,42 +1863,15 @@ export default function PartyLedger() {
       )}
 
       {/* Pagination */}
-      {filtered.length > 0 && (
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            gap: 12,
-            marginTop: 12,
-            flexWrap: 'wrap',
-          }}
-        >
-          <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-            Showing {pageStart + 1}-{Math.min(pageStart + PAGE_SIZE, filtered.length)} of{' '}
-            {filtered.length}
-          </span>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <button
-              className="btn btn-ghost btn-sm"
-              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-              disabled={safeCurrentPage === 1}
-            >
-              Prev
-            </button>
-            <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-              Page {safeCurrentPage} of {totalPages}
-            </span>
-            <button
-              className="btn btn-ghost btn-sm"
-              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-              disabled={safeCurrentPage === totalPages}
-            >
-              Next
-            </button>
-          </div>
-        </div>
-      )}
+      <PaginationFooter
+        currentPage={safeCurrentPage}
+        totalPages={totalPages}
+        totalItems={filtered.length}
+        pageStart={pageStart}
+        pageSize={PAGE_SIZE}
+        onPageChange={setCurrentPage}
+        scrollTargetRef={listTopRef}
+      />
 
       {/* Modals */}
       <PLEditModal

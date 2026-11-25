@@ -13,6 +13,7 @@ import {
   SearchBar,
   EmptyState,
   ConfirmDialog,
+  PaginationFooter,
 } from '../components/UI';
 import Loader from '../components/Loader';
 import LoaderDashboard from '../components/LoaderDashboard';
@@ -21,6 +22,7 @@ import {
   isWithinDateRange,
   latestDateFrom,
   compareRowsByUpdatedNewestFirst,
+  compareBillableLotsNewestFirst,
   formatDisplayDate,
 } from '../utils/dateFilters';
 import { workspaceDisplayTitleForLot } from '../utils/businessWorkspace';
@@ -147,6 +149,7 @@ export default function GhausiaCollection() {
   const completingLotsRef = useRef(new Set());
   const [inlineSummaryBusy, setInlineSummaryBusy] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
+  const lotsSectionTopRef = useRef(null);
   const [billableCollapsed, setBillableCollapsed] = useState(() => {
     return localStorage.getItem('ghausia_billable_collapsed') === 'true';
   });
@@ -261,7 +264,8 @@ export default function GhausiaCollection() {
     completingLotsRef.current.add(lotKey);
     setCompletionPersistingLotId(lot.id);
 
-    const today = new Date().toISOString().slice(0, 10);
+    const nowD = new Date();
+    const today = `${nowD.getFullYear()}-${String(nowD.getMonth() + 1).padStart(2, '0')}-${String(nowD.getDate()).padStart(2, '0')}`;
     const lotUpdate = {
       status: 'completed',
       receivedBackDate: today,
@@ -417,10 +421,14 @@ export default function GhausiaCollection() {
 
     setInlineSummaryBusy(true);
     try {
-      const today = new Date().toISOString().slice(0, 10);
+      const nowD = new Date();
+    const today = `${nowD.getFullYear()}-${String(nowD.getMonth() + 1).padStart(2, '0')}-${String(nowD.getDate()).padStart(2, '0')}`;
       const lotUpdate = { status: newStatus };
       if (newStatus === 'dispatched') lotUpdate.dispatchDate = today;
-      if (newStatus === 'received back') lotUpdate.receivedBackDate = today;
+      if (newStatus === 'received back') {
+        lotUpdate.receivedBackDate = today;
+        lotUpdate.completionApprovedAt = new Date().toISOString();
+      }
       if (newStatus === 'rejected') lotUpdate.rejectedDate = today;
       if (newStatus === 'pending approval') lotUpdate.pendingReviewSubmittedAt = today;
 
@@ -521,7 +529,6 @@ export default function GhausiaCollection() {
         if (componentFilter === 'dupatta' && l.suitComponent !== 'dupatta') return false;
         if (componentFilter === 'main' && l.suitComponent === 'dupatta') return false;
         if (partyFilter !== 'All' && String(l.partyId || '') !== String(partyFilter)) return false;
-        if (stuckLotIdsFilter.length > 0 && !stuckLotIdsFilter.includes(String(l.id))) return false;
         return isWithinDateRange(
           latestDateFrom(l, [
             'updatedAt',
@@ -537,8 +544,11 @@ export default function GhausiaCollection() {
           customRange
         );
       }),
-    [effectiveCollectionLots, componentFilter, partyFilter, dateRange, customRange, stuckLotIdsFilter]
+    [effectiveCollectionLots, componentFilter, partyFilter, dateRange, customRange]
   );
+
+  const isLotCompletedOrBilled = (l) =>
+    l.status === 'completed' || Boolean(l.ownerBillId) || Boolean(l.billedInBillNo);
 
   const completedLotsCount = useMemo(
     () => {
@@ -546,17 +556,23 @@ export default function GhausiaCollection() {
       if (highlightedBillableLotId) {
         lots = lots.filter(l => String(l.id) === String(highlightedBillableLotId));
       }
-      return lots.filter((l) => l.status === 'completed').length;
+      if (stuckLotIdsFilter.length > 0) {
+        lots = lots.filter(l => stuckLotIdsFilter.includes(String(l.id)));
+      }
+      return lots.filter(isLotCompletedOrBilled).length;
     },
-    [visibleLots, highlightedBillableLotId]
+    [visibleLots, highlightedBillableLotId, stuckLotIdsFilter]
   );
   const otherLotsCount = useMemo(() => {
     let lots = visibleLots;
     if (highlightedBillableLotId) {
       lots = lots.filter(l => String(l.id) === String(highlightedBillableLotId));
     }
-    return lots.length - lots.filter((l) => l.status === 'completed').length;
-  }, [visibleLots, highlightedBillableLotId]);
+    if (stuckLotIdsFilter.length > 0) {
+      lots = lots.filter(l => stuckLotIdsFilter.includes(String(l.id)));
+    }
+    return lots.filter((l) => !isLotCompletedOrBilled(l)).length;
+  }, [visibleLots, highlightedBillableLotId, stuckLotIdsFilter]);
   const othersTabStatusLabel =
     statusFilter === 'All'
       ? 'Others'
@@ -569,9 +585,12 @@ export default function GhausiaCollection() {
     if (highlightedBillableLotId) {
       lots = lots.filter(l => String(l.id) === String(highlightedBillableLotId));
     }
+    if (stuckLotIdsFilter.length > 0) {
+      lots = lots.filter(l => stuckLotIdsFilter.includes(String(l.id)));
+    }
     if (statusFilter === 'All') return otherLotsCount;
-    return lots.filter((l) => l.status === statusFilter).length;
-  }, [visibleLots, statusFilter, otherLotsCount, highlightedBillableLotId]);
+    return lots.filter((l) => !isLotCompletedOrBilled(l) && l.status === statusFilter).length;
+  }, [visibleLots, statusFilter, otherLotsCount, highlightedBillableLotId, stuckLotIdsFilter]);
   const othersTabHint =
     statusFilter === 'All'
       ? 'Pending, dispatched, and received back (not completed)'
@@ -580,26 +599,30 @@ export default function GhausiaCollection() {
   // Search-aware tab counts so tab badge numbers match search queries
   const searchOthersCount = useMemo(() => {
     if (!debouncedSearch.trim()) return othersTabCount;
-    let lots = visibleLots;
+    let lots = visibleLots.filter((l) => !isLotCompletedOrBilled(l));
     if (highlightedBillableLotId) {
       lots = lots.filter(l => String(l.id) === String(highlightedBillableLotId));
+    }
+    if (stuckLotIdsFilter.length > 0) {
+      lots = lots.filter(l => stuckLotIdsFilter.includes(String(l.id)));
     }
     if (statusFilter !== 'All') {
       lots = lots.filter(l => l.status === statusFilter);
-    } else {
-      lots = lots.filter(l => l.status !== 'completed');
     }
     return lots.filter(l => matchLotSearch(l, debouncedSearch, searchField, partyMap)).length;
-  }, [visibleLots, highlightedBillableLotId, statusFilter, debouncedSearch, searchField, partyMap, othersTabCount]);
+  }, [visibleLots, highlightedBillableLotId, stuckLotIdsFilter, statusFilter, debouncedSearch, searchField, partyMap, othersTabCount]);
 
   const searchCompletedCount = useMemo(() => {
     if (!debouncedSearch.trim()) return completedLotsCount;
-    let lots = visibleLots.filter(l => l.status === 'completed');
+    let lots = visibleLots.filter(isLotCompletedOrBilled);
     if (highlightedBillableLotId) {
       lots = lots.filter(l => String(l.id) === String(highlightedBillableLotId));
     }
+    if (stuckLotIdsFilter.length > 0) {
+      lots = lots.filter(l => stuckLotIdsFilter.includes(String(l.id)));
+    }
     return lots.filter(l => matchLotSearch(l, debouncedSearch, searchField, partyMap)).length;
-  }, [visibleLots, highlightedBillableLotId, debouncedSearch, searchField, partyMap, completedLotsCount]);
+  }, [visibleLots, highlightedBillableLotId, stuckLotIdsFilter, debouncedSearch, searchField, partyMap, completedLotsCount]);
 
   const displayOthersTabCount = debouncedSearch.trim() ? searchOthersCount : othersTabCount;
   const displayCompletedLotsCount = debouncedSearch.trim() ? searchCompletedCount : completedLotsCount;
@@ -756,21 +779,22 @@ export default function GhausiaCollection() {
     fetchOwnerBills();
   }, [activeBillOwnerId, fetchOwnerBills]);
 
-  // ─── Billable Lots (Strictly 'received back' and unbilled for this workspace) ───
+  // ─── Billable Lots (Strictly 'received back' and unbilled; newest approved always on top) ───
   const billable = useMemo(
     () =>
       effectiveCollectionLots
         .filter((l) => {
           if (l.status !== 'received back') return false;
           if (l.ownerBillId || l.billedInBillNo) return false;
+          if (viewAllWorkspaces) return true;
           const matchesOwner =
             !activeBillOwnerId ||
             !l.businessOwnerId ||
             String(l.businessOwnerId) === String(activeBillOwnerId);
           return matchesOwner;
         })
-        .sort((a, b) => compareRowsByUpdatedNewestFirst(a, b, 'lot')),
-    [effectiveCollectionLots, activeBillOwnerId]
+        .sort((a, b) => compareBillableLotsNewestFirst(a, b)),
+    [effectiveCollectionLots, activeBillOwnerId, viewAllWorkspaces]
   );
 
   const activeBillOwnerName = useMemo(() => {
@@ -780,12 +804,13 @@ export default function GhausiaCollection() {
     const matched = businessOwners?.find(
       (o) => String(o.id || o._id) === String(activeBillOwnerId)
     );
-    return matched?.name || (billable[0]?.businessOwnerId ? 'Owner' : 'Owner');
-  }, [viewAllWorkspaces, activeWorkspace, businessOwners, activeBillOwnerId, billable]);
+    return matched?.name || 'Owner';
+  }, [viewAllWorkspaces, activeWorkspace, businessOwners, activeBillOwnerId]);
 
   const ownerPaymentsForBill = useMemo(() => {
     const bizNameLower = String(activeWorkspace?.name || '').trim().toLowerCase();
     const ownerNameLower = String(activeBillOwnerName || '').trim().toLowerCase();
+    const firstOwnerId = businessOwners?.[0] ? String(businessOwners[0].id || businessOwners[0]._id) : '';
     return payments.filter((p) => {
       const isReceived = p.type === 'Received';
       if (!isReceived) return false;
@@ -793,18 +818,27 @@ export default function GhausiaCollection() {
       const isOwnerParty =
         partyLower === 'owner' ||
         partyLower === '' ||
-        (bizNameLower && partyLower === bizNameLower) ||
-        (ownerNameLower && partyLower === ownerNameLower) ||
-        partyLower.includes('ghausia');
+        (bizNameLower && bizNameLower !== 'all workspaces' && partyLower === bizNameLower) ||
+        (ownerNameLower && ownerNameLower !== 'owner' && partyLower === ownerNameLower);
       const matchesBiz =
         !activeBillOwnerId ||
-        !p.businessOwnerId ||
-        String(p.businessOwnerId) === String(activeBillOwnerId);
+        (p.businessOwnerId
+          ? String(p.businessOwnerId) === String(activeBillOwnerId)
+          : (businessOwners.length <= 1 || String(activeBillOwnerId) === firstOwnerId));
       return isOwnerParty && matchesBiz;
     });
-  }, [payments, activeWorkspace, activeBillOwnerId, activeBillOwnerName]);
+  }, [payments, activeWorkspace, activeBillOwnerId, activeBillOwnerName, businessOwners]);
 
-  const allWorkspaceBillableLots = billable;
+  const allWorkspaceBillableLots = useMemo(
+    () =>
+      billable.filter(
+        (l) =>
+          !activeBillOwnerId ||
+          !l.businessOwnerId ||
+          String(l.businessOwnerId) === String(activeBillOwnerId)
+      ),
+    [billable, activeBillOwnerId]
+  );
 
   const modalCandidateLots = useMemo(() => {
     if (!selectedBillToView) return allWorkspaceBillableLots;
@@ -917,39 +951,62 @@ export default function GhausiaCollection() {
   }, [billablePage, billablePageCount]);
   const ownerIn = useMemo(() => {
     const bizNameLower = String(activeWorkspace?.name || '').trim().toLowerCase();
+    const ownerNamesSet = new Set(
+      (businessOwners || []).map((o) => String(o?.name || '').trim().toLowerCase()).filter(Boolean)
+    );
     return effectivePayments
       .filter((p) => {
         if (p.type !== 'Received') return false;
         const partyLower = String(p.party || '').trim().toLowerCase();
-        return partyLower === 'owner' || partyLower === '' || (bizNameLower && partyLower === bizNameLower);
+        return (
+          partyLower === 'owner' ||
+          partyLower === '' ||
+          (bizNameLower && bizNameLower !== 'all workspaces' && partyLower === bizNameLower) ||
+          (viewAllWorkspaces && ownerNamesSet.has(partyLower))
+        );
       })
       .reduce((s, p) => s + Number(p.amount || 0), 0);
-  }, [effectivePayments, activeWorkspace]);
+  }, [effectivePayments, activeWorkspace, viewAllWorkspaces, businessOwners]);
 
   const ownerPaidToOwner = useMemo(() => {
     const bizNameLower = String(activeWorkspace?.name || '').trim().toLowerCase();
+    const ownerNamesSet = new Set(
+      (businessOwners || []).map((o) => String(o?.name || '').trim().toLowerCase()).filter(Boolean)
+    );
     return effectivePayments
       .filter((p) => {
         if (p.type !== 'Paid') return false;
+        // Exclude auto-generated OwnerBill lot-settlement Paid records (already counted in billableSettledTotal)
+        const isAutoOwnerBillPaid =
+          Boolean(p.ownerBillId) ||
+          (p.billedInBillNo && p.billedInBillNo !== 'none') ||
+          String(p.note || '').includes('billed to owner');
+        if (isAutoOwnerBillPaid) return false;
         const partyLower = String(p.party || '').trim().toLowerCase();
-        return partyLower === 'owner' || (bizNameLower && partyLower === bizNameLower);
+        return (
+          partyLower === 'owner' ||
+          (bizNameLower && bizNameLower !== 'all workspaces' && partyLower === bizNameLower) ||
+          (viewAllWorkspaces && ownerNamesSet.has(partyLower))
+        );
       })
       .reduce((s, p) => s + Number(p.amount || 0), 0);
-  }, [effectivePayments, activeWorkspace]);
+  }, [effectivePayments, activeWorkspace, viewAllWorkspaces, businessOwners]);
 
   const billableSettledTotal = useMemo(
     () =>
       effectiveCollectionLots
         .filter((l) => {
           const isBilled = (l.status === 'completed' && l.completedFromBillable) || Boolean(l.ownerBillId) || Boolean(l.billedInBillNo);
+          if (!isBilled) return false;
+          if (viewAllWorkspaces) return true;
           const matchesBiz =
             !activeBillOwnerId ||
             !l.businessOwnerId ||
             String(l.businessOwnerId) === String(activeBillOwnerId);
-          return isBilled && matchesBiz;
+          return matchesBiz;
         })
         .reduce((s, l) => s + Number(getBusinessBillAmount(l) || l.billAmount || 0), 0),
-    [effectiveCollectionLots, activeBillOwnerId]
+    [effectiveCollectionLots, activeBillOwnerId, viewAllWorkspaces]
   );
   const ownerReceivedNet = ownerIn - ownerPaidToOwner - billableSettledTotal;
   const ownerReceivedIsPending = ownerReceivedNet < 0;
@@ -983,19 +1040,29 @@ export default function GhausiaCollection() {
 
   const latestFinalizedBill = useMemo(() => {
     if (!ownerBills || ownerBills.length === 0) return null;
-    const sorted = [...ownerBills].sort((a, b) => (b.billNo || 0) - (a.billNo || 0));
+    const sorted = [...ownerBills].sort((a, b) => {
+      const bookDiff = Number(b.bookNo || 1) - Number(a.bookNo || 1);
+      if (bookDiff !== 0) return bookDiff;
+      return Number(b.billNo || 0) - Number(a.billNo || 0);
+    });
     return sorted[0] || null;
   }, [ownerBills]);
 
   // When an owner bill is finalized, the true receivable is anchored by the latest bill's Baqaya:
   // Receivable = Latest Bill Baqaya + Unbilled Lots (ready to bill) - Fresh Payments (received after latest bill)
   const ownerReceivableFromBills = useMemo(() => {
+    if (viewAllWorkspaces && businessOwners && businessOwners.length > 1) {
+      return null;
+    }
     const baseBaqaya = latestFinalizedBill
       ? Number(latestFinalizedBill.grandTotalBaqaya || 0)
       : latestTallyBaqaya;
 
     if (baseBaqaya == null) return null;
-    const unbilledLotsWork = Number(billableTotal || 0);
+    const unbilledLotsWork = allWorkspaceBillableLots.reduce(
+      (s, l) => s + getOwnerUnpaidBalance(l),
+      0
+    );
 
     const settledPaymentIds = new Set(ownerBillsDefaults?.billedPaymentIds || []);
     (ownerBills || []).forEach((b) => {
@@ -1018,7 +1085,17 @@ export default function GhausiaCollection() {
 
     const net = baseBaqaya + unbilledLotsWork - freshReceived;
     return Math.round(net);
-  }, [latestFinalizedBill, latestTallyBaqaya, billableTotal, ownerBills, ownerBillsDefaults, ownerPaymentsForBill]);
+  }, [
+    viewAllWorkspaces,
+    businessOwners,
+    latestFinalizedBill,
+    latestTallyBaqaya,
+    allWorkspaceBillableLots,
+    getOwnerUnpaidBalance,
+    ownerBills,
+    ownerBillsDefaults,
+    ownerPaymentsForBill,
+  ]);
 
   // Unbilled received payments for this billing cycle
   const unbilledOwnerReceived = useMemo(() => {
@@ -1231,7 +1308,8 @@ export default function GhausiaCollection() {
 
     const { saveBusinessOwnerId: _ignoreSaveOwner, ...lotPayloadForApi } = saveForm;
 
-    const today = new Date().toISOString().slice(0, 10);
+    const nowD = new Date();
+    const today = `${nowD.getFullYear()}-${String(nowD.getMonth() + 1).padStart(2, '0')}-${String(nowD.getDate()).padStart(2, '0')}`;
     setLotSaving(true);
     try {
       if (prev) {
@@ -1519,16 +1597,7 @@ export default function GhausiaCollection() {
           overflow: 'hidden',
         }}
       >
-        <div
-          style={{
-            display: 'flex',
-            flexWrap: 'wrap',
-            alignItems: 'flex-start',
-            justifyContent: 'space-between',
-            gap: 20,
-            padding: '22px 24px 18px',
-          }}
-        >
+        <div className="ghausia-hero-top">
           <div style={{ flex: '1 1 260px', minWidth: 0 }}>
             <div
               style={{
@@ -1832,6 +1901,7 @@ export default function GhausiaCollection() {
             setCustomEnd(end);
           }}
           className="pl-toolbar-filter pl-toolbar-filter--date"
+          containerClassName="pl-toolbar-filter pl-toolbar-filter--date"
         />
         <select
           className="form-select pl-toolbar-filter pl-toolbar-filter--party"
@@ -1882,6 +1952,7 @@ export default function GhausiaCollection() {
 
       {/* Table tabs & View Mode Switcher */}
       <div
+        ref={lotsSectionTopRef}
         role="tablist"
         aria-label="Lots by completion"
         style={{
@@ -2037,42 +2108,15 @@ export default function GhausiaCollection() {
       />
 
       {/* Pagination */}
-      {filtered.length > 0 && (
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            gap: 12,
-            marginTop: 12,
-            flexWrap: 'wrap',
-          }}
-        >
-          <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-            Showing {pageStart + 1}-{Math.min(pageStart + PAGE_SIZE, filtered.length)} of{' '}
-            {filtered.length}
-          </span>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <button
-              className="btn btn-ghost btn-sm"
-              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-              disabled={safeCurrentPage === 1}
-            >
-              Prev
-            </button>
-            <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-              Page {safeCurrentPage} of {totalPages}
-            </span>
-            <button
-              className="btn btn-ghost btn-sm"
-              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-              disabled={safeCurrentPage === totalPages}
-            >
-              Next
-            </button>
-          </div>
-        </div>
-      )}
+      <PaginationFooter
+        currentPage={safeCurrentPage}
+        totalPages={totalPages}
+        totalItems={filtered.length}
+        pageStart={pageStart}
+        pageSize={PAGE_SIZE}
+        onPageChange={setCurrentPage}
+        scrollTargetRef={lotsSectionTopRef}
+      />
 
       {/* Lot Form Modal */}
       {modal === 'form' && (
@@ -2165,6 +2209,14 @@ export default function GhausiaCollection() {
           }}
           onSaved={(savedBill) => {
             const billedLots = savedBill?.lots || [];
+            if (selectedBillToView) {
+              revertLotsBilledLocally(
+                selectedBillToView.id || selectedBillToView._id,
+                selectedBillToView.billNo,
+                selectedBillToView.bookNo,
+                activeBillOwnerId
+              );
+            }
             markLotsBilledLocally(billedLots, savedBill);
             setOptimisticCompletions((prev) => {
               const next = { ...prev };
@@ -2176,6 +2228,7 @@ export default function GhausiaCollection() {
                       status: 'completed',
                       ownerBillId: savedBill?.id || savedBill?._id,
                       billedInBillNo: savedBill?.billNo,
+                      billedInBookNo: savedBill?.bookNo,
                     },
                   };
                 }
@@ -2204,7 +2257,7 @@ export default function GhausiaCollection() {
             setShowOwnerBillModal(true);
           }}
           onBillDeleted={(b) => {
-            revertLotsBilledLocally(b?.id || b?._id, b?.billNo);
+            revertLotsBilledLocally(b?.id || b?._id, b?.billNo, b?.bookNo, activeBillOwnerId);
             setOptimisticCompletions((prev) => {
               const next = { ...prev };
               (b?.lots || []).forEach((bl) => {

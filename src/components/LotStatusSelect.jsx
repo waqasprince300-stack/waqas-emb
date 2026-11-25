@@ -116,15 +116,16 @@ export default function LotStatusSelect({
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
-                gap: 5,
+                gap: '2px 4px',
                 flexWrap: 'wrap',
+                maxWidth: '100%',
                 lineHeight: 1.25,
               }}
             >
               <span>{labelFor(value)}</span>
               <span
                 style={{
-                  fontSize: 11,
+                  fontSize: '0.88em',
                   fontWeight: 600,
                   opacity: 0.82,
                   whiteSpace: 'nowrap',

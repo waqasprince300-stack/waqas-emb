@@ -15,13 +15,14 @@ import {
 
 import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
-import { StatusBadge, Modal } from '../components/UI';
+import { StatusBadge, Modal, scrollToSectionTop } from '../components/UI';
 import LoaderDashboard from '../components/LoaderDashboard';
 import {
   DateRangeSelect,
   isWithinDateRange,
   latestDateFrom,
   compareRowsByUpdatedNewestFirst,
+  compareBillableLotsNewestFirst,
   formatDisplayDate,
 } from '../utils/dateFilters';
 import { workspaceDisplayTitleForLot } from '../utils/businessWorkspace';
@@ -164,10 +165,8 @@ export default function Dashboard() {
 
   const handlePageChange = useCallback((newPage) => {
     setRecentLotsPage(newPage);
-    if (isMobileScreen && recentLotsCardRef.current) {
-      recentLotsCardRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-  }, [isMobileScreen]);
+    scrollToSectionTop(recentLotsCardRef);
+  }, []);
   const [selectedFabric, setSelectedFabric] = useState(null);
   const [alertDaysThreshold, setAlertDaysThreshold] = useState(7);
   const [adminPartyMotivation, setAdminPartyMotivation] = useState(null);
@@ -1241,7 +1240,7 @@ export default function Dashboard() {
                     </thead>
                     <tbody>
                       {[...billable]
-                        .sort((a, b) => compareRowsByUpdatedNewestFirst(a, b, 'lot'))
+                        .sort(compareBillableLotsNewestFirst)
                         .map((l) => (
                           <tr key={l.id}>
                             <td>
@@ -1642,7 +1641,16 @@ export default function Dashboard() {
 
                 {/* Desktop: table */}
                 <div className="dash-recent-desktop table-scroll">
-                  <table className="dash-recent-table">
+                  <table className="dash-recent-table fixed-grid-table">
+                    <colgroup>
+                      <col style={{ width: isParty ? '14%' : '12%' }} />
+                      <col style={{ width: isParty ? '14%' : '13%' }} />
+                      <col style={{ width: isParty ? '11%' : '9%' }} />
+                      {!isParty && <col style={{ width: '18%' }} />}
+                      <col style={{ width: isParty ? '24%' : '18%' }} />
+                      <col style={{ width: isParty ? '16%' : '13%' }} />
+                      <col style={{ width: isParty ? '21%' : '17%' }} />
+                    </colgroup>
                     <thead>
                       <tr>
                         <th>Lot</th>
@@ -1681,14 +1689,23 @@ export default function Dashboard() {
                           </td>
                           {!isParty && (
                             <td style={{ color: 'var(--text-secondary)', fontSize: 13 }}>
-                              {l.partyName || '—'}
+                              <span className="table-cell-ellipsis" title={l.partyName || ''}>
+                                {l.partyName || '—'}
+                              </span>
                             </td>
                           )}
                           <td style={{ color: 'var(--text-secondary)', fontSize: 13 }}>
-                            {workspaceDisplayTitleForLot(l, businessOwners, {
-                              shortIdFallback: isParty,
-                              partyObj: currentPartyObj,
-                            })}
+                            {(() => {
+                              const bizTitle = workspaceDisplayTitleForLot(l, businessOwners, {
+                                shortIdFallback: isParty,
+                                partyObj: currentPartyObj,
+                              });
+                              return (
+                                <span className="table-cell-ellipsis" title={typeof bizTitle === 'string' ? bizTitle : ''}>
+                                  {bizTitle}
+                                </span>
+                              );
+                            })()}
                           </td>
                           <td style={{ color: 'var(--text-secondary)', fontSize: 12, whiteSpace: 'nowrap' }}>
                             {formatDisplayDate(lotRelevantDate(l))}

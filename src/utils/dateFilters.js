@@ -213,8 +213,8 @@ export function compareLotsBusinessOrder(a, b) {
   const timeB = dateObjB ? dateObjB.getTime() : 0;
 
   if (timeA && timeB) {
-    const dayA = dateObjA.toISOString().slice(0, 10);
-    const dayB = dateObjB.toISOString().slice(0, 10);
+    const dayA = `${dateObjA.getFullYear()}-${pad2(dateObjA.getMonth() + 1)}-${pad2(dateObjA.getDate())}`;
+    const dayB = `${dateObjB.getFullYear()}-${pad2(dateObjB.getMonth() + 1)}-${pad2(dateObjB.getDate())}`;
     if (dayA !== dayB) {
       return dayB.localeCompare(dayA);
     }
@@ -294,6 +294,29 @@ export function compareRowsByUpdatedNewestFirst(a, b, kind) {
   const d = rowRecencyMs(b, kind) - rowRecencyMs(a, kind);
   if (d !== 0) return d;
   return fallbackIdCompare(a, b);
+}
+
+/**
+ * Sort billable ('received back') lots so the most recently approved / received-back
+ * lot always appears strictly at the top (each new approval stacks above earlier ones).
+ */
+export function compareBillableLotsNewestFirst(a, b) {
+  const getApprovedMs = (lot) => {
+    if (!lot) return 0;
+    const approved = parseDateValue(lot.completionApprovedAt)?.getTime();
+    if (approved != null && !Number.isNaN(approved) && approved > 0) return approved;
+    const recBack = parseDateValue(lot.receivedBackDate)?.getTime();
+    if (recBack != null && !Number.isNaN(recBack) && recBack > 0) return recBack;
+    const updated = parseDateValue(lot.updatedAt)?.getTime();
+    if (updated != null && !Number.isNaN(updated) && updated > 0) return updated;
+    return getLotBusinessDate(lot)?.getTime() || 0;
+  };
+
+  const timeA = getApprovedMs(a);
+  const timeB = getApprovedMs(b);
+  if (timeB !== timeA) return timeB - timeA;
+
+  return compareLotsBusinessOrder(a, b);
 }
 
 /**

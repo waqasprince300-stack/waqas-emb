@@ -90,8 +90,21 @@ export function emptyStitchRow(partId = '', customParts = []) {
 export function normalizeStitchRow(row, customParts = []) {
   const part = String(row?.part || '').trim();
   const label = String(row?.label || row?.partLabel || '').trim();
+  const rawRepeat = row?.repeat;
+  const repeat =
+    rawRepeat === ''
+      ? ''
+      : rawRepeat == null
+        ? 1
+        : Number.isFinite(Number(rawRepeat))
+          ? Math.max(0, Number(rawRepeat))
+          : 1;
   if (!part && !label) {
-    return emptyStitchRow('', customParts);
+    return {
+      ...emptyStitchRow('', customParts),
+      baseStitches: row?.baseStitches ?? '',
+      repeat,
+    };
   }
   if (part && part !== 'custom') {
     const preset = findStitchPart(part, customParts);
@@ -99,21 +112,23 @@ export function normalizeStitchRow(row, customParts = []) {
       part,
       label: label || preset?.label || part,
       baseStitches: row?.baseStitches ?? '',
-      repeat: Number(row?.repeat) || 1,
+      repeat,
     };
   }
   return {
     part: part || 'custom',
     label,
     baseStitches: row?.baseStitches ?? '',
-    repeat: Number(row?.repeat) || 1,
+    repeat,
   };
 }
 
 export function rowStitchTotal(row) {
   const base = Number(row.baseStitches);
-  if (!base || Number.isNaN(base)) return 0;
-  return base * (Number(row.repeat) || 1);
+  if (!base || Number.isNaN(base) || base < 0) return 0;
+  const r = row.repeat === '' ? 0 : row.repeat == null ? 1 : Number(row.repeat);
+  if (!Number.isFinite(r) || r <= 0) return 0;
+  return base * r;
 }
 
 export function grandStitchTotal(rows) {

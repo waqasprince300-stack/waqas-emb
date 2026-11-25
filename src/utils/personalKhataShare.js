@@ -26,15 +26,16 @@ export function buildKhataShareUrl(snapshot) {
   for (let i = 0; i < enc.length; i += CHUNK_LEN) {
     chunks.push(enc.slice(i, i + CHUNK_LEN));
   }
-  const qs = chunks.map((c, i) => `d${i}=${encodeURIComponent(c)}`).join('&');
-  const len = qs.length + originPath.length + 2;
+  // Keep multi-chunk payloads in URL hash so browsers never trigger HTTP 414 URI Too Long
+  const hashQs = chunks.map((c, i) => `d${i}=${encodeURIComponent(c)}`).join('&');
+  const len = hashQs.length + originPath.length + 2;
   if (len > 120000) {
     return {
       url: '',
       warning: 'snapshot_bloated',
     };
   }
-  return { url: `${originPath}?${qs}`, warning: 'long_url' };
+  return { url: `${originPath}#${hashQs}`, warning: 'long_url' };
 }
 
 export function parseKhataShareFromLocation(location) {
@@ -47,6 +48,17 @@ export function parseKhataShareFromLocation(location) {
       return JSON.parse(b64ToUtf8(raw));
     }
 
+    if (hash && hash.length > 1) {
+      const hashParams = new URLSearchParams(hash.slice(1));
+      const hashKeys = [...hashParams.keys()]
+        .filter((k) => /^d\d+$/i.test(k))
+        .sort((a, b) => Number(a.slice(1)) - Number(b.slice(1)));
+      if (hashKeys.length > 0) {
+        const mergedHash = hashKeys.map((k) => hashParams.get(k) || '').join('');
+        return JSON.parse(b64ToUtf8(mergedHash));
+      }
+    }
+
     const params = new URLSearchParams(search || '');
     if (!params.toString()) return null;
 
@@ -56,7 +68,7 @@ export function parseKhataShareFromLocation(location) {
 
     if (keys.length === 0) return null;
 
-    const merged = keys.map((k) => decodeURIComponent(params.get(k) || '')).join('');
+    const merged = keys.map((k) => params.get(k) || '').join('');
     return JSON.parse(b64ToUtf8(merged));
   } catch {
     return null;

@@ -176,8 +176,8 @@ export default function NotificationBell() {
             onClick={(e) => e.stopPropagation()}
             style={{
               position: 'fixed',
-              top: 56,
-              right: 16,
+              top: 'calc(52px + env(safe-area-inset-top, 0px))',
+              right: 'max(16px, env(safe-area-inset-right, 16px))',
               width: 'min(360px, calc(100vw - 24px))',
               maxHeight: 'min(70vh, 420px)',
               overflow: 'hidden',
