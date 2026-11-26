@@ -58,22 +58,26 @@ export function AppProvider({ children }) {
   const ledgerReceiptsLoadRef = useRef(null);
 
   // 2. Track Write helper for pause-on-save
-  const trackWrite = useCallback((promise) => {
-    pendingWritesRef.current += 1;
-    return Promise.resolve(promise).finally(() => {
-      pendingWritesRef.current = Math.max(0, pendingWritesRef.current - 1);
-      lastWriteAtRef.current = Date.now();
-    });
-  }, []);
+  const invalidateBootstrapCache = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ['bootstrap'] });
+  }, [queryClient]);
+
+  const trackWrite = useCallback(
+    (promise) => {
+      pendingWritesRef.current += 1;
+      return Promise.resolve(promise).finally(() => {
+        pendingWritesRef.current = Math.max(0, pendingWritesRef.current - 1);
+        lastWriteAtRef.current = Date.now();
+        invalidateBootstrapCache();
+      });
+    },
+    [invalidateBootstrapCache]
+  );
 
   const isRefreshSuppressed = useCallback(
     () => pendingWritesRef.current > 0 || Date.now() - lastWriteAtRef.current < WRITE_SETTLE_MS,
     []
   );
-
-  const invalidateBootstrapCache = useCallback(() => {
-    queryClient.invalidateQueries({ queryKey: ['bootstrap'] });
-  }, [queryClient]);
 
   // 3. Domain Hooks
   const {
@@ -153,7 +157,7 @@ export function AppProvider({ children }) {
     if (Array.isArray(reporting.lots)) setAdminReportingLots(reporting.lots.map(normalizeLotData));
     if (Array.isArray(reporting.payments)) setAdminReportingPayments(reporting.payments);
     if (Array.isArray(reporting.partyEdits)) {
-      setAdminReportingPartyEdits((prev) => mergePartyEditsFromRemote(reporting.partyEdits, prev));
+      setAdminReportingPartyEdits((prev) => mergePartyEditsFromRemote(reporting.partyEdits, prev, { prune: true }));
     }
   }, [setAdminReportingPayments]);
 
@@ -162,7 +166,7 @@ export function AppProvider({ children }) {
     if (Array.isArray(cross.lots)) setPartyCrossLots(cross.lots.map(normalizeLotData));
     if (Array.isArray(cross.payments)) setPartyCrossPayments(cross.payments);
     if (Array.isArray(cross.partyEdits)) {
-      setPartyCrossPartyEdits((prev) => mergePartyEditsFromRemote(cross.partyEdits, prev));
+      setPartyCrossPartyEdits((prev) => mergePartyEditsFromRemote(cross.partyEdits, prev, { prune: true }));
     }
   }, [setPartyCrossPayments]);
 
@@ -170,7 +174,7 @@ export function AppProvider({ children }) {
     if (Array.isArray(data.ghausiaLots)) setGhausiaLots(data.ghausiaLots.map(normalizeLotData));
     if (Array.isArray(data.payments)) setPayments(data.payments);
     if (Array.isArray(data.partyEdits)) {
-      setPartyEdits((prev) => mergePartyEditsFromRemote(data.partyEdits, prev));
+      setPartyEdits((prev) => mergePartyEditsFromRemote(data.partyEdits, prev, { prune: true }));
     }
   }, [setPayments]);
 
@@ -254,8 +258,25 @@ export function AppProvider({ children }) {
     if (!id) return;
     const clear = (prev) => {
       const existing = prev[id];
-      if (!existing || !existing.receipt) return prev;
-      return { ...prev, [id]: { ...existing, receipt: '' } };
+      if (!existing) return prev;
+      if (
+        !existing.receipt &&
+        !existing.partyVoiceNote &&
+        !existing.adminVoiceNote &&
+        !(Array.isArray(existing.lotImages) && existing.lotImages.length > 0)
+      ) {
+        return prev;
+      }
+      return {
+        ...prev,
+        [id]: {
+          ...existing,
+          receipt: '',
+          partyVoiceNote: '',
+          adminVoiceNote: '',
+          lotImages: [],
+        },
+      };
     };
     setPartyEdits(clear);
     setAdminReportingPartyEdits(clear);
@@ -292,6 +313,40 @@ export function AppProvider({ children }) {
             hasLotImages: count > 0,
           },
         };
+      };
+      setPartyEdits(merge);
+      if (user?.role === 'admin') setAdminReportingPartyEdits(merge);
+      if (user?.role === 'party') setPartyCrossPartyEdits(merge);
+    },
+    [user?.role]
+  );
+
+  const patchLotVoiceNotes = useCallback(
+    (lotId, voicePatch) => {
+      const id = lotId != null ? String(lotId) : '';
+      if (!id || !voicePatch || typeof voicePatch !== 'object') return;
+      const merge = (prev) => {
+        const existing = prev[id] || { lotId: id };
+        const nextRow = { ...existing };
+        if (Object.prototype.hasOwnProperty.call(voicePatch, 'partyVoiceNote')) {
+          nextRow.partyVoiceNote = voicePatch.partyVoiceNote || '';
+          nextRow.hasPartyVoiceNote = Boolean(nextRow.partyVoiceNote);
+        } else if (typeof voicePatch.hasPartyVoiceNote === 'boolean') {
+          nextRow.hasPartyVoiceNote = voicePatch.hasPartyVoiceNote;
+        }
+        if (Object.prototype.hasOwnProperty.call(voicePatch, 'partyVoiceNoteDuration')) {
+          nextRow.partyVoiceNoteDuration = Number(voicePatch.partyVoiceNoteDuration) || 0;
+        }
+        if (Object.prototype.hasOwnProperty.call(voicePatch, 'adminVoiceNote')) {
+          nextRow.adminVoiceNote = voicePatch.adminVoiceNote || '';
+          nextRow.hasAdminVoiceNote = Boolean(nextRow.adminVoiceNote);
+        } else if (typeof voicePatch.hasAdminVoiceNote === 'boolean') {
+          nextRow.hasAdminVoiceNote = voicePatch.hasAdminVoiceNote;
+        }
+        if (Object.prototype.hasOwnProperty.call(voicePatch, 'adminVoiceNoteDuration')) {
+          nextRow.adminVoiceNoteDuration = Number(voicePatch.adminVoiceNoteDuration) || 0;
+        }
+        return { ...prev, [id]: nextRow };
       };
       setPartyEdits(merge);
       if (user?.role === 'admin') setAdminReportingPartyEdits(merge);
@@ -500,7 +555,10 @@ export function AppProvider({ children }) {
           const reqStart = Date.now();
           const scoped = await apiService.getBootstrap({ ...partyOpts, scopeOnly: 'workspace' });
           if (gen !== loadGenerationRef.current) return;
-          if (pendingWritesRef.current > 0 || lastWriteAtRef.current > reqStart) return;
+          if (pendingWritesRef.current > 0 || lastWriteAtRef.current > reqStart) {
+            markLoaded(false);
+            return;
+          }
 
           queryClient.setQueryData(fullBootstrapKey, scoped);
 
@@ -528,7 +586,10 @@ export function AppProvider({ children }) {
             queryFn: () => apiService.getBootstrap({ minimal: true, ...partyOpts }),
           });
           if (gen !== loadGenerationRef.current) return;
-          if (pendingWritesRef.current > 0 || lastWriteAtRef.current > reqStart) return;
+          if (pendingWritesRef.current > 0 || lastWriteAtRef.current > reqStart) {
+            markLoaded(false);
+            return;
+          }
 
           if (Array.isArray(minimal?.parties)) setParties(minimal.parties.map(normalizeParty));
 
@@ -575,7 +636,10 @@ export function AppProvider({ children }) {
         // and assigning it this newer reqStart timestamp.
         const full = await apiService.getBootstrap({ ...partyOpts });
         if (gen !== loadGenerationRef.current) return;
-        if (pendingWritesRef.current > 0 || lastWriteAtRef.current > reqStart) return;
+        if (pendingWritesRef.current > 0 || lastWriteAtRef.current > reqStart) {
+          markLoaded(false);
+          return;
+        }
 
         // Update the React Query cache manually so other components can still access it if needed
         queryClient.setQueryData(fullBootstrapKey, full);
@@ -979,6 +1043,46 @@ export function AppProvider({ children }) {
       if (user?.role === 'party') {
         setPartyCrossLots((arr) => applyUpdates(arr));
       }
+      if (patch && (Object.prototype.hasOwnProperty.call(patch, 'partyId') || Object.prototype.hasOwnProperty.call(patch, 'status'))) {
+        const idStr = String(id);
+        const isReassigned = Object.prototype.hasOwnProperty.call(patch, 'partyId');
+        const syncPe = (prev) => {
+          const existingPe = prev[idStr];
+          if (!existingPe) return prev;
+          if (isReassigned) {
+            return {
+              ...prev,
+              [idStr]: {
+                ...existingPe,
+                notes: '',
+                partyVoiceNote: '',
+                partyVoiceNoteDuration: 0,
+                hasPartyVoiceNote: false,
+                receipt: '',
+                hasReceipt: false,
+                lotImages: [],
+                lotImagesCount: 0,
+                hasLotImages: false,
+                partyBillAmount: null,
+                completeDate: '',
+                overrideStatus: '',
+                pendingRevision: undefined,
+                billRevisionRequest: undefined,
+              },
+            };
+          }
+          return {
+            ...prev,
+            [idStr]: {
+              ...existingPe,
+              overrideStatus: '',
+            },
+          };
+        };
+        setPartyEdits(syncPe);
+        if (user?.role === 'admin') setAdminReportingPartyEdits(syncPe);
+        if (user?.role === 'party') setPartyCrossPartyEdits(syncPe);
+      }
       return isArr ? updatedLots : updatedLots[0];
     },
     [trackWrite, user?.role]
@@ -1012,6 +1116,15 @@ export function AppProvider({ children }) {
       if (user?.role === 'party') {
         setPartyCrossLots(applyUpdates);
       }
+      const pruneDeletedPe = (prev) => {
+        const next = { ...prev };
+        delete next[idStr];
+        if (deletedLinkedIdStr) delete next[deletedLinkedIdStr];
+        return next;
+      };
+      setPartyEdits(pruneDeletedPe);
+      if (user?.role === 'admin') setAdminReportingPartyEdits(pruneDeletedPe);
+      if (user?.role === 'party') setPartyCrossPartyEdits(pruneDeletedPe);
     },
     [trackWrite, user?.role]
   );
@@ -1239,16 +1352,47 @@ export function AppProvider({ children }) {
           ...result,
           completeDate: result.completeDate ? normalizeDateString(result.completeDate) : '',
           allotDate: result.allotDate ? normalizeDateString(result.allotDate) : '',
+          hasPartyVoiceNote:
+            typeof result.partyVoiceNote === 'string'
+              ? result.partyVoiceNote.trim() !== ''
+              : Boolean(result.hasPartyVoiceNote),
+          hasAdminVoiceNote:
+            typeof result.adminVoiceNote === 'string'
+              ? result.adminVoiceNote.trim() !== ''
+              : Boolean(result.hasAdminVoiceNote),
           ...(lotImagesCount !== undefined
             ? { lotImagesCount, hasLotImages: lotImagesCount > 0 }
             : {}),
         };
-        setPartyEdits((prev) => ({ ...prev, [lotId]: normalizedEdit }));
+        const mergeNormalized = (prev) => {
+          const existing = prev[lotId] || {};
+          return {
+            ...prev,
+            [lotId]: {
+              ...existing,
+              ...normalizedEdit,
+              // Keep already-hydrated blobs if this PATCH/PUT response only touched non-media fields
+              receipt:
+                Object.prototype.hasOwnProperty.call(result, 'receipt')
+                  ? (result.receipt ?? '')
+                  : (existing.receipt ?? ''),
+              partyVoiceNote:
+                Object.prototype.hasOwnProperty.call(result, 'partyVoiceNote')
+                  ? (result.partyVoiceNote ?? '')
+                  : (existing.partyVoiceNote ?? ''),
+              adminVoiceNote:
+                Object.prototype.hasOwnProperty.call(result, 'adminVoiceNote')
+                  ? (result.adminVoiceNote ?? '')
+                  : (existing.adminVoiceNote ?? ''),
+            },
+          };
+        };
+        setPartyEdits(mergeNormalized);
         if (user?.role === 'admin') {
-          setAdminReportingPartyEdits((prev) => ({ ...prev, [lotId]: normalizedEdit }));
+          setAdminReportingPartyEdits(mergeNormalized);
         }
         if (user?.role === 'party') {
-          setPartyCrossPartyEdits((prev) => ({ ...prev, [lotId]: normalizedEdit }));
+          setPartyCrossPartyEdits(mergeNormalized);
         }
         return normalizedEdit;
       } catch (error) {
@@ -1282,6 +1426,7 @@ export function AppProvider({ children }) {
       updatePartyEdit,
       patchLotReceipt,
       patchLotImages,
+      patchLotVoiceNotes,
       loadLedgerReceipts,
       ledgerReceiptsVersion,
       payments,
@@ -1338,6 +1483,7 @@ export function AppProvider({ children }) {
       updatePartyEdit,
       patchLotReceipt,
       patchLotImages,
+      patchLotVoiceNotes,
       loadLedgerReceipts,
       ledgerReceiptsVersion,
       payments,

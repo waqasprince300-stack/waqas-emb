@@ -1,6 +1,7 @@
 import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import LazyReceiptThumb from '../components/receipt/LazyReceiptThumb';
+import { NoteReadOnlyBox, VoiceNotePlayerPill } from '../components/voice/VoiceNoteControl';
 import Swal from 'sweetalert2';
 import { useApp } from '../context/AppContext';
 import { Modal, FormGroup, EmptyState, SearchBar } from '../components/UI';
@@ -32,11 +33,6 @@ function formatReviewSubmittedAt(lot, pe) {
   return label || null;
 }
 
-function needsOwnerBillingChoice(lot, pe, payments) {
-  return hasOwnerReceivedForLot(lot, payments) || pendingRevisionIsReal(pe);
-}
-
-/** Positive party ledger increase during pending review (for delta-only owner billing). */
 function partyRevisionPositiveDelta(pe) {
   const pr = pe?.pendingRevision;
   if (!pr || !pendingRevisionIsReal(pe)) return 0;
@@ -130,6 +126,22 @@ export default function ReviewLots() {
   }, [reportingLots, debouncedSearch, searchField, parties]);
 
   /** Deep link: /review-lots?lotId=… → focus that pending lot. */
+  const deepLinkScrollTimerRef = useRef(null);
+
+  useEffect(() => {
+    return () => {
+      if (deepLinkScrollTimerRef.current) {
+        clearTimeout(deepLinkScrollTimerRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!highlightLotId) return undefined;
+    const clearHl = setTimeout(() => setHighlightLotId(null), 8000);
+    return () => clearTimeout(clearHl);
+  }, [highlightLotId]);
+
   useEffect(() => {
     const lotId = String(searchParams.get('lotId') || '').trim();
     if (!lotId || initialDataLoading) return;
@@ -152,15 +164,18 @@ export default function ReviewLots() {
     next.delete('lotId');
     setSearchParams(next, { replace: true });
 
-    const t = setTimeout(() => {
+    if (deepLinkScrollTimerRef.current) {
+      clearTimeout(deepLinkScrollTimerRef.current);
+    }
+    deepLinkScrollTimerRef.current = setTimeout(() => {
+      deepLinkScrollTimerRef.current = null;
       const el = document.getElementById(`rl-lot-row-${lotId}`);
-      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+        const scroller = el.closest('.table-scroll');
+        if (scroller) scroller.scrollLeft = 0;
+      }
     }, 250);
-    const clearHl = setTimeout(() => setHighlightLotId(null), 8000);
-    return () => {
-      clearTimeout(t);
-      clearTimeout(clearHl);
-    };
   }, [searchParams, setSearchParams, reportingLots, initialDataLoading]);
 
   const peBill = (lotId, lot) => {
@@ -408,7 +423,7 @@ export default function ReviewLots() {
                       id={`rl-lot-row-${l.id}`}
                       style={
                         String(highlightLotId) === String(l.id)
-                          ? { background: 'var(--warning-bg, #fef3c7)', outline: '2px solid var(--warning, #f59e0b)' }
+                          ? { background: 'var(--warning-bg, #fef3c7)', boxShadow: 'inset 0 0 0 2px var(--warning, #f59e0b)' }
                           : undefined
                       }
                     >
@@ -444,8 +459,37 @@ export default function ReviewLots() {
                           emptyLabel="—"
                         />
                       </td>
-                      <td style={{ fontSize: 12, maxWidth: 220 }}>
-                        <div>{pe.notes || '—'}</div>
+                      <td style={{ fontSize: 12, maxWidth: 240 }}>
+                        <div>{pe.notes || (pe.adminNotes || pe.hasPartyVoiceNote || pe.partyVoiceNote || pe.hasAdminVoiceNote || pe.adminVoiceNote ? '' : '—')}</div>
+                        {pe.adminNotes && (
+                          <div style={{ fontSize: 11.5, color: 'var(--primary, #1e40af)', marginTop: pe.notes ? 4 : 0 }}>
+                            <strong>Admin:</strong> {pe.adminNotes}
+                          </div>
+                        )}
+                        {(pe.hasPartyVoiceNote || pe.partyVoiceNote || pe.hasAdminVoiceNote || pe.adminVoiceNote) && (
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
+                            <VoiceNotePlayerPill
+                              compact
+                              lotId={l.id}
+                              src={pe.partyVoiceNote || ''}
+                              hasVoiceNote={Boolean(pe.hasPartyVoiceNote || pe.partyVoiceNote)}
+                              duration={pe.partyVoiceNoteDuration || 0}
+                              label="Party Voice"
+                              roleTone="party"
+                              businessOwnerId={l.businessOwnerId}
+                            />
+                            <VoiceNotePlayerPill
+                              compact
+                              lotId={l.id}
+                              src={pe.adminVoiceNote || ''}
+                              hasVoiceNote={Boolean(pe.hasAdminVoiceNote || pe.adminVoiceNote)}
+                              duration={pe.adminVoiceNoteDuration || 0}
+                              label="Admin Voice"
+                              roleTone="admin"
+                              businessOwnerId={l.businessOwnerId}
+                            />
+                          </div>
+                        )}
                         {pendingRevisionIsReal(pe) ? (
                           <div
                             style={{
@@ -555,16 +599,46 @@ export default function ReviewLots() {
                       emptyLabel="—"
                     />
                   </div>
-                  {(pe.notes || pendingRevisionIsReal(pe) || hasOwnerReceivedForLot(l, reportingPayments)) && (
-                    <div style={{ fontSize: 12.5, marginTop: 8, padding: '10px', background: 'var(--primary-bg, #f8fafc)', border: '1px solid var(--border, #e2e8f0)', borderRadius: '8px' }}>
-                      {pe.notes && <div style={{ marginBottom: 6, color: 'var(--text-primary)' }}>{pe.notes}</div>}
+                  {(pe.notes ||
+                    pe.adminNotes ||
+                    pe.hasPartyVoiceNote ||
+                    pe.partyVoiceNote ||
+                    pe.hasAdminVoiceNote ||
+                    pe.adminVoiceNote ||
+                    pendingRevisionIsReal(pe) ||
+                    hasOwnerReceivedForLot(l, reportingPayments)) && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 6 }}>
+                      <NoteReadOnlyBox
+                        compact
+                        title="Party"
+                        text={pe.notes || ''}
+                        lotId={l.id}
+                        voiceSrc={pe.partyVoiceNote || ''}
+                        hasVoiceNote={Boolean(pe.hasPartyVoiceNote || pe.partyVoiceNote)}
+                        duration={pe.partyVoiceNoteDuration || 0}
+                        voiceLabel="Party Voice"
+                        roleTone="party"
+                        businessOwnerId={l.businessOwnerId}
+                      />
+                      <NoteReadOnlyBox
+                        compact
+                        title="Admin"
+                        text={pe.adminNotes || ''}
+                        lotId={l.id}
+                        voiceSrc={pe.adminVoiceNote || ''}
+                        hasVoiceNote={Boolean(pe.hasAdminVoiceNote || pe.adminVoiceNote)}
+                        duration={pe.adminVoiceNoteDuration || 0}
+                        voiceLabel="Admin Voice"
+                        roleTone="admin"
+                        businessOwnerId={l.businessOwnerId}
+                      />
                       {pendingRevisionIsReal(pe) ? (
-                        <div style={{ fontSize: 11.5, color: 'var(--warning, #92400e)', lineHeight: 1.4 }}>
+                        <div style={{ fontSize: 11.5, color: 'var(--warning, #92400e)', lineHeight: 1.4, padding: '4px 8px', background: 'var(--warning-bg, #fef3c7)', borderRadius: 6 }}>
                           Party revised bill: ₨
                           {Number(pe.pendingRevision.fromAmount).toLocaleString()} → ₨
                           {Number(pe.pendingRevision.toAmount).toLocaleString()}
                           {hasOwnerReceivedForLot(l, reportingPayments) ? (
-                            <span style={{ display: 'block', marginTop: 4 }}>· Owner payment exists</span>
+                            <span style={{ display: 'block', marginTop: 2 }}>· Owner payment exists</span>
                           ) : null}
                         </div>
                       ) : hasOwnerReceivedForLot(l, reportingPayments) ? (
@@ -601,8 +675,6 @@ export default function ReviewLots() {
         )}
       </div>
 
-
-
       {rejectModal && (
         <Modal
           title={`Reject completion — ${rejectModal.lotNo || rejectModal.lotNumber}`}
@@ -622,8 +694,7 @@ export default function ReviewLots() {
               </button>
               <button
                 type="submit"
-                className="btn btn-primary"
-                style={{ background: 'var(--danger, #dc2626)', borderColor: 'var(--danger, #dc2626)' }}
+                className="btn btn-danger"
                 disabled={busyId}
               >
                 {busyId ? (

@@ -1,6 +1,7 @@
 import React from 'react';
 import { EmptyState } from '../UI';
 import LazyReceiptThumb from '../receipt/LazyReceiptThumb';
+import { NoteReadOnlyBox } from '../voice/VoiceNoteControl';
 import { getPartyLedgerBillDisplay } from '../../utils/partyBillPrivacy';
 import { normalizedBusinessOwnerId } from '../../utils/businessWorkspace';
 import { formatDisplayDate } from '../../utils/dateFilters';
@@ -91,7 +92,42 @@ export default function PLMobileTiles({
                   <div>Allot Date: {getPartyAllotDate(l) ? formatDisplayDate(getPartyAllotDate(l)) : '\u2014'}</div>
                   <div>Complete Date: {displayComplete ? formatDisplayDate(displayComplete) : '\u2014'}</div>
                   {l.description && <div>Note: {l.description}</div>}
-                  {pe.notes && <div>Party Note: {pe.notes}</div>}
+                  {(pe.notes || pe.adminNotes || pe.hasPartyVoiceNote || pe.partyVoiceNote || pe.hasAdminVoiceNote || pe.adminVoiceNote) && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 5, marginTop: 4 }}>
+                      <NoteReadOnlyBox
+                        compact
+                        title="Party"
+                        text={pe.notes || ''}
+                        lotId={l.id}
+                        voiceSrc={pe.partyVoiceNote || ''}
+                        hasVoiceNote={Boolean(pe.hasPartyVoiceNote || pe.partyVoiceNote)}
+                        duration={pe.partyVoiceNoteDuration || 0}
+                        voiceLabel="Party"
+                        roleTone="party"
+                        businessOwnerId={normalizedBusinessOwnerId(l.businessOwnerId)}
+                        isParty={isParty}
+                        locked={
+                          isParty &&
+                          ['completed', 'received back'].includes(
+                            String(l.status || '').toLowerCase().trim()
+                          )
+                        }
+                      />
+                      <NoteReadOnlyBox
+                        compact
+                        title="Admin"
+                        text={pe.adminNotes || ''}
+                        lotId={l.id}
+                        voiceSrc={pe.adminVoiceNote || ''}
+                        hasVoiceNote={Boolean(pe.hasAdminVoiceNote || pe.adminVoiceNote)}
+                        duration={pe.adminVoiceNoteDuration || 0}
+                        voiceLabel="Admin"
+                        roleTone="admin"
+                        businessOwnerId={normalizedBusinessOwnerId(l.businessOwnerId)}
+                        isParty={isParty}
+                      />
+                    </div>
+                  )}
                   {l.rejectionNote && displayStatus === 'Rejected' && (
                     <div style={{ color: 'var(--danger, #dc2626)', fontWeight: 600 }}>
                       Rejected: {l.rejectionNote}
@@ -108,8 +144,8 @@ export default function PLMobileTiles({
                       businessOwnerId={normalizedBusinessOwnerId(l.businessOwnerId)}
                       lotLabel={l.lotNo || l.lotNumber}
                       onOpen={setReceiptPreview}
-                      emptyLabel={isParty && displayStatus !== 'Pending' ? 'Add bill' : 'No bill'}
-                      onUpload={isParty && displayStatus !== 'Pending' ? (f) => handleDirectBillUpload(l, f) : undefined}
+                      emptyLabel={isAdmin || (isParty && displayStatus !== 'Completed' && displayStatus !== 'Pending') ? 'Add bill' : 'No bill'}
+                      onUpload={isAdmin || (isParty && displayStatus !== 'Completed' && displayStatus !== 'Pending') ? (f) => handleDirectBillUpload(l, f) : undefined}
                     />
                     <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                       {displayStatus !== 'Pending' && renderLotPicturesButton(l, pe)}
@@ -149,7 +185,7 @@ export default function PLMobileTiles({
                       {isAdmin && pe.billRevisionRequest && String(pe.billRevisionRequest.status || '').toLowerCase() === 'pending' && (
                         <button
                           onClick={() => setRevisionReview({ lot: l, updateOwnerBill: true, useCustomOwner: false, customOwnerAmount: '', rejectionNote: '' })}
-                          style={{ padding: '4px 12px', fontSize: 12, fontWeight: 700, borderRadius: 6, cursor: 'pointer', background: 'var(--warning, #f59e0b)', color: 'var(--card-bg, #ffffff)', border: 'none', fontFamily: 'Inter, sans-serif' }}
+                          style={{ padding: '4px 12px', fontSize: 12, fontWeight: 700, borderRadius: 6, cursor: 'pointer', background: 'var(--warning, #f59e0b)', color: '#111827', border: 'none', fontFamily: 'Inter, sans-serif' }}
                         >
                           Review request
                         </button>

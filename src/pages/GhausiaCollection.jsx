@@ -439,14 +439,22 @@ export default function GhausiaCollection() {
         return;
       }
 
-      const ledgerStatus = newStatus === 'dispatched' ? 'In Progress' : newStatus;
+      const ledgerStatus =
+        newStatus === 'dispatched'
+          ? 'In Progress'
+          : newStatus === 'received back'
+            ? 'Received Back'
+            : newStatus;
+      const partyEditPatch = { overrideStatus: ledgerStatus };
+      if (newStatus === 'received back') {
+        partyEditPatch.completeDate = today;
+      } else if (['pending', 'dispatched', 'rejected'].includes(newStatus)) {
+        partyEditPatch.completeDate = '';
+      }
       try {
         await updatePartyEdit(
           lot.id,
-          {
-            overrideStatus: ledgerStatus,
-            completeDate: '',
-          },
+          partyEditPatch,
           { businessOwnerId: lotBizId(lot) }
         );
       } catch (e) {
@@ -1166,21 +1174,23 @@ export default function GhausiaCollection() {
 
 
   const handleSave = async (form) => {
-    if (form.status === 'dispatched' && !form.partyId) {
+    const { _adminNoteMeta, ...formWithoutMeta } = form;
+    const adminNoteMeta = _adminNoteMeta || null;
+    if (formWithoutMeta.status === 'dispatched' && !formWithoutMeta.partyId) {
       Swal.fire({ icon: 'warning', title: 'Select a Party', text: 'You must select a party before dispatching this lot.' });
       return;
     }
-    const bulkLotNumbers = Array.isArray(form.bulkLotNumbers) ? form.bulkLotNumbers : null;
+    const bulkLotNumbers = Array.isArray(formWithoutMeta.bulkLotNumbers) ? formWithoutMeta.bulkLotNumbers : null;
 
     const prev = editing;
     const wasCompleted = prev?.status === 'completed';
-    const nowCompleted = form.status === 'completed';
+    const nowCompleted = formWithoutMeta.status === 'completed';
     const becomingCompleted = nowCompleted && !wasCompleted;
-    let saveForm = { ...form };
+    let saveForm = { ...formWithoutMeta };
     let recordOwnerPaymentAfterSave = false;
 
     if (bulkLotNumbers && bulkLotNumbers.length > 1 && !prev) {
-      const targetBiz = String(form.saveBusinessOwnerId || activeBusinessOwnerId || '').trim();
+      const targetBiz = String(formWithoutMeta.saveBusinessOwnerId || activeBusinessOwnerId || '').trim();
       if (!targetBiz.trim()) {
         lotSaveErrorToast('Select a business collection before saving lots.');
         return;
@@ -1206,6 +1216,7 @@ export default function GhausiaCollection() {
       setLotSaving(true);
       let created = 0;
       let skipped = 0;
+      let noteFailedCount = 0;
       const failed = [];
 
       try {
@@ -1217,7 +1228,7 @@ export default function GhausiaCollection() {
             continue;
           }
           try {
-            await addLot(
+            const createdBulkResult = await addLot(
               {
                 ...basePayload,
                 lotNumber,
@@ -1226,6 +1237,17 @@ export default function GhausiaCollection() {
               },
               { businessOwnerId: targetBiz }
             );
+            const createdBulkLot = Array.isArray(createdBulkResult)
+              ? createdBulkResult[0]
+              : createdBulkResult;
+            if (adminNoteMeta && createdBulkLot?.id) {
+              try {
+                await updatePartyEdit(createdBulkLot.id, adminNoteMeta, { businessOwnerId: targetBiz });
+              } catch (noteErr) {
+                noteFailedCount += 1;
+                console.warn('Failed to save admin note/voice note for bulk lot', noteErr);
+              }
+            }
             existingKeys.add(lotKey);
             created += 1;
           } catch (e) {
@@ -1245,9 +1267,10 @@ export default function GhausiaCollection() {
         const parts = [`${created} lot${created === 1 ? '' : 's'} saved`];
         if (skipped > 0) parts.push(`${skipped} skipped (already exist)`);
         if (failed.length > 0) parts.push(`${failed.length} failed`);
+        if (noteFailedCount > 0) parts.push(`${noteFailedCount} admin note${noteFailedCount === 1 ? '' : 's'} failed`);
 
         await Swal.fire({
-          icon: failed.length > 0 ? 'warning' : 'success',
+          icon: failed.length > 0 || noteFailedCount > 0 ? 'warning' : 'success',
           title: 'Bulk save done',
           html: `<p style="margin:0 0 8px">${parts.join(' · ')}</p>${failed.length > 0
             ? `<p style="margin:0;font-size:13px;color:var(--text-muted, #64748b)">${failed
@@ -1313,6 +1336,19 @@ export default function GhausiaCollection() {
     setLotSaving(true);
     try {
       if (prev) {
+        const prevStatusNorm = String(prev.status || '').toLowerCase().trim();
+        const nextStatusNorm = String(saveForm.status || '').toLowerCase().trim();
+        const transitioningToApproved =
+          prevStatusNorm !== 'completed' &&
+          prevStatusNorm !== 'received back' &&
+          (nextStatusNorm === 'completed' || nextStatusNorm === 'received back');
+        const postMoveBiz =
+          String(saveForm.moveToBusinessOwnerId || targetBiz || '').trim() || targetBiz;
+        let adminNoteSavedPreApproval = false;
+        if (adminNoteMeta && transitioningToApproved && !saveForm.moveToBusinessOwnerId) {
+          await updatePartyEdit(prev.id, adminNoteMeta, { businessOwnerId: targetBiz });
+          adminNoteSavedPreApproval = true;
+        }
         await updateLot(prev.id, lotPayloadForApi, { businessOwnerId: targetBiz });
 
         // Auto-sync lot number and design number to the linked lot
@@ -1333,25 +1369,27 @@ export default function GhausiaCollection() {
             syncUpdates.designNo = saveForm.designNo;
           }
           try {
-            await updateLot(prev.linkedLotId, syncUpdates, { businessOwnerId: targetBiz });
+            await updateLot(prev.linkedLotId, syncUpdates, { businessOwnerId: postMoveBiz });
           } catch (err) {
             console.warn('Failed to sync lot details to linked lot', err);
           }
         }
-        if (saveForm.status === 'completed') {
+        if (saveForm.status === 'completed' || (adminNoteMeta && !adminNoteSavedPreApproval)) {
           await updatePartyEdit(
             prev.id,
             {
-              overrideStatus: 'Completed',
-              completeDate: today,
+              ...(saveForm.status === 'completed'
+                ? { overrideStatus: 'Completed', completeDate: today }
+                : {}),
+              ...(adminNoteMeta && !adminNoteSavedPreApproval ? adminNoteMeta : {}),
             },
-            { businessOwnerId: targetBiz }
+            { businessOwnerId: postMoveBiz }
           );
         }
         if (recordOwnerPaymentAfterSave) {
           try {
             await recordOwnerReceivedForCompletedLot(
-              { ...prev, ...saveForm, businessOwnerId: targetBiz },
+              { ...prev, ...saveForm, businessOwnerId: postMoveBiz },
               saveForm.billAmount,
               today
             );
@@ -1364,13 +1402,16 @@ export default function GhausiaCollection() {
           }
         }
       } else {
-        const created = await addLot(lotPayloadForApi, { businessOwnerId: targetBiz });
-        if (saveForm.status === 'completed') {
+        const createdRes = await addLot(lotPayloadForApi, { businessOwnerId: targetBiz });
+        const createdMain = Array.isArray(createdRes) ? createdRes[0] : createdRes;
+        if ((saveForm.status === 'completed' || adminNoteMeta) && createdMain?.id) {
           await updatePartyEdit(
-            created.id,
+            createdMain.id,
             {
-              overrideStatus: 'Completed',
-              completeDate: today,
+              ...(saveForm.status === 'completed'
+                ? { overrideStatus: 'Completed', completeDate: today }
+                : {}),
+              ...(adminNoteMeta || {}),
             },
             { businessOwnerId: targetBiz }
           );
@@ -1378,7 +1419,7 @@ export default function GhausiaCollection() {
         if (recordOwnerPaymentAfterSave) {
           try {
             await recordOwnerReceivedForCompletedLot(
-              { ...created, ...saveForm, businessOwnerId: targetBiz },
+              { ...(createdMain || {}), ...saveForm, businessOwnerId: targetBiz },
               saveForm.billAmount,
               today
             );
@@ -2068,6 +2109,7 @@ export default function GhausiaCollection() {
         openLinkedLot={openLinkedLot}
         setDeleteTarget={setDeleteTarget}
         renderOwnerBillableAmount={renderOwnerBillableAmount}
+        partyEdits={partyEdits}
       />
 
       {/* Mobile Views */}
@@ -2105,6 +2147,7 @@ export default function GhausiaCollection() {
         openLinkedLot={openLinkedLot}
         setDeleteTarget={setDeleteTarget}
         renderOwnerBillableAmount={renderOwnerBillableAmount}
+        partyEdits={partyEdits}
       />
 
       {/* Pagination */}
@@ -2132,6 +2175,7 @@ export default function GhausiaCollection() {
           <LotForm
             key={editing?.id || 'new'}
             initial={editing}
+            initialPartyEdit={editing ? partyEdits[editing.id] || null : null}
             onSave={handleSave}
             onClose={() => {
               if (!lotSaving) {
@@ -2161,7 +2205,6 @@ export default function GhausiaCollection() {
         confirmCompleteBillModal={confirmCompleteBillModal}
         ownerReceivedNet={ownerReceivedNet}
         getPartyName={getPartyName}
-        partyEdits={partyEdits}
       />
 
       {/* Payment Modal */}

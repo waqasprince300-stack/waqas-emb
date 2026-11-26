@@ -3,6 +3,7 @@ import LotStatusSelect from '../LotStatusSelect';
 import PartyPickerSelect from '../PartyPickerSelect';
 import { ActionBtn } from '../UI';
 import LotEmptyState from './LotEmptyState';
+import { NoteReadOnlyBox } from '../voice/VoiceNoteControl';
 import { formatDisplayDate } from '../../utils/dateFilters';
 import { workspaceDisplayTitleForLot } from '../../utils/businessWorkspace';
 import { STATUS_OPTIONS } from '../../utils/ghausiaHelpers';
@@ -55,6 +56,7 @@ export default function LotMobileViews({
   openLinkedLot,
   setDeleteTarget,
   renderOwnerBillableAmount,
+  partyEdits = {},
 }) {
   const emptyStateProps = {
     search,
@@ -171,6 +173,40 @@ export default function LotMobileViews({
                     parties={parties}
                   />
                 </div>
+                {(() => {
+                  const pe = partyEdits[l.id] || {};
+                  const hasPv = Boolean(pe.hasPartyVoiceNote || pe.partyVoiceNote);
+                  const hasAv = Boolean(pe.hasAdminVoiceNote || pe.adminVoiceNote);
+                  if (!pe.adminNotes && !pe.notes && !hasPv && !hasAv) return null;
+                  return (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 5, marginTop: 6 }}>
+                      <NoteReadOnlyBox
+                        compact
+                        title="Admin"
+                        text={pe.adminNotes || ''}
+                        lotId={l.id}
+                        voiceSrc={pe.adminVoiceNote || ''}
+                        hasVoiceNote={hasAv}
+                        duration={pe.adminVoiceNoteDuration || 0}
+                        voiceLabel="Admin"
+                        roleTone="admin"
+                        businessOwnerId={l.businessOwnerId}
+                      />
+                      <NoteReadOnlyBox
+                        compact
+                        title="Party"
+                        text={pe.notes || ''}
+                        lotId={l.id}
+                        voiceSrc={pe.partyVoiceNote || ''}
+                        hasVoiceNote={hasPv}
+                        duration={pe.partyVoiceNoteDuration || 0}
+                        voiceLabel="Party"
+                        roleTone="party"
+                        businessOwnerId={l.businessOwnerId}
+                      />
+                    </div>
+                  );
+                })()}
               </div>
 
               <div className="lot-tile-footer">
@@ -216,7 +252,6 @@ export default function LotMobileViews({
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
                     {l.suitComponent === 'dupatta' && <button type="button" onClick={() => openEdit(l)} style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', background: 'var(--primary-bg, #fdf4ff)', color: 'var(--primary, #a21caf)', border: '1px solid var(--border, #f5d0fe)', borderRadius: 4, cursor: 'pointer' }}>Dupatta</button>}
                     {l.suitComponent === 'main' && l.suitType === '3-piece' && <button type="button" onClick={() => openEdit(l)} style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', background: 'var(--primary-bg, #eff6ff)', color: 'var(--primary, #1d4ed8)', border: '1px solid var(--border, #bfdbfe)', borderRadius: 4, cursor: 'pointer' }}>Main Lot</button>}
-                    {l.isRework && <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', background: 'var(--primary-bg, #fffbeb)', color: 'var(--primary, #b45309)', border: '1px solid var(--border, #fde68a)', borderRadius: 4 }}>Rework</span>}
                     {l.isRework && <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', background: 'var(--primary-bg, #fffbeb)', color: 'var(--primary, #b45309)', border: '1px solid var(--border, #fde68a)', borderRadius: 4 }}>Rework</span>}
                     {l.linkedLotId && (
                       <button type="button" onClick={() => openLinkedLot(l.linkedLotId)} style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', background: 'var(--primary-bg, #f8fafc)', color: 'var(--text-secondary, #334155)', border: '1px solid var(--border, #cbd5e1)', borderRadius: 4, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -284,6 +319,7 @@ export default function LotMobileViews({
               <div style={{ marginTop: 4 }}>
                 <PartyPickerSelect
                   value={l.partyId || ''}
+                  fallbackName={l.partyName || ''}
                   onChange={(val) => handlePartyChange(l.id, val)}
                   parties={parties}
                 />
@@ -293,6 +329,40 @@ export default function LotMobileViews({
                 <div>Workspace: {workspaceDisplayTitleForLot(l, businessOwners)}</div>
                 <div>Allot Date: {formatDisplayDate(l.allotDate)}</div>
                 {l.description && <div>Note: {l.description}</div>}
+                {(() => {
+                  const pe = partyEdits[l.id] || {};
+                  const hasPv = Boolean(pe.hasPartyVoiceNote || pe.partyVoiceNote);
+                  const hasAv = Boolean(pe.hasAdminVoiceNote || pe.adminVoiceNote);
+                  if (!pe.adminNotes && !pe.notes && !hasPv && !hasAv) return null;
+                  return (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 5, marginTop: 6 }}>
+                      <NoteReadOnlyBox
+                        compact
+                        title="Admin"
+                        text={pe.adminNotes || ''}
+                        lotId={l.id}
+                        voiceSrc={pe.adminVoiceNote || ''}
+                        hasVoiceNote={hasAv}
+                        duration={pe.adminVoiceNoteDuration || 0}
+                        voiceLabel="Admin Voice"
+                        roleTone="admin"
+                        businessOwnerId={l.businessOwnerId}
+                      />
+                      <NoteReadOnlyBox
+                        compact
+                        title="Party"
+                        text={pe.notes || ''}
+                        lotId={l.id}
+                        voiceSrc={pe.partyVoiceNote || ''}
+                        hasVoiceNote={hasPv}
+                        duration={pe.partyVoiceNoteDuration || 0}
+                        voiceLabel="Party Voice"
+                        roleTone="party"
+                        businessOwnerId={l.businessOwnerId}
+                      />
+                    </div>
+                  );
+                })()}
               </div>
 
               <div className="gh-mob-bill-row">

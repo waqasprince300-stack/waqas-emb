@@ -11,7 +11,7 @@ import {
   dateRangeLabel,
   formatDisplayDateTime,
 } from '../utils/dateFilters';
-import { getAdminLedgerOrBusinessBill } from '../utils/partyBillPrivacy';
+import { getAdminLedgerOrBusinessBill, getPartyLedgerBillDisplay } from '../utils/partyBillPrivacy';
 import useDebounce from '../hooks/useDebounce';
 import PaymentSlipCell from '../components/receipt/PaymentSlipCell';
 import { formatLakhCrore } from '../utils/numberToWords';
@@ -279,7 +279,7 @@ function TrashView({ trashedParties, trashedOwners, loading, onRestoreParty, onP
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 300px), 1fr))', gap: 16 }}>
             {trashedParties.map((party) => (
-              <div key={party._id} style={{ background: 'var(--card-bg, #fff)', border: '1px solid var(--border)', borderRadius: 12, padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div key={party._id} style={{ background: 'var(--card-bg, #fff)', border: '1px solid var(--border)', borderRadius: 12, padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
                 <div>
                   <div style={{ fontWeight: 700, fontSize: 16 }}>{party.name.replace(/ \(Deleted \d+\)$/, '')}</div>
                   <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Deleted: {formatDisplayDateTime(party.deletedAt)}</div>
@@ -301,7 +301,7 @@ function TrashView({ trashedParties, trashedOwners, loading, onRestoreParty, onP
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 300px), 1fr))', gap: 16 }}>
             {trashedOwners.map((owner) => (
-              <div key={owner._id} style={{ background: 'var(--card-bg, #fff)', border: '1px solid var(--border)', borderRadius: 12, padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div key={owner._id} style={{ background: 'var(--card-bg, #fff)', border: '1px solid var(--border)', borderRadius: 12, padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
                 <div>
                   <div style={{ fontWeight: 700, fontSize: 16 }}>{owner.name.replace(/ \(Deleted \d+\)$/, '')}</div>
                   <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Deleted: {formatDisplayDateTime(owner.deletedAt)}</div>
@@ -319,6 +319,20 @@ function TrashView({ trashedParties, trashedOwners, loading, onRestoreParty, onP
   );
 }
 
+const PARTY_CARD_MIN_WIDTH = 300;
+const PARTY_GRID_GAP = 16;
+
+function computePartiesGridPageSize(containerWidth) {
+  if (!containerWidth || containerWidth <= 0) return 10;
+  const cols = Math.max(
+    1,
+    Math.floor((containerWidth + PARTY_GRID_GAP) / (PARTY_CARD_MIN_WIDTH + PARTY_GRID_GAP))
+  );
+  if (cols <= 2) return 8;
+  if (cols === 3) return 9;
+  return cols * 2; // 4 cols -> 8, 5 cols -> 10, 6 cols -> 12 (complete rows without empty slots)
+}
+
 export default function Parties() {
   const {
     parties,
@@ -332,7 +346,11 @@ export default function Parties() {
     initialDataLoading,
     refreshData,
   } = useApp();
-  const PAGE_SIZE = 8;
+  const [pageSize, setPageSize] = useState(() =>
+    typeof window !== 'undefined'
+      ? computePartiesGridPageSize(Math.max(300, window.innerWidth - 280))
+      : 10
+  );
   const [modal, setModal] = useState(null);
   const [editing, setEditing] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
@@ -355,6 +373,26 @@ export default function Parties() {
   const [trashedParties, setTrashedParties] = useState([]);
   const [trashedOwners, setTrashedOwners] = useState([]);
   const [trashLoading, setTrashLoading] = useState(false);
+
+  useEffect(() => {
+    const el = listTopRef.current;
+    if (!el) return undefined;
+    const sync = () => {
+      const w = el.clientWidth;
+      if (w > 0) {
+        const next = computePartiesGridPageSize(w);
+        setPageSize((prev) => (prev === next ? prev : next));
+      }
+    };
+    sync();
+    if (typeof ResizeObserver !== 'undefined') {
+      const ro = new ResizeObserver(sync);
+      ro.observe(el);
+      return () => ro.disconnect();
+    }
+    window.addEventListener('resize', sync);
+    return () => window.removeEventListener('resize', sync);
+  }, [activeTab, initialDataLoading]);
 
   useEffect(() => {
     if (activeTab === 'trash') {
@@ -426,10 +464,10 @@ export default function Parties() {
     }
     return matchQ;
   }), [parties, debouncedSearch, searchField]);
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const safeCurrentPage = Math.min(currentPage, totalPages);
-  const pageStart = (safeCurrentPage - 1) * PAGE_SIZE;
-  const paginatedParties = filtered.slice(pageStart, pageStart + PAGE_SIZE);
+  const pageStart = (safeCurrentPage - 1) * pageSize;
+  const paginatedParties = filtered.slice(pageStart, pageStart + pageSize);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -465,11 +503,18 @@ export default function Parties() {
     [reportingPartyEdits]
   );
 
+  // Active lots should reflect only explicit party-facing bills (never owner-bill fallback).
+  const activePartyBill = useCallback(
+    (l) => getPartyLedgerBillDisplay(reportingPartyEdits[l.id] || {}),
+    [reportingPartyEdits]
+  );
+
   const EMPTY_LOT_STATS = {
     total: 0,
     active: 0,
     completed: 0,
     activeAmount: 0,
+    hasActivePartyBill: false,
     completedAmount: 0,
     totalValue: 0,
     paid: 0,
@@ -512,16 +557,20 @@ export default function Parties() {
       const lots = lotsByParty.get(pid) || [];
       const partyName = String(party.name || 'Unknown').trim();
       let activeAmount = 0;
+      let hasActivePartyBill = false;
       let completedAmount = 0;
       let active = 0;
       let completed = 0;
       for (const l of lots) {
-        const amt = lotBillAmount(l);
         if (lotStatusKey(l) === 'completed') {
-          completedAmount += amt;
+          completedAmount += lotBillAmount(l);
           completed += 1;
         } else {
-          activeAmount += amt;
+          const partyAmt = activePartyBill(l);
+          if (partyAmt != null) {
+            activeAmount += partyAmt;
+            hasActivePartyBill = true;
+          }
           active += 1;
         }
       }
@@ -534,6 +583,7 @@ export default function Parties() {
         active,
         completed,
         activeAmount,
+        hasActivePartyBill,
         completedAmount,
         totalValue: completedAmount,
         paid: totalPaid,
@@ -542,7 +592,7 @@ export default function Parties() {
       });
     }
     return result;
-  }, [parties, rangedLots, rangedPayments, lotBillAmount, lotStatusKey]);
+  }, [parties, rangedLots, rangedPayments, lotBillAmount, activePartyBill, lotStatusKey]);
 
   const getLotStats = (partyId) => statsByPartyId.get(String(partyId ?? '')) || EMPTY_LOT_STATS;
 
@@ -613,7 +663,7 @@ export default function Parties() {
     ['var(--primary-bg, #eff6ff)', 'var(--primary, #1e40af)'],
     ['var(--success-bg, #f0fdf4)', 'var(--success, #15803d)'],
     ['var(--warning-bg, #fff7ed)', 'var(--warning, #c2410c)'],
-    ['#F5F3FF', '#6d28d9'],
+    ['var(--purple-bg, #F5F3FF)', 'var(--purple, #6d28d9)'],
     ['var(--danger-bg, #fef2f2)', 'var(--danger, #991b1b)'],
     ['var(--primary-bg, #f0f9ff)', '#075985'],
   ];
@@ -735,12 +785,12 @@ export default function Parties() {
         />
       ) : (
         <>
-          {/* Summary */}
+      {/* Summary */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 12, paddingRight: 4 }}>
         <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Market Overview</div>
-        <button 
-          onClick={() => setHideAmounts(h => !h)} 
-          style={{ background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-muted)', fontWeight: 600 }}
+        <button
+          onClick={() => setHideAmounts(h => !h)}
+          style={{ background: 'transparent', border: 'none', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-start', gap: 6, fontSize: 12, color: 'var(--text-muted)', fontWeight: 600, minWidth: 116, whiteSpace: 'nowrap', flexShrink: 0 }}
         >
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
             {hideAmounts 
@@ -754,7 +804,7 @@ export default function Parties() {
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(175px, 1fr))',
           gap: 12,
           marginBottom: 22,
         }}
@@ -794,30 +844,36 @@ export default function Parties() {
               color: 'var(--success, #10b981)',
             };
           })(),
-        ].map((c) => (
-          <div key={c.label} className="stat-card">
-            <div className="stat-label">{c.label}</div>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' }}>
-              <div style={{ fontSize: 20, fontWeight: 700, color: c.color }}>{c.value}</div>
-              {!hideAmounts && c.numVal != null && formatLakhCrore(c.numVal) && (
-                <span
-                  style={{
-                    fontSize: 11,
-                    fontWeight: 700,
-                    padding: '1.5px 6px',
-                    borderRadius: 6,
-                    background: 'var(--primary-bg, rgba(255, 255, 255, 0.08))',
-                    color: 'var(--text-secondary, #c2b6b1)',
-                    border: '1px solid var(--border)',
-                    letterSpacing: '0.01em',
-                  }}
-                >
-                  {formatLakhCrore(c.numVal)}
-                </span>
-              )}
+        ].map((c) => {
+          const lakhCroreText = c.numVal != null ? formatLakhCrore(c.numVal) : null;
+          return (
+            <div key={c.label} className="stat-card" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+              <div className="stat-label">{c.label}</div>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}>
+                <div style={{ fontSize: 'clamp(16px, 1.5vw, 20px)', fontWeight: 700, color: c.color, lineHeight: 1.2 }}>{c.value}</div>
+                <div style={{ minHeight: 20, display: 'flex', alignItems: 'center' }}>
+                  {!hideAmounts && lakhCroreText ? (
+                    <span
+                      style={{
+                        fontSize: 11,
+                        fontWeight: 700,
+                        padding: '1.5px 6px',
+                        borderRadius: 6,
+                        background: 'var(--primary-bg, rgba(255, 255, 255, 0.08))',
+                        color: 'var(--text-secondary, #c2b6b1)',
+                        border: '1px solid var(--border)',
+                        letterSpacing: '0.01em',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {lakhCroreText}
+                    </span>
+                  ) : null}
+                </div>
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Search */}
@@ -859,8 +915,8 @@ export default function Parties() {
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 300px), 1fr))',
-            gap: 16,
+            gridTemplateColumns: `repeat(auto-fill, minmax(min(100%, ${PARTY_CARD_MIN_WIDTH}px), 1fr))`,
+            gap: PARTY_GRID_GAP,
           }}
         >
           {paginatedParties.map((party, idx) => {
@@ -1005,7 +1061,13 @@ export default function Parties() {
                     <PartyStatTile
                       label="Active"
                       count={stats.active}
-                      amountStr={stats.active > 0 ? formatMoney(stats.activeAmount) : '—'}
+                      amountStr={
+                        stats.active > 0
+                          ? stats.hasActivePartyBill
+                            ? formatMoney(stats.activeAmount)
+                            : 'Bill pending'
+                          : '—'
+                      }
                       accent='var(--warning, #f59e0b)'
                       bgTint='var(--warning-bg, #fffbeb)'
                       hideAmount={hideAmounts}
@@ -1030,7 +1092,7 @@ export default function Parties() {
                       <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted, #64748b)', textTransform: 'uppercase' }}>
                         Total bill
                       </div>
-                      <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--text-primary, #1e293b)', marginTop: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      <div style={{ fontSize: 'clamp(11.5px, 1vw, 13px)', fontWeight: 800, color: 'var(--text-primary, #1e293b)', marginTop: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                         {stats.total > 0 ? (hideAmounts ? '****' : formatMoney(stats.totalValue)) : '—'}
                       </div>
                     </div>
@@ -1038,7 +1100,7 @@ export default function Parties() {
                       <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted, #64748b)', textTransform: 'uppercase' }}>
                         Paid
                       </div>
-                      <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--success, #10b981)', marginTop: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      <div style={{ fontSize: 'clamp(11.5px, 1vw, 13px)', fontWeight: 800, color: 'var(--success, #10b981)', marginTop: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                         {hideAmounts ? '****' : formatMoney(stats.paid)}
                       </div>
                     </div>
@@ -1046,7 +1108,7 @@ export default function Parties() {
                       <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted, #64748b)', textTransform: 'uppercase' }}>
                         {stats.remaining >= 0 ? 'Remaining' : 'Advance'}
                       </div>
-                      <div style={{ fontSize: 13, fontWeight: 800, color: stats.remaining > 0 ? 'var(--danger, #ef4444)' : 'var(--success, #10b981)', marginTop: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      <div style={{ fontSize: 'clamp(11.5px, 1vw, 13px)', fontWeight: 800, color: stats.remaining > 0 ? 'var(--danger, #ef4444)' : 'var(--success, #10b981)', marginTop: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                         {hideAmounts ? '****' : formatMoney(Math.abs(stats.remaining))}
                       </div>
                     </div>
@@ -1086,7 +1148,7 @@ export default function Parties() {
         totalPages={totalPages}
         totalItems={filtered.length}
         pageStart={pageStart}
-        pageSize={PAGE_SIZE}
+        pageSize={pageSize}
         onPageChange={setCurrentPage}
         scrollTargetRef={listTopRef}
       />

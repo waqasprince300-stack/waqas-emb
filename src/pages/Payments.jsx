@@ -724,17 +724,21 @@ export default function Payments() {
             style={{
               display: 'inline-flex',
               alignItems: 'center',
+              justifyContent: 'center',
               gap: 6,
               fontSize: 12,
               fontWeight: 600,
               color: showSummaryCards ? 'var(--text-secondary, #475569)' : 'var(--primary, #1e40af)',
               border: '1px solid var(--border)',
-              background: showSummaryCards ? 'var(--surface-card, #ffffff)' : 'var(--primary-bg, #eff6ff)',
+              background: showSummaryCards ? 'var(--card-bg, #ffffff)' : 'var(--primary-bg, #eff6ff)',
               borderRadius: 20,
               padding: '5px 14px',
+              minWidth: 126,
               cursor: 'pointer',
               boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
               transition: 'all 0.15s ease',
+              whiteSpace: 'nowrap',
+              flexShrink: 0,
             }}
             title={showSummaryCards ? 'Hide summary stat cards for privacy' : 'Show summary stat cards'}
           >
@@ -906,29 +910,34 @@ export default function Payments() {
                 >
                   {c.label}
                 </div>
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' }}>
-                  {c.icon && !c.isCount && (
-                    <span style={{ fontSize: 18, fontWeight: 700, color: c.color }}>{c.icon}</span>
-                  )}
-                  <span style={{ fontSize: 'clamp(12px, 4vw, 22px)', fontWeight: 700, color: c.color, whiteSpace: 'nowrap', letterSpacing: '-0.02em' }}>
-                    {c.isCount ? c.value : `₨${Number(c.value).toLocaleString()}`}
-                  </span>
-                  {!c.isCount && formatLakhCrore(c.value) && (
-                    <span
-                      style={{
-                        fontSize: 11,
-                        fontWeight: 700,
-                        padding: '1.5px 6px',
-                        borderRadius: 6,
-                        background: 'var(--primary-bg, rgba(255, 255, 255, 0.08))',
-                        color: 'var(--text-secondary, #c2b6b1)',
-                        border: '1px solid var(--border)',
-                        letterSpacing: '0.01em',
-                      }}
-                    >
-                      {formatLakhCrore(c.value)}
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                    {c.icon && !c.isCount && (
+                      <span style={{ fontSize: 18, fontWeight: 700, color: c.color }}>{c.icon}</span>
+                    )}
+                    <span style={{ fontSize: 'clamp(12px, 4vw, 22px)', fontWeight: 700, color: c.color, whiteSpace: 'nowrap', letterSpacing: '-0.02em' }}>
+                      {c.isCount ? c.value : `₨${Number(c.value).toLocaleString()}`}
                     </span>
-                  )}
+                  </div>
+                  <div style={{ minHeight: 20, display: 'flex', alignItems: 'center' }}>
+                    {!c.isCount && formatLakhCrore(c.value) ? (
+                      <span
+                        style={{
+                          fontSize: 11,
+                          fontWeight: 700,
+                          padding: '1.5px 6px',
+                          borderRadius: 6,
+                          background: 'var(--primary-bg, rgba(255, 255, 255, 0.08))',
+                          color: 'var(--text-secondary, #c2b6b1)',
+                          border: '1px solid var(--border)',
+                          letterSpacing: '0.01em',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {formatLakhCrore(c.value)}
+                      </span>
+                    ) : null}
+                  </div>
                 </div>
                 {c.note && (
                   <div
@@ -1002,29 +1011,34 @@ export default function Payments() {
                 >
                   {c.label}
                 </div>
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' }}>
-                  {c.icon && !c.isCount && (
-                    <span style={{ fontSize: 18, fontWeight: 700, color: c.color }}>{c.icon}</span>
-                  )}
-                  <span style={{ fontSize: 'clamp(12px, 4vw, 22px)', fontWeight: 700, color: c.color, whiteSpace: 'nowrap', letterSpacing: '-0.02em' }}>
-                    {c.isCount ? c.value : `₨${c.value.toLocaleString()}`}
-                  </span>
-                  {!c.isCount && formatLakhCrore(c.value) && (
-                    <span
-                      style={{
-                        fontSize: 11,
-                        fontWeight: 700,
-                        padding: '1.5px 6px',
-                        borderRadius: 6,
-                        background: 'var(--primary-bg, rgba(255, 255, 255, 0.08))',
-                        color: 'var(--text-secondary, #c2b6b1)',
-                        border: '1px solid var(--border)',
-                        letterSpacing: '0.01em',
-                      }}
-                    >
-                      {formatLakhCrore(c.value)}
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                    {c.icon && !c.isCount && (
+                      <span style={{ fontSize: 18, fontWeight: 700, color: c.color }}>{c.icon}</span>
+                    )}
+                    <span style={{ fontSize: 'clamp(12px, 4vw, 22px)', fontWeight: 700, color: c.color, whiteSpace: 'nowrap', letterSpacing: '-0.02em' }}>
+                      {c.isCount ? c.value : `₨${c.value.toLocaleString()}`}
                     </span>
-                  )}
+                  </div>
+                  <div style={{ minHeight: 20, display: 'flex', alignItems: 'center' }}>
+                    {!c.isCount && formatLakhCrore(c.value) ? (
+                      <span
+                        style={{
+                          fontSize: 11,
+                          fontWeight: 700,
+                          padding: '1.5px 6px',
+                          borderRadius: 6,
+                          background: 'var(--primary-bg, rgba(255, 255, 255, 0.08))',
+                          color: 'var(--text-secondary, #c2b6b1)',
+                          border: '1px solid var(--border)',
+                          letterSpacing: '0.01em',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {formatLakhCrore(c.value)}
+                      </span>
+                    ) : null}
+                  </div>
                 </div>
                 {c.note && (
                   <div
@@ -1154,17 +1168,43 @@ export default function Payments() {
         <div className="table-scroll">
           <table className="fixed-grid-table payments-table">
             <colgroup>
-              <col style={{ width: 46 }} />
-              <col style={{ width: 96 }} />
-              <col style={{ width: 148 }} />
-              {!isParty && <col style={{ width: '15%' }} />}
-              {isAdmin && <col style={{ width: '13%' }} />}
-              <col style={{ width: '17%' }} />
-              <col />
-              <col style={{ width: 124 }} />
-              {isParty && <col style={{ width: 134 }} />}
-              <col style={{ width: 74 }} />
-              {!isParty && <col style={{ width: 78 }} />}
+              {isParty ? (
+                <>
+                  <col style={{ width: '5%' }} />
+                  <col style={{ width: '10%' }} />
+                  <col style={{ width: '15%' }} />
+                  <col style={{ width: '16%' }} />
+                  <col style={{ width: '24%' }} />
+                  <col style={{ width: '11%' }} />
+                  <col style={{ width: '12%' }} />
+                  <col style={{ width: '7%' }} />
+                </>
+              ) : isAdmin ? (
+                <>
+                  <col style={{ width: '5%' }} />
+                  <col style={{ width: '9%' }} />
+                  <col style={{ width: '13%' }} />
+                  <col style={{ width: '12%' }} />
+                  <col style={{ width: '11%' }} />
+                  <col style={{ width: '13%' }} />
+                  <col style={{ width: '14%' }} />
+                  <col style={{ width: '10%' }} />
+                  <col style={{ width: '6%' }} />
+                  <col style={{ width: '7%' }} />
+                </>
+              ) : (
+                <>
+                  <col style={{ width: '5%' }} />
+                  <col style={{ width: '10%' }} />
+                  <col style={{ width: '14%' }} />
+                  <col style={{ width: '14%' }} />
+                  <col style={{ width: '16%' }} />
+                  <col style={{ width: '17%' }} />
+                  <col style={{ width: '10%' }} />
+                  <col style={{ width: '7%' }} />
+                  <col style={{ width: '7%' }} />
+                </>
+              )}
             </colgroup>
             <thead>
               <tr>
@@ -1225,10 +1265,10 @@ export default function Payments() {
 
                   return (
                     <tr key={`${String(p.id)}-${p._synthetic ? 'b' : 'p'}`}>
-                      <td style={{ color: 'var(--text-muted)', fontWeight: 500 }}>
+                      <td style={{ color: 'var(--text-muted)', fontWeight: 500, whiteSpace: 'nowrap' }}>
                         {filtered.length - (pageStart + i)}
                       </td>
-                      <td>{formatDisplayDate(p.date)}</td>
+                      <td style={{ whiteSpace: 'nowrap' }}>{formatDisplayDate(p.date)}</td>
                       <td>
                         <span
                           style={{
@@ -1352,7 +1392,7 @@ export default function Payments() {
                       </td>
                       {isParty && (
                         <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
-                          <div style={{ fontWeight: 700, fontSize: 14, color: (p.runningBalance || 0) > 0 ? '#1e293b' : (p.runningBalance || 0) < 0 ? '#047857' : '#64748b' }}>
+                          <div style={{ fontWeight: 700, fontSize: 14, color: (p.runningBalance || 0) > 0 ? 'var(--text-primary, #1e293b)' : (p.runningBalance || 0) < 0 ? '#047857' : '#64748b' }}>
                             ₨{Math.abs(p.runningBalance || 0).toLocaleString()}
                           </div>
                           <div style={{ marginTop: 2 }}>
@@ -1372,7 +1412,7 @@ export default function Payments() {
                           </div>
                         </td>
                       )}
-                      <td style={{ textAlign: 'center' }}>
+                      <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
                         <PaymentSlipCell payment={p} isParty={isParty} canEdit={isAdmin && !p._synthetic} />
                       </td>
                       {!isParty && (
@@ -1441,11 +1481,11 @@ export default function Payments() {
             const amtColor = ownerBill
               ? 'var(--warning, #d97706)'
               : partyWorkBill
-                ? '#2563eb'
+                ? 'var(--primary-light, #2563eb)'
                 : partyReceived
-                  ? '#16a34a'
+                  ? 'var(--success, #16a34a)'
                   : showPlus
-                    ? '#16a34a'
+                    ? 'var(--success, #16a34a)'
                     : 'var(--danger, #dc2626)';
 
             const { lotLabel, designLabel, isCombinedDupatta } = resolveLinkedLotDesignDisplay(
@@ -1459,7 +1499,7 @@ export default function Payments() {
                 className="payment-card-mobile"
               >
                 <div className="pmc-header">
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                     <span
                       style={{
                         background: ownerBill
@@ -1472,7 +1512,7 @@ export default function Payments() {
                         color: ownerBill
                           ? 'var(--warning, #92400e)'
                           : partyWorkBill
-                            ? '#2563eb'
+                            ? 'var(--primary-light, #2563eb)'
                             : badgeGreen
                               ? 'var(--success, #166534)'
                               : 'var(--danger, #991b1b)',

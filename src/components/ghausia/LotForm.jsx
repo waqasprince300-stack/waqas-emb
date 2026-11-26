@@ -1,7 +1,10 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import Swal from 'sweetalert2';
 import { FormGroup } from '../UI';
 import Loader from '../Loader';
+import { useApp } from '../../context/AppContext';
+import { apiService } from '../../services/api';
+import { NoteWithVoiceField, NoteReadOnlyBox } from '../voice/VoiceNoteControl';
 import { generateSerialLotNumbers, previewSerialLotNumbers } from '../../utils/lotSerial';
 import {
   getRecentPartyIds,
@@ -23,6 +26,7 @@ import {
 } from '../../utils/ghausiaHelpers';
 function LotForm({
   initial,
+  initialPartyEdit = null,
   onSave,
   onClose,
   parties,
@@ -33,6 +37,60 @@ function LotForm({
   onJumpToLinkedLot,
   onSeparateBill,
 }) {
+  const { patchLotVoiceNotes } = useApp();
+  const [adminNotes, setAdminNotes] = useState(() => initialPartyEdit?.adminNotes || '');
+  const adminNotesDirtyRef = useRef(false);
+  const [adminVoiceNote, setAdminVoiceNote] = useState(() => initialPartyEdit?.adminVoiceNote || '');
+  const [adminVoiceNoteDuration, setAdminVoiceNoteDuration] = useState(() =>
+    Number(initialPartyEdit?.adminVoiceNoteDuration || 0)
+  );
+  const [adminVoiceDirty, setAdminVoiceDirty] = useState(false);
+  const adminVoiceDirtyRef = useRef(false);
+  const [partyVoiceNote, setPartyVoiceNote] = useState(() => initialPartyEdit?.partyVoiceNote || '');
+  const [partyVoiceNoteDuration, setPartyVoiceNoteDuration] = useState(() =>
+    Number(initialPartyEdit?.partyVoiceNoteDuration || 0)
+  );
+  const rawInitialStatus = String(initial?.status || '').toLowerCase().trim();
+  const isAdminNoteLocked = Boolean(
+    initial && (rawInitialStatus === 'completed' || rawInitialStatus === 'received back')
+  );
+
+  useEffect(() => {
+    const lotId = initial?.id || initial?._id;
+    const hasPv = Boolean(initialPartyEdit?.hasPartyVoiceNote || initialPartyEdit?.partyVoiceNote);
+    const hasAv = Boolean(initialPartyEdit?.hasAdminVoiceNote || initialPartyEdit?.adminVoiceNote);
+    if (!lotId || ((!hasPv || initialPartyEdit?.partyVoiceNote) && (!hasAv || initialPartyEdit?.adminVoiceNote))) {
+      return;
+    }
+    let cancelled = false;
+    apiService
+      .getPartyEditByLotId(lotId, {
+        includeVoiceNotes: true,
+        businessOwnerId: initial?.businessOwnerId || undefined,
+      })
+      .then((row) => {
+        if (cancelled || !row) return;
+        patchLotVoiceNotes?.(lotId, {
+          partyVoiceNote: row.partyVoiceNote || '',
+          partyVoiceNoteDuration: row.partyVoiceNoteDuration || 0,
+          adminVoiceNote: row.adminVoiceNote || '',
+          adminVoiceNoteDuration: row.adminVoiceNoteDuration || 0,
+        });
+        if (!adminNotesDirtyRef.current && row.adminNotes !== undefined) {
+          setAdminNotes(row.adminNotes ?? '');
+        }
+        if (!adminVoiceDirtyRef.current) {
+          setAdminVoiceNote(row.adminVoiceNote || '');
+          setAdminVoiceNoteDuration(Number(row.adminVoiceNoteDuration || 0));
+        }
+        setPartyVoiceNote(row.partyVoiceNote || '');
+        setPartyVoiceNoteDuration(Number(row.partyVoiceNoteDuration || 0));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [initial?.id, initial?._id, initial?.businessOwnerId]); // eslint-disable-line react-hooks/exhaustive-deps
   const blank = {
     lotNumber: '',
     lotNo: '',
@@ -369,6 +427,18 @@ function LotForm({
       }
     }
 
+    const adminNotesChanged =
+      !isAdminNoteLocked &&
+      (adminNotes !== (initialPartyEdit?.adminNotes || '') || adminVoiceDirty);
+    const _adminNoteMeta = adminNotesChanged
+      ? {
+          adminNotes,
+          ...(adminVoiceDirty
+            ? { adminVoiceNote, adminVoiceNoteDuration }
+            : {}),
+        }
+      : null;
+
     // Strip form-only fields that should not leak to the API payload
     const { manualLotNumbersRaw: _stripManual, lotCreationMode: _stripMode, ...cleanForm } = form;
     const basePayload = {
@@ -394,6 +464,7 @@ function LotForm({
         : {}),
       ...(syncMainLotPieces ? { syncMainLotPieces } : {}),
       ...(moveToBusinessOwnerId ? { moveToBusinessOwnerId } : {}),
+      ...(_adminNoteMeta ? { _adminNoteMeta } : {}),
     };
 
     if (isNewLot && lotCreationMode !== 'single' && bulkLotNumbers && bulkLotNumbers.length > 0) {
@@ -1080,7 +1151,6 @@ function LotForm({
           <select
             className="form-select"
             value={form.partyId}
-            autoFocus={!initial}
             onChange={(e) => {
               const selectedParty = parties.find((p) => p.id === e.target.value);
               set('partyId', e.target.value);
@@ -1368,9 +1438,63 @@ function LotForm({
         </div>
       )}
 
+      {/* Admin Written & Voice Notes (inline composer; locked after approval) + Party Note Preview */}
+      <div style={{ marginTop: 18, paddingTop: 14, borderTop: '1px dashed var(--border, #cbd5e1)' }}>
+        <NoteWithVoiceField
+          label="Admin Note"
+          roleTone="admin"
+          pillLabel="Admin Voice"
+          lotId={initial?.id || initial?._id}
+          businessOwnerId={initial?.businessOwnerId || defaultNewLotOwnerId}
+          isParty={false}
+          textValue={adminNotes}
+          onTextChange={(val) => {
+            setAdminNotes(val);
+            adminNotesDirtyRef.current = true;
+          }}
+          voiceValue={adminVoiceNote}
+          hasVoiceNote={
+            adminVoiceDirty
+              ? Boolean(adminVoiceNote)
+              : Boolean(initialPartyEdit?.hasAdminVoiceNote || adminVoiceNote)
+          }
+          duration={adminVoiceNoteDuration}
+          locked={isAdminNoteLocked}
+          placeholder={
+            isAdminNoteLocked
+              ? 'Locked after lot approval — admin note cannot be edited once approved'
+              : 'Optional admin written or voice note (party user can read)...'
+          }
+          onVoiceChange={(audio, dur) => {
+            setAdminVoiceNote(audio);
+            setAdminVoiceNoteDuration(dur);
+            adminVoiceDirtyRef.current = true;
+            setAdminVoiceDirty(true);
+          }}
+        />
+
+        <NoteReadOnlyBox
+          title="Party Note"
+          text={initialPartyEdit?.notes || ''}
+          lotId={initial?.id || initial?._id}
+          voiceSrc={partyVoiceNote}
+          hasVoiceNote={Boolean(initialPartyEdit?.hasPartyVoiceNote || partyVoiceNote)}
+          duration={partyVoiceNoteDuration}
+          voiceLabel="Party Voice"
+          roleTone="party"
+          businessOwnerId={initial?.businessOwnerId}
+          isParty={false}
+        />
+      </div>
+
       <div
         className="modal-footer"
-        style={{ padding: '16px 0 0', borderTop: '1px solid var(--border)', marginTop: 24 }}
+        style={{
+          padding: '16px 0 0',
+          borderTop: '1px solid var(--border)',
+          marginTop: 24,
+          background: 'transparent',
+        }}
       >
         <button type="button" className="btn btn-ghost" onClick={onClose} disabled={saving}>
           Cancel

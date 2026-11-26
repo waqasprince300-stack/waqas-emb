@@ -2,6 +2,7 @@ import React from 'react';
 import { EmptyState } from '../UI';
 import LazyReceiptThumb from '../receipt/LazyReceiptThumb';
 import { receiptPreviewKind } from '../receipt/ReceiptThumb';
+import { VoiceNotePlayerPill } from '../voice/VoiceNoteControl';
 import { getPartyLedgerBillDisplay } from '../../utils/partyBillPrivacy';
 import { normalizedBusinessOwnerId } from '../../utils/businessWorkspace';
 import { formatDisplayDate } from '../../utils/dateFilters';
@@ -47,26 +48,33 @@ export default function PLDesktopTable({
   getPartyLedgerBillNumeric,
   pendingRevisionIsReal,
 }) {
+  const colWeights = [
+    9.0, // Lot No
+    5.8, // Design No
+    8.6, // Description
+    5.2, // Fabric
+    5.6, // Colors
+    5.2, // Pieces
+    7.0, // Allot Date
+    7.0, // Complete Date
+    ...(showPartyNameCol ? [7.0] : []),
+    ...(showWorkspaceCol ? [6.8] : []),
+    7.6, // Status
+    6.9, // Bill Amount
+    8.7, // Receipt
+    9.4, // Notes
+    8.0, // Actions
+  ];
+  const totalColWeight = colWeights.reduce((sum, w) => sum + w, 0);
+
   return (
     <div className="table-wrapper desktop-only-table">
       <div className="table-scroll">
         <table className="ledger-table fixed-grid-table pl-lots-table">
           <colgroup>
-            <col style={{ width: 88 }} />
-            <col style={{ width: 74 }} />
-            <col style={{ width: 132 }} />
-            <col style={{ width: 78 }} />
-            <col style={{ width: 56 }} />
-            <col style={{ width: 60 }} />
-            <col style={{ width: 88 }} />
-            <col style={{ width: 94 }} />
-            {showPartyNameCol ? <col style={{ width: 118 }} /> : null}
-            {showWorkspaceCol ? <col style={{ width: 118 }} /> : null}
-            <col style={{ width: 158 }} />
-            <col style={{ width: 96 }} />
-            <col style={{ width: 152 }} />
-            <col style={{ width: 150 }} />
-            <col style={{ width: 118 }} />
+            {colWeights.map((w, idx) => (
+              <col key={idx} style={{ width: `${((w / totalColWeight) * 100).toFixed(2)}%` }} />
+            ))}
           </colgroup>
           <thead>
             <tr>
@@ -114,7 +122,7 @@ export default function PLDesktopTable({
                     className="stagger-item"
                     style={
                       String(highlightLotId) === String(l.id)
-                        ? { background: 'var(--warning-bg, #fef3c7)', outline: '2px solid var(--warning, #f59e0b)' }
+                        ? { background: 'var(--warning-bg, #fef3c7)', boxShadow: 'inset 0 0 0 2px var(--warning, #f59e0b)' }
                         : undefined
                     }
                   >
@@ -141,16 +149,16 @@ export default function PLDesktopTable({
                         {l.fabric || l.itemType}
                       </span>
                     </td>
-                    <td>{l.colors}</td>
-                    <td>{l.pieces}</td>
-                    <td>
+                    <td style={{ whiteSpace: 'nowrap' }}>{l.colors}</td>
+                    <td style={{ whiteSpace: 'nowrap' }}>{l.pieces}</td>
+                    <td style={{ whiteSpace: 'nowrap' }}>
                       {getPartyAllotDate(l) ? (
                         formatDisplayDate(getPartyAllotDate(l))
                       ) : (
                         <span style={{ color: 'var(--text-muted)' }}>&mdash;</span>
                       )}
                     </td>
-                    <td style={{ fontWeight: 500 }}>
+                    <td style={{ fontWeight: 500, whiteSpace: 'nowrap' }}>
                       {displayComplete ? (
                         formatDisplayDate(displayComplete)
                       ) : (
@@ -272,6 +280,7 @@ export default function PLDesktopTable({
                         textAlign: 'right',
                         fontWeight: 700,
                         color: 'var(--primary, #1e40af)',
+                        whiteSpace: 'nowrap',
                       }}
                     >
                       {partyBillOnly == null ? (
@@ -382,6 +391,51 @@ export default function PLDesktopTable({
                           {pe.notes}
                         </div>
                       ) : null}
+                      {pe.adminNotes ? (
+                        <div
+                          className="table-cell-clamp-2"
+                          title={pe.adminNotes}
+                          style={{
+                            fontSize: 11.5,
+                            color: 'var(--primary, #1e40af)',
+                            marginTop: pe.notes ? 4 : 0,
+                          }}
+                        >
+                          <strong>Admin:</strong> {pe.adminNotes}
+                        </div>
+                      ) : null}
+                      {(pe.hasPartyVoiceNote || pe.partyVoiceNote || pe.hasAdminVoiceNote || pe.adminVoiceNote) && (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
+                          <VoiceNotePlayerPill
+                            compact
+                            lotId={l.id}
+                            src={pe.partyVoiceNote || ''}
+                            hasVoiceNote={Boolean(pe.hasPartyVoiceNote || pe.partyVoiceNote)}
+                            duration={pe.partyVoiceNoteDuration || 0}
+                            label="Party"
+                            roleTone="party"
+                            businessOwnerId={normalizedBusinessOwnerId(l.businessOwnerId)}
+                            isParty={isParty}
+                            locked={
+                              isParty &&
+                              ['completed', 'received back'].includes(
+                                String(l.status || '').toLowerCase().trim()
+                              )
+                            }
+                          />
+                          <VoiceNotePlayerPill
+                            compact
+                            lotId={l.id}
+                            src={pe.adminVoiceNote || ''}
+                            hasVoiceNote={Boolean(pe.hasAdminVoiceNote || pe.adminVoiceNote)}
+                            duration={pe.adminVoiceNoteDuration || 0}
+                            label="Admin"
+                            roleTone="admin"
+                            businessOwnerId={normalizedBusinessOwnerId(l.businessOwnerId)}
+                            isParty={isParty}
+                          />
+                        </div>
+                      )}
                       {displayStatus === 'Rejected' && l.rejectionNote ? (
                         <div
                           style={{
@@ -510,25 +564,27 @@ export default function PLDesktopTable({
                                     rejectionNote: '',
                                   })
                                 }
+                                title="Review bill change request"
                                 style={{
-                                  padding: '4px 12px',
-                                  fontSize: 12,
+                                  padding: '4px 10px',
+                                  fontSize: 11.5,
                                   fontWeight: 700,
                                   borderRadius: 6,
                                   cursor: 'pointer',
                                   background: 'var(--warning, #f59e0b)',
-                                  color: 'var(--card-bg, #ffffff)',
+                                  color: '#111827',
                                   border: 'none',
                                   fontFamily: 'Inter, sans-serif',
+                                  whiteSpace: 'nowrap',
                                 }}
                               >
-                                Review request
+                                Review
                               </button>
                             )}
                           <button
                             onClick={() => openEdit(l)}
                             style={{
-                              padding: '4px 12px',
+                              padding: '4px 10px',
                               fontSize: 12,
                               fontWeight: 500,
                               borderRadius: 6,
@@ -537,6 +593,7 @@ export default function PLDesktopTable({
                               color: 'var(--primary, #1e40af)',
                               border: '1px solid var(--border, #bfdbfe)',
                               fontFamily: 'Inter, sans-serif',
+                              whiteSpace: 'nowrap',
                             }}
                           >
                             Edit

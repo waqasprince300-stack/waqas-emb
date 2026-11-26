@@ -55,8 +55,14 @@ export default function PLSummaryCards({ totals, partyBalanceInfo, isParty }) {
               <strong style={{ fontSize: 14, color: 'var(--warning, #d97706)' }}>({totals.inProgress ?? 0})</strong>
             </>
           ),
-          value: `₨${(totals.inProgressAmount ?? 0).toLocaleString()}`,
-          numValue: totals.inProgressAmount,
+          value:
+            totals.inProgress > 0 && totals.hasInProgressPartyBill === false
+              ? 'Bill pending'
+              : `₨${(totals.inProgressAmount ?? 0).toLocaleString()}`,
+          numValue:
+            totals.inProgress > 0 && totals.hasInProgressPartyBill === false
+              ? null
+              : totals.inProgressAmount,
           color: 'var(--warning, #d97706)',
         },
         {
@@ -64,12 +70,12 @@ export default function PLSummaryCards({ totals, partyBalanceInfo, isParty }) {
           label: (
             <>
               {isParty ? 'Review / rework' : 'Pending review + Rejected'}{' '}
-              <strong style={{ fontSize: 14, color: '#a16207' }}>({totals.otherCount ?? 0})</strong>
+              <strong style={{ fontSize: 14, color: 'var(--warning, #d97706)' }}>({totals.otherCount ?? 0})</strong>
             </>
           ),
           value: totals.otherCount > 0 ? `₨${(totals.otherAmount ?? 0).toLocaleString()}` : 'None',
           numValue: totals.otherCount > 0 ? totals.otherAmount : null,
-          color: '#a16207',
+          color: 'var(--warning, #d97706)',
           sub:
             totals.otherCount > 0
               ? `${totals.pendingReview ?? 0} in review · ${totals.rejected ?? 0} rejected`
@@ -101,42 +107,52 @@ export default function PLSummaryCards({ totals, partyBalanceInfo, isParty }) {
           color: `${(partyBalanceInfo?.balance ?? 0) >= 0 ? 'var(--success, #0f766e)' : 'var(--danger, #dc2626)'}`,
           sub: 'Overall ledger (Status filter does not change these totals).',
         },
-      ].map((c) => (
-        <div key={c.key} className="stat-card">
-          <div className="stat-label">{c.label}</div>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' }}>
-            <div style={{ fontSize: 20, fontWeight: 700, color: c.color }}>{c.value}</div>
-            {c.numValue != null && formatLakhCrore(c.numValue) && (
-              <span
+      ].map((c) => {
+        const lakhCrore = c.numValue != null ? formatLakhCrore(c.numValue) : null;
+        return (
+          <div key={c.key} className="stat-card" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+            <div>
+              <div className="stat-label">{c.label}</div>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}>
+                <div style={{ fontSize: typeof c.value === 'string' && c.value.length > 20 ? 15 : 20, fontWeight: 700, color: c.color, lineHeight: 1.25 }}>{c.value}</div>
+                {c.numValue != null && (
+                  <div style={{ minHeight: 20, display: 'flex', alignItems: 'center' }}>
+                    {lakhCrore ? (
+                      <span
+                        style={{
+                          fontSize: 11,
+                          fontWeight: 700,
+                          padding: '1.5px 6px',
+                          borderRadius: 6,
+                          background: 'var(--primary-bg, rgba(255, 255, 255, 0.08))',
+                          color: 'var(--text-secondary, #c2b6b1)',
+                          border: '1px solid var(--border)',
+                          letterSpacing: '0.01em',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {lakhCrore}
+                      </span>
+                    ) : null}
+                  </div>
+                )}
+              </div>
+            </div>
+            {c.sub && (
+              <div
                 style={{
                   fontSize: 11,
-                  fontWeight: 700,
-                  padding: '1.5px 6px',
-                  borderRadius: 6,
-                  background: 'var(--primary-bg, rgba(255, 255, 255, 0.08))',
-                  color: 'var(--text-secondary, #c2b6b1)',
-                  border: '1px solid var(--border)',
-                  letterSpacing: '0.01em',
+                  color: 'var(--text-muted)',
+                  marginTop: 6,
+                  lineHeight: 1.35,
                 }}
               >
-                {formatLakhCrore(c.numValue)}
-              </span>
+                {c.sub}
+              </div>
             )}
           </div>
-          {c.sub && (
-            <div
-              style={{
-                fontSize: 11,
-                color: 'var(--text-muted)',
-                marginTop: 6,
-                lineHeight: 1.35,
-              }}
-            >
-              {c.sub}
-            </div>
-          )}
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

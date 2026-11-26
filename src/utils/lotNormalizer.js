@@ -85,6 +85,12 @@ export const partyEditsArrayToMap = (remotePartyEdits) => {
   return remotePartyEdits.reduce((acc, item) => {
     const lotId = item.lotId != null ? String(item.lotId) : '';
     if (!lotId) return acc;
+    const prev = acc[lotId];
+    if (prev) {
+      const prevTs = Date.parse(prev.updatedAt || prev.createdAt || '') || 0;
+      const nextTs = Date.parse(item.updatedAt || item.createdAt || '') || 0;
+      if (nextTs < prevTs) return acc;
+    }
     acc[lotId] = {
       ...item,
       completeDate: item.completeDate ? normalizeDateString(item.completeDate) : '',
@@ -95,10 +101,10 @@ export const partyEditsArrayToMap = (remotePartyEdits) => {
 };
 
 /** Merge bootstrap party edits without wiping already-hydrated receipt images / lot pictures. */
-export const mergePartyEditsFromRemote = (remotePartyEdits, prev = {}) => {
+export const mergePartyEditsFromRemote = (remotePartyEdits, prev = {}, opts = {}) => {
   if (!Array.isArray(remotePartyEdits)) return prev;
   const incoming = partyEditsArrayToMap(remotePartyEdits);
-  const next = { ...prev };
+  const next = opts?.prune ? {} : { ...prev };
   Object.keys(incoming).forEach((lotId) => {
     const remote = incoming[lotId];
     const existing = prev[lotId];
@@ -130,9 +136,41 @@ export const mergePartyEditsFromRemote = (remotePartyEdits, prev = {}) => {
             ? existingCount
             : hydratedCount;
 
+    const remotePartyVoice = remote.partyVoiceNote;
+    const remoteClearedPartyVoice =
+      remote.hasPartyVoiceNote === false &&
+      (remotePartyVoice == null || String(remotePartyVoice).trim() === '');
+    const keptPartyVoice = remoteClearedPartyVoice
+      ? ''
+      : remotePartyVoice != null && remotePartyVoice !== ''
+        ? remotePartyVoice
+        : (existing?.partyVoiceNote ?? '');
+
+    const remoteAdminVoice = remote.adminVoiceNote;
+    const remoteClearedAdminVoice =
+      remote.hasAdminVoiceNote === false &&
+      (remoteAdminVoice == null || String(remoteAdminVoice).trim() === '');
+    const keptAdminVoice = remoteClearedAdminVoice
+      ? ''
+      : remoteAdminVoice != null && remoteAdminVoice !== ''
+        ? remoteAdminVoice
+        : (existing?.adminVoiceNote ?? '');
+
     const merged = {
       ...remote,
       receipt: keptReceipt,
+      partyVoiceNote: keptPartyVoice,
+      adminVoiceNote: keptAdminVoice,
+      partyVoiceNoteDuration: remoteClearedPartyVoice
+        ? 0
+        : Number.isFinite(Number(remote.partyVoiceNoteDuration))
+          ? Number(remote.partyVoiceNoteDuration)
+          : (existing?.partyVoiceNoteDuration ?? 0),
+      adminVoiceNoteDuration: remoteClearedAdminVoice
+        ? 0
+        : Number.isFinite(Number(remote.adminVoiceNoteDuration))
+          ? Number(remote.adminVoiceNoteDuration)
+          : (existing?.adminVoiceNoteDuration ?? 0),
       lotImagesCount,
       hasLotImages: remoteClearedLotImages
         ? false
@@ -142,6 +180,16 @@ export const mergePartyEditsFromRemote = (remotePartyEdits, prev = {}) => {
         : remote.hasReceipt === true ||
           (typeof keptReceipt === 'string' && keptReceipt.trim() !== '') ||
           existing?.hasReceipt === true,
+      hasPartyVoiceNote: remoteClearedPartyVoice
+        ? false
+        : remote.hasPartyVoiceNote === true ||
+          (typeof keptPartyVoice === 'string' && keptPartyVoice.trim() !== '') ||
+          existing?.hasPartyVoiceNote === true,
+      hasAdminVoiceNote: remoteClearedAdminVoice
+        ? false
+        : remote.hasAdminVoiceNote === true ||
+          (typeof keptAdminVoice === 'string' && keptAdminVoice.trim() !== '') ||
+          existing?.hasAdminVoiceNote === true,
     };
 
     if (remoteClearedLotImages) {

@@ -3,6 +3,8 @@ import Swal from 'sweetalert2';
 import { Modal, FormGroup, StatusBadge } from '../UI';
 import Loader from '../Loader';
 import { receiptPreviewKind } from '../receipt/ReceiptThumb';
+import { NoteWithVoiceField, NoteReadOnlyBox } from '../voice/VoiceNoteControl';
+import { normalizedBusinessOwnerId } from '../../utils/businessWorkspace';
 import {
   partyFacingLedgerDisplayLabel,
   partyFacingLotStatusLabel,
@@ -120,8 +122,11 @@ export default function PLEditModal({
 }) {
   if (!editingId || !editingLot) return null;
 
+  const isAlreadyCompleted =
+    getDisplayStatus(editingLot) === 'Completed' ||
+    ['completed', 'received back'].includes(String(editingLot.status || '').toLowerCase().trim());
   const isSubmittingForApproval =
-    editForm.status === 'Completed' && ledgerEditKind !== 'pendingReview';
+    editForm.status === 'Completed' && ledgerEditKind !== 'pendingReview' && !isAlreadyCompleted;
 
   return (
     <Modal
@@ -545,16 +550,62 @@ export default function PLEditModal({
           </div>
         )}
       </FormGroup>
-      <FormGroup label="Notes">
-        <textarea
-          className="form-textarea"
-          rows={2}
-          value={editForm.notes}
-          onChange={(e) => setEditForm((f) => ({ ...f, notes: e.target.value }))}
-          placeholder="Optional notes..."
-          style={{ resize: 'vertical' }}
-        />
-      </FormGroup>
+      {(() => {
+        const rawLotStatus = String(editingLot?.status || '').toLowerCase().trim();
+        const isApprovedOrCompleted =
+          rawLotStatus === 'completed' || rawLotStatus === 'received back';
+        const isPartyApprovedLocked = Boolean(isParty && isApprovedOrCompleted);
+        const lotBizId = normalizedBusinessOwnerId(editingLot?.businessOwnerId);
+        return (
+          <>
+            <NoteWithVoiceField
+              label="Party Notes"
+              roleTone="party"
+              pillLabel="Party Voice"
+              lotId={editingLot.id}
+              businessOwnerId={lotBizId}
+              isParty={isParty}
+              textValue={editForm.notes || ''}
+              onTextChange={(val) => setEditForm((f) => ({ ...f, notes: val }))}
+              voiceValue={editForm.partyVoiceNote || ''}
+              hasVoiceNote={Boolean(editForm.hasPartyVoiceNote || editForm.partyVoiceNote)}
+              duration={editForm.partyVoiceNoteDuration || 0}
+              locked={isPartyApprovedLocked}
+              placeholder={
+                isPartyApprovedLocked
+                  ? 'Locked after approval — contact admin to change'
+                  : isParty
+                    ? 'Optional written or voice note for this lot...'
+                    : 'Party note (admin can update if party requests)...'
+              }
+              onVoiceChange={(audio, dur) =>
+                setEditForm((f) => ({
+                  ...f,
+                  partyVoiceNote: audio,
+                  partyVoiceNoteDuration: dur,
+                  hasPartyVoiceNote: Boolean(audio),
+                  partyVoiceDirty: true,
+                }))
+              }
+            />
+
+            <NoteReadOnlyBox
+              title="Admin Note"
+              text={editForm.adminNotes || ''}
+              lotId={editingLot.id}
+              voiceSrc={editForm.adminVoiceNote || ''}
+              hasVoiceNote={Boolean(
+                editForm.hasAdminVoiceNote || editForm.adminVoiceNote
+              )}
+              duration={editForm.adminVoiceNoteDuration || 0}
+              voiceLabel="Admin Voice"
+              roleTone="admin"
+              businessOwnerId={lotBizId}
+              isParty={isParty}
+            />
+          </>
+        );
+      })()}
 
       {ledgerEditKind === 'pendingReview' && (
         <div className="alert alert-warning">
@@ -564,7 +615,7 @@ export default function PLEditModal({
             : 'Saving updates this submission while it is under review. If you change the bill amount, the admin will see the old and new figures and can choose how the owner business bill should follow when they approve.'}
         </div>
       )}
-      {editForm.status === 'Completed' && ledgerEditKind !== 'pendingReview' && (
+      {isSubmittingForApproval && (
         <div className="alert alert-warning">
           <strong>Note:</strong>{' '}
           {isParty

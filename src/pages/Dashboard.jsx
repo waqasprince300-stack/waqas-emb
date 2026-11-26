@@ -650,7 +650,7 @@ export default function Dashboard() {
               </Link>
             </div>
           )}
-          <div className="dash-filter-toggles" style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'nowrap', justifyContent: 'flex-end' }}>
+          <div className="dash-filter-toggles" style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
             <SafeDateRangeSelect
               value={dateRange}
               onChange={setDateRange}
@@ -667,7 +667,7 @@ export default function Dashboard() {
                 <button
                   onClick={() => setHideAmounts(h => !h)}
                   className="dash-desktop-only"
-                  style={{ background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--text-muted)', fontWeight: 600, marginTop: 4 }}
+                  style={{ background: 'transparent', border: 'none', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-start', gap: 6, fontSize: 13, color: 'var(--text-muted)', fontWeight: 600, minWidth: 124, whiteSpace: 'nowrap', flexShrink: 0 }}
                 >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                     {hideAmounts
@@ -680,7 +680,7 @@ export default function Dashboard() {
                 <button
                   onClick={() => setHideAmounts(h => !h)}
                   className="dash-mobile-only"
-                  style={{ background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--text-muted)', fontWeight: 600, marginTop: 4 }}
+                  style={{ background: 'transparent', border: 'none', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-start', gap: 6, fontSize: 13, color: 'var(--text-muted)', fontWeight: 600, minWidth: 124, whiteSpace: 'nowrap', flexShrink: 0 }}
                 >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                     {hideAmounts
@@ -704,7 +704,7 @@ export default function Dashboard() {
             </span>
             <button
               onClick={() => setHidePartyPerf(h => !h)}
-              style={{ background: 'var(--primary-bg, #f0f7ff)', border: '1px solid var(--border, #e2e8f0)', borderRadius: 12, padding: '4px 10px', cursor: 'pointer', fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)' }}
+              style={{ background: 'var(--primary-bg, #f0f7ff)', border: '1px solid var(--border, #e2e8f0)', borderRadius: 12, padding: '4px 10px', minWidth: 54, textAlign: 'center', whiteSpace: 'nowrap', flexShrink: 0, cursor: 'pointer', fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)' }}
             >
               {hidePartyPerf ? 'Show' : 'Hide'}
             </button>
@@ -718,30 +718,35 @@ export default function Dashboard() {
               }}
             >
               {partyMiniStatsCards.map((c) => (
-                <div key={c.label} className="stat-card-modern" style={{ '--card-accent': c.color }}>
-                  <div className="stat-label">{c.label}</div>
-                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' }}>
-                    <div className="stat-value" style={{ color: c.color }}>
-                      {'display' in c ? c.display : c.value}
+                <div key={c.label} className="stat-card-modern" style={{ '--card-accent': c.color, justifyContent: 'space-between' }}>
+                  <div>
+                    <div className="stat-label">{c.label}</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 3 }}>
+                      <div className="stat-value" style={{ color: c.color, marginBottom: 0 }}>
+                        {'display' in c ? c.display : c.value}
+                      </div>
+                      <div style={{ minHeight: 20, display: 'flex', alignItems: 'center' }}>
+                        {c.lakhCrore ? (
+                          <span
+                            style={{
+                              fontSize: 11,
+                              fontWeight: 700,
+                              padding: '1.5px 6px',
+                              borderRadius: 6,
+                              background: 'var(--primary-bg, rgba(255, 255, 255, 0.08))',
+                              color: 'var(--text-secondary, #c2b6b1)',
+                              border: '1px solid var(--border)',
+                              letterSpacing: '0.01em',
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            {c.lakhCrore}
+                          </span>
+                        ) : null}
+                      </div>
                     </div>
-                    {c.lakhCrore && (
-                      <span
-                        style={{
-                          fontSize: 11,
-                          fontWeight: 700,
-                          padding: '1.5px 6px',
-                          borderRadius: 6,
-                          background: 'var(--primary-bg, rgba(255, 255, 255, 0.08))',
-                          color: 'var(--text-secondary, #c2b6b1)',
-                          border: '1px solid var(--border)',
-                          letterSpacing: '0.01em',
-                        }}
-                      >
-                        {c.lakhCrore}
-                      </span>
-                    )}
                   </div>
-                  <div className="stat-sub">{c.sub}</div>
+                  <div className="stat-sub" style={{ marginTop: 4 }}>{c.sub}</div>
                 </div>
               ))}
             </div>
@@ -796,14 +801,14 @@ export default function Dashboard() {
               </div>
               <div className="stat-card-modern" style={{ '--card-accent': 'var(--primary-light, #0ea5e9)' }}>
                 <div className="stat-label" style={{ textTransform: 'uppercase' }} title="WIP Value">WIP Value</div>
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: 5, flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 3, marginBottom: 4 }}>
                   <div
                     className="stat-value"
                     title={hideAmounts ? 'Amounts hidden' : formatRupee(wipValue)}
                     style={{
                       color: 'var(--primary-light, #0ea5e9)',
                       fontSize: hideAmounts
-                        ? 22
+                        ? 18
                         : wipValue >= 10000000
                           ? 14
                           : wipValue >= 1000000
@@ -815,27 +820,38 @@ export default function Dashboard() {
                       whiteSpace: 'nowrap',
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
+                      maxWidth: '100%',
+                      marginBottom: 0,
+                      minHeight: 22,
+                      display: 'flex',
+                      alignItems: 'center',
                     }}
                   >
                     {hideAmounts ? '***' : formatRupee(wipValue)}
                   </div>
-                  {!hideAmounts && formatLakhCrore(wipValue) && (
-                    <span
-                      style={{
-                        fontSize: 10.5,
-                        fontWeight: 700,
-                        padding: '1px 5px',
-                        borderRadius: 5,
-                        background: 'var(--primary-bg, rgba(255, 255, 255, 0.08))',
-                        color: 'var(--text-secondary, #c2b6b1)',
-                        border: '1px solid var(--border)',
-                        letterSpacing: '0.01em',
-                        lineHeight: 1.2,
-                      }}
-                    >
-                      {formatLakhCrore(wipValue)}
-                    </span>
-                  )}
+                  <div style={{ minHeight: 18, display: 'flex', alignItems: 'center' }}>
+                    {(() => {
+                      const wipBadge = !hideAmounts ? formatLakhCrore(wipValue) : null;
+                      return wipBadge ? (
+                        <span
+                          style={{
+                            fontSize: 10.5,
+                            fontWeight: 700,
+                            padding: '1px 5px',
+                            borderRadius: 5,
+                            background: 'var(--primary-bg, rgba(255, 255, 255, 0.08))',
+                            color: 'var(--text-secondary, #c2b6b1)',
+                            border: '1px solid var(--border)',
+                            letterSpacing: '0.01em',
+                            lineHeight: 1.2,
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          {wipBadge}
+                        </span>
+                      ) : null;
+                    })()}
+                  </div>
                 </div>
                 <div className="stat-sub" title="Value of active work">Value of active work</div>
               </div>
@@ -852,74 +868,81 @@ export default function Dashboard() {
               }}
             >
               <div className="stat-card-modern" style={{ '--card-accent': activePartyStat.color }}>
-                <div className="stat-label">{activePartyStat.label}</div>
+                <div className="stat-label" style={{ minHeight: 36, lineHeight: 1.3 }}>{activePartyStat.label}</div>
                 <div className="stat-value" style={{ color: activePartyStat.color, fontSize: 28 }}>
                   {activePartyStat.value}
                 </div>
                 <div className="stat-sub">{activePartyStat.sub}</div>
               </div>
-              {finCards.map((c) => (
-                <div
-                  key={c.label}
-                  className="stat-card-modern"
-                  style={{
-                    '--card-accent': c.color,
-                    ...(c.highlight
-                      ? {
-                        borderColor: netOwnerVsParties >= 0 ? 'var(--success-bg, #86efac)' : 'var(--danger-bg, #fecaca)',
-                        background: netOwnerVsParties >= 0
-                            ? 'var(--card-bg, linear-gradient(145deg, var(--card-bg, #ffffff) 0%, var(--success-bg, #f0fdf4) 100%))'
-                            : 'var(--card-bg, linear-gradient(145deg, var(--card-bg, #ffffff) 0%, var(--danger-bg, #fef2f2) 100%))',
-                      }
-                      : {}),
-                  }}
-                >
-                  <div className="stat-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      {c.label}
-                      {c.tooltip && (
-                        <span
-                          title={c.tooltip}
-                          style={{
-                            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                            width: 16, height: 16, borderRadius: '50%', background: 'var(--border, #e2e8f0)', color: 'var(--text-muted, #64748b)',
-                            fontSize: 10, fontWeight: 'bold', cursor: 'help'
-                          }}
-                        >
-                          i
+              {finCards.map((c) => {
+                const lakhCrore = !hideAmounts ? formatLakhCrore(c.value) : null;
+                return (
+                  <div
+                    key={c.label}
+                    className="stat-card-modern"
+                    style={{
+                      '--card-accent': c.color,
+                      ...(c.highlight
+                        ? {
+                          borderColor: netOwnerVsParties >= 0 ? 'var(--success-bg, #86efac)' : 'var(--danger-bg, #fecaca)',
+                          background: netOwnerVsParties >= 0
+                              ? 'var(--card-bg, linear-gradient(145deg, var(--card-bg, #ffffff) 0%, var(--success-bg, #f0fdf4) 100%))'
+                              : 'var(--card-bg, linear-gradient(145deg, var(--card-bg, #ffffff) 0%, var(--danger-bg, #fef2f2) 100%))',
+                        }
+                        : {}),
+                    }}
+                  >
+                    <div className="stat-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 6, minHeight: 36, lineHeight: 1.3 }}>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        {c.label}
+                        {c.tooltip && (
+                          <span
+                            title={c.tooltip}
+                            style={{
+                              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                              width: 16, height: 16, borderRadius: '50%', background: 'var(--border, #e2e8f0)', color: 'var(--text-muted, #64748b)',
+                              fontSize: 10, fontWeight: 'bold', cursor: 'help', flexShrink: 0,
+                            }}
+                          >
+                            i
+                          </span>
+                        )}
+                      </span>
+                      {c.label === 'Completed Revenue' && momGrowth !== null && !hideAmounts && (
+                        <span className={'dash-trend ' + (momGrowth >= 0 ? 'up' : 'down')} style={{ marginTop: 0, whiteSpace: 'nowrap', flexShrink: 0 }}>
+                          {momGrowth >= 0 ? '⬆️' : '⬇️'} {Math.abs(momGrowth).toFixed(1)}%
                         </span>
                       )}
-                    </span>
-                    {c.label === 'Completed Revenue' && momGrowth !== null && !hideAmounts && (
-                      <span className={'dash-trend ' + (momGrowth >= 0 ? 'up' : 'down')}>
-                        {momGrowth >= 0 ? '⬆️' : '⬇️'} {Math.abs(momGrowth).toFixed(1)}%
-                      </span>
-                    )}
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' }}>
-                    <div className="stat-value" style={{ color: c.color, fontSize: 24, whiteSpace: 'nowrap' }}>
-                      {hideAmounts ? '****' : (c.signed ? formatSignedRupee(c.value) : formatRupee(c.value))}
                     </div>
-                    {!hideAmounts && formatLakhCrore(c.value) && (
-                      <span
-                        style={{
-                          fontSize: 11,
-                          fontWeight: 700,
-                          padding: '1.5px 6px',
-                          borderRadius: 6,
-                          background: 'var(--primary-bg, rgba(255, 255, 255, 0.08))',
-                          color: 'var(--text-secondary, #c2b6b1)',
-                          border: '1px solid var(--border)',
-                          letterSpacing: '0.01em',
-                        }}
-                      >
-                        {formatLakhCrore(c.value)}
-                      </span>
-                    )}
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}>
+                      <div className="stat-value" style={{ color: c.color, fontSize: 'clamp(18px, 1.7vw, 24px)', whiteSpace: 'nowrap', marginBottom: 0 }}>
+                        {hideAmounts ? '****' : (c.signed ? formatSignedRupee(c.value) : formatRupee(c.value))}
+                      </div>
+                      <div style={{ minHeight: 21, display: 'flex', alignItems: 'center' }}>
+                        {lakhCrore ? (
+                          <span
+                            style={{
+                              fontSize: 11,
+                              fontWeight: 700,
+                              padding: '1.5px 6px',
+                              borderRadius: 6,
+                              background: 'var(--primary-bg, rgba(255, 255, 255, 0.08))',
+                              color: 'var(--text-secondary, #c2b6b1)',
+                              border: '1px solid var(--border)',
+                              letterSpacing: '0.01em',
+                              lineHeight: 1.2,
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            {lakhCrore}
+                          </span>
+                        ) : null}
+                      </div>
+                    </div>
+                    {c.note && <div className="stat-sub" style={{ marginTop: 4 }}>{c.note}</div>}
                   </div>
-                  {c.note && <div className="stat-sub">{c.note}</div>}
-                </div>
-              ))}
+                );
+              })}
             </div>
           </section>
 
@@ -938,7 +961,7 @@ export default function Dashboard() {
                           {topParties.map((p, idx) => (
                             <tr key={p.id}>
                               <td style={{ width: 40, textAlign: 'center' }}>
-                                <div style={{ width: 24, height: 24, borderRadius: '50%', background: idx === 0 ? 'var(--warning-bg, #fef08a)' : idx === 1 ? 'var(--border, #e2e8f0)' : 'var(--warning-bg, #fed7aa)', color: idx === 0 ? '#a16207' : idx === 1 ? 'var(--text-secondary, #475569)' : 'var(--warning, #9a3412)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, margin: '0 auto' }}>
+                                <div style={{ width: 24, height: 24, borderRadius: '50%', background: idx === 0 ? 'var(--warning-bg, #fef08a)' : idx === 1 ? 'var(--border, #e2e8f0)' : 'var(--warning-bg, #fed7aa)', color: idx === 0 ? 'var(--warning-text, #a16207)' : idx === 1 ? 'var(--text-secondary, #475569)' : 'var(--warning, #9a3412)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, margin: '0 auto' }}>
                                   {idx + 1}
                                 </div>
                               </td>
@@ -947,7 +970,7 @@ export default function Dashboard() {
                                 <div style={{ fontSize: 13, fontWeight: 600 }}>{p.completed}</div>
                                 <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Completed</div>
                               </td>
-                              <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--success, #15803d)' }}>
+                              <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--success, #15803d)', minWidth: 120, whiteSpace: 'nowrap' }}>
                                 {hideAmounts ? '****' : `₨${p.value.toLocaleString()}`}
                               </td>
                             </tr>
@@ -1043,6 +1066,7 @@ export default function Dashboard() {
                         <SafeCartesianGrid strokeDasharray="3 3" vertical={false} stroke='var(--border, #e2e8f0)' />
                         <SafeXAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: 'var(--text-muted, #64748b)', fontSize: 12 }} dy={10} />
                         <SafeYAxis
+                          width={52}
                           axisLine={false}
                           tickLine={false}
                           tick={{ fill: 'var(--text-muted, #64748b)', fontSize: 12 }}
@@ -1194,7 +1218,7 @@ export default function Dashboard() {
             <div className="card dash-desktop-only">
               <div className="card-header">
                 <span className="card-title">Billable to Owner</span>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0, whiteSpace: 'nowrap', minHeight: 22 }}>
                   <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--primary-light, #0369a1)' }}>
                     {hideAmounts ? '****' : `₨${billableTotal.toLocaleString()}`}
                   </span>
@@ -1209,6 +1233,7 @@ export default function Dashboard() {
                         color: 'var(--text-secondary, #c2b6b1)',
                         border: '1px solid var(--border)',
                         letterSpacing: '0.01em',
+                        lineHeight: 1.2,
                       }}
                     >
                       {formatLakhCrore(billableTotal)}
@@ -1229,35 +1254,37 @@ export default function Dashboard() {
                     No lots received back yet
                   </p>
                 ) : (
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Lot / Design</th>
-                        <th>Party</th>
-                        <th>Business</th>
-                        <th style={{ textAlign: 'right' }}>Amount</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {[...billable]
-                        .sort(compareBillableLotsNewestFirst)
-                        .map((l) => (
-                          <tr key={l.id}>
-                            <td>
-                              <span style={{ fontWeight: 600 }}>{l.lotNo || l.lotNumber}</span> /{' '}
-                              {l.designNo}
-                            </td>
-                            <td style={{ color: 'var(--text-secondary)' }}>{l.partyName}</td>
-                            <td style={{ color: 'var(--text-secondary)', fontSize: 12 }}>
-                              {workspaceDisplayTitleForLot(l, businessOwners)}
-                            </td>
-                            <td style={{ textAlign: 'right', fontWeight: 600, color: 'var(--primary-light, #0369a1)' }}>
-                              {hideAmounts ? '****' : `₨${(Number(getBusinessBillAmount(l)) || 0).toLocaleString()}`}
-                            </td>
-                          </tr>
-                        ))}
-                    </tbody>
-                  </table>
+                  <div className="table-scroll">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Lot / Design</th>
+                          <th>Party</th>
+                          <th>Business</th>
+                          <th style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>Amount</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {[...billable]
+                          .sort(compareBillableLotsNewestFirst)
+                          .map((l) => (
+                            <tr key={l.id}>
+                              <td>
+                                <span style={{ fontWeight: 600 }}>{l.lotNo || l.lotNumber}</span> /{' '}
+                                {l.designNo}
+                              </td>
+                              <td style={{ color: 'var(--text-secondary)' }}>{l.partyName}</td>
+                              <td style={{ color: 'var(--text-secondary)', fontSize: 12 }}>
+                                {workspaceDisplayTitleForLot(l, businessOwners)}
+                              </td>
+                              <td style={{ textAlign: 'right', fontWeight: 600, color: 'var(--primary-light, #0369a1)', whiteSpace: 'nowrap' }}>
+                                {hideAmounts ? '****' : `₨${(Number(getBusinessBillAmount(l)) || 0).toLocaleString()}`}
+                              </td>
+                            </tr>
+                          ))}
+                      </tbody>
+                    </table>
+                  </div>
                 )}
               </div>
             </div>
@@ -1275,7 +1302,7 @@ export default function Dashboard() {
                         {topParties.map((p, idx) => (
                           <tr key={p.id}>
                             <td style={{ width: 40, textAlign: 'center' }}>
-                              <div style={{ width: 24, height: 24, borderRadius: '50%', background: idx === 0 ? 'var(--warning-bg, #fef08a)' : idx === 1 ? 'var(--border, #e2e8f0)' : 'var(--warning-bg, #fed7aa)', color: idx === 0 ? '#a16207' : idx === 1 ? 'var(--text-secondary, #475569)' : 'var(--warning, #9a3412)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, margin: '0 auto' }}>
+                              <div style={{ width: 24, height: 24, borderRadius: '50%', background: idx === 0 ? 'var(--warning-bg, #fef08a)' : idx === 1 ? 'var(--border, #e2e8f0)' : 'var(--warning-bg, #fed7aa)', color: idx === 0 ? 'var(--warning-text, #a16207)' : idx === 1 ? 'var(--text-secondary, #475569)' : 'var(--warning, #9a3412)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, margin: '0 auto' }}>
                                 {idx + 1}
                               </div>
                             </td>
@@ -1284,7 +1311,7 @@ export default function Dashboard() {
                               <div style={{ fontSize: 13, fontWeight: 600 }}>{p.completed}</div>
                               <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Completed</div>
                             </td>
-                            <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--success, #15803d)' }}>
+                            <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--success, #15803d)', minWidth: 115, whiteSpace: 'nowrap' }}>
                               {hideAmounts ? '****' : `₨${p.value.toLocaleString()}`}
                             </td>
                           </tr>
@@ -1335,19 +1362,19 @@ export default function Dashboard() {
           <div className="card">
             <div className="card-header">
               <span className="card-title">Party Performance Insights</span>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <button
-                  onClick={() => setHidePartyPerf(h => !h)}
-                  style={{ background: 'var(--primary-bg, #f0f7ff)', border: '1px solid var(--border, #e2e8f0)', borderRadius: 12, padding: '4px 10px', cursor: 'pointer', fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)' }}
-                >
-                  {hidePartyPerf ? 'Show' : 'Hide'}
-                </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                 {!hidePartyPerf && (
                   <>
                     <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600 }}>Pichle 90 din</span>
                     <Link to="/parties" style={{ fontSize: 12, fontWeight: 600, color: 'var(--primary-light, #3b82f6)', textDecoration: 'none' }}>View All →</Link>
                   </>
                 )}
+                <button
+                  onClick={() => setHidePartyPerf(h => !h)}
+                  style={{ background: 'var(--primary-bg, #f0f7ff)', border: '1px solid var(--border, #e2e8f0)', borderRadius: 12, padding: '4px 10px', minWidth: 54, textAlign: 'center', whiteSpace: 'nowrap', flexShrink: 0, cursor: 'pointer', fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)' }}
+                >
+                  {hidePartyPerf ? 'Show' : 'Hide'}
+                </button>
               </div>
             </div>
             {!hidePartyPerf && (
@@ -1643,13 +1670,13 @@ export default function Dashboard() {
                 <div className="dash-recent-desktop table-scroll">
                   <table className="dash-recent-table fixed-grid-table">
                     <colgroup>
-                      <col style={{ width: isParty ? '14%' : '12%' }} />
-                      <col style={{ width: isParty ? '14%' : '13%' }} />
-                      <col style={{ width: isParty ? '11%' : '9%' }} />
-                      {!isParty && <col style={{ width: '18%' }} />}
-                      <col style={{ width: isParty ? '24%' : '18%' }} />
-                      <col style={{ width: isParty ? '16%' : '13%' }} />
-                      <col style={{ width: isParty ? '21%' : '17%' }} />
+                      <col style={{ width: isParty ? '13%' : '12%' }} />
+                      <col style={{ width: isParty ? '13%' : '12%' }} />
+                      <col style={{ width: isParty ? '11%' : '10%' }} />
+                      {!isParty && <col style={{ width: '17%' }} />}
+                      <col style={{ width: isParty ? '24%' : '17%' }} />
+                      <col style={{ width: isParty ? '16%' : '14%' }} />
+                      <col style={{ width: isParty ? '23%' : '18%' }} />
                     </colgroup>
                     <thead>
                       <tr>
@@ -1844,7 +1871,7 @@ export default function Dashboard() {
                         <th>Party / From</th>
                         <th>Linked Lot</th>
                         <th>Note</th>
-                        <th style={{ textAlign: 'right' }}>Amount</th>
+                        <th style={{ textAlign: 'right', minWidth: 115 }}>Amount</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -2096,7 +2123,7 @@ export default function Dashboard() {
                 </div>
               )}
               {selectedLotDetail.description && (
-                <div className="dash-lot-detail-item" style={{ gridColumn: 'span 2' }}>
+                <div className="dash-lot-detail-item dash-lot-detail-item--full">
                   <span className="dash-lot-detail-label">Description / Remarks</span>
                   <span className="dash-lot-detail-value" style={{ fontWeight: 400, fontSize: 13 }}>
                     {selectedLotDetail.description}

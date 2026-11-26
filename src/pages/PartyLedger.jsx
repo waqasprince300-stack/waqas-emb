@@ -12,7 +12,7 @@ import {
   latestDateFrom,
   compareRowsByUpdatedNewestFirst,
 } from '../utils/dateFilters';
-import { getPartyLedgerBillNumeric, getAdminLedgerOrBusinessBill } from '../utils/partyBillPrivacy';
+import { getPartyLedgerBillDisplay, getPartyLedgerBillNumeric, getAdminLedgerOrBusinessBill } from '../utils/partyBillPrivacy';
 import { workspaceDisplayTitleForLot, normalizedBusinessOwnerId } from '../utils/businessWorkspace';
 import {
   countPendingBillRevisionRequests,
@@ -182,6 +182,7 @@ export default function PartyLedger() {
     initialDataLoading,
     patchLotImages,
     patchLotReceipt,
+    patchLotVoiceNotes,
     markNotificationsReadByContext,
   } = useApp();
 
@@ -406,7 +407,7 @@ export default function PartyLedger() {
   const getPartyNameLocal = (partyId, fallback) =>
     parties.find((p) => samePartyId(p.id, partyId))?.name || fallback || '-';
 
-  /** Totals use agreed party amount when set, falling back to lot bill for admin reconciliation (matches Parties page). */
+  /** Completed lots use agreed party amount when set, falling back to lot bill for admin reconciliation (matches Parties page). */
   const getLedgerAmountForTotals = (l) => {
     const pe = ledgerPartyEdits[l.id] || {};
     if (isParty) {
@@ -414,6 +415,9 @@ export default function PartyLedger() {
     }
     return getAdminLedgerOrBusinessBill(l, pe);
   };
+
+  /** Non-completed lots strictly read explicit party-facing bills (never owner-bill fallback). */
+  const getActiveLedgerBillDisplay = (l) => getPartyLedgerBillDisplay(ledgerPartyEdits[l.id] || {});
 
   const filtered = useMemo(() => {
     const list = assignedLots.filter((l) => {
@@ -899,6 +903,23 @@ export default function PartyLedger() {
 
 
   /** Deep link: /party-ledger?lotId=... -> show that lot (and open bill review if billReview=1). */
+  const deepLinkScrollTimerRef = useRef(null);
+  const activeEditLotIdRef = useRef(null);
+
+  useEffect(() => {
+    return () => {
+      if (deepLinkScrollTimerRef.current) {
+        clearTimeout(deepLinkScrollTimerRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!highlightLotId) return undefined;
+    const clearHl = setTimeout(() => setHighlightLotId(null), 8000);
+    return () => clearTimeout(clearHl);
+  }, [highlightLotId]);
+
   useEffect(() => {
     const lotId = String(searchParams.get('lotId') || '').trim();
     if (!lotId) {
@@ -929,13 +950,14 @@ export default function PartyLedger() {
         setStatusFilter('All');
       }
     }
+    setComponentFilter('All');
     setPartyFilter('All');
     setWorkspaceFilter('All');
     setDateRange('all');
     setCustomStart('');
     setCustomEnd('');
     setSearch(String(lot.lotNo || lot.lotNumber || '').trim());
-    setSearchField('lotNo');
+    setSearchField(String(lot.lotNo || lot.lotNumber || '').trim() ? 'lotNo' : 'all');
     setHighlightLotId(lotId);
     setCurrentPage(1);
 
@@ -944,14 +966,22 @@ export default function PartyLedger() {
     next.delete('billReview');
     setSearchParams(next, { replace: true });
 
-    const pe = ledgerPartyEdits[lot.id] || {};
+    const pe = partyEditForLot(ledgerPartyEdits, lot) || {};
     const shouldOpenReview = isAdmin && (openBillReview || hasPendingBillRevisionRequest(pe));
 
-    const t = setTimeout(() => {
+    if (deepLinkScrollTimerRef.current) {
+      clearTimeout(deepLinkScrollTimerRef.current);
+    }
+    deepLinkScrollTimerRef.current = setTimeout(() => {
+      deepLinkScrollTimerRef.current = null;
       const escaped = typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(String(lotId)) : String(lotId);
       const nodes = document.querySelectorAll(`[data-pl-lot-id="${escaped}"]`);
       const el = Array.from(nodes).find((n) => n.offsetParent !== null) || nodes[0] || document.getElementById(`pl-lot-row-${lotId}`);
-      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+        const scroller = el.closest('.table-scroll');
+        if (scroller) scroller.scrollLeft = 0;
+      }
       if (shouldOpenReview) {
         setRevisionReview({
           lot,
@@ -964,22 +994,21 @@ export default function PartyLedger() {
         openEdit(lot);
       }
     }, 350);
-    const clearHl = setTimeout(() => setHighlightLotId(null), 8000);
-    return () => {
-      clearTimeout(t);
-      clearTimeout(clearHl);
-    };
-  }, [searchParams, setSearchParams, ledgerLots, ledgerPartyEdits, initialDataLoading, isAdmin]);
+  }, [searchParams, setSearchParams, ledgerLots, ledgerPartyEdits, initialDataLoading, isAdmin, isParty]);
 
   const jumpToPendingBillRevision = () => {
-    const pendingLot = ledgerLots.find(
-      (l) =>
-        getDisplayStatus(l) === 'Completed' &&
-        hasPendingBillRevisionRequest(partyEditForLot(ledgerPartyEdits, l))
+    const pendingLot = ledgerLots.find((l) =>
+      hasPendingBillRevisionRequest(partyEditForLot(ledgerPartyEdits, l))
     );
     if (!pendingLot) {
       setLedgerLotsTab('completed');
       return;
+    }
+    if (getDisplayStatus(pendingLot) === 'Completed') {
+      setLedgerLotsTab('completed');
+    } else {
+      setLedgerLotsTab('other');
+      setStatusFilter('All');
     }
     deepLinkAppliedRef.current = '';
     setSearchParams(
@@ -1012,6 +1041,9 @@ export default function PartyLedger() {
         ? String(peOpen.partyBillAmount)
         : '';
 
+    const hasPv = Boolean(pe.hasPartyVoiceNote || pe.partyVoiceNote);
+    const hasAv = Boolean(pe.hasAdminVoiceNote || pe.adminVoiceNote);
+
     setEditForm({
       allotDate: isParty ? (getPartyAllotDate(lot) || '') : (lot.allotDate || ''),
       completeDate:
@@ -1021,15 +1053,89 @@ export default function PartyLedger() {
       billAmount: initialBill,
       receipt: pe.receipt || '',
       notes: pe.notes || '',
+      partyVoiceNote: pe.partyVoiceNote || '',
+      partyVoiceNoteDuration: Number(pe.partyVoiceNoteDuration || 0),
+      hasPartyVoiceNote: hasPv,
+      partyVoiceDirty: false,
+      adminNotes: pe.adminNotes || '',
+      adminNotesDirty: false,
+      adminVoiceNote: pe.adminVoiceNote || '',
+      adminVoiceNoteDuration: Number(pe.adminVoiceNoteDuration || 0),
+      hasAdminVoiceNote: hasAv,
+      adminVoiceDirty: false,
       partyId: lot.partyId != null && lot.partyId !== '' ? String(lot.partyId) : '',
       partyName: getPartyNameLocal(lot.partyId, lot.partyName),
     });
     setEditingId(lot.id);
+    activeEditLotIdRef.current = lot.id;
+
+    if ((hasPv && !pe.partyVoiceNote) || (hasAv && !pe.adminVoiceNote)) {
+      const targetLotId = lot.id;
+      apiService
+        .getPartyEditByLotId(targetLotId, {
+          includeVoiceNotes: true,
+          businessOwnerId: normalizedBusinessOwnerId(lot.businessOwnerId) || undefined,
+          skipTenantHeader: isParty,
+        })
+        .then((row) => {
+          if (!row) return;
+          patchLotVoiceNotes?.(targetLotId, {
+            partyVoiceNote: row.partyVoiceNote || '',
+            partyVoiceNoteDuration: row.partyVoiceNoteDuration || 0,
+            adminVoiceNote: row.adminVoiceNote || '',
+            adminVoiceNoteDuration: row.adminVoiceNoteDuration || 0,
+          });
+          if (activeEditLotIdRef.current !== targetLotId) return;
+          setEditForm((prev) => ({
+            ...prev,
+            ...(prev.partyVoiceDirty
+              ? {}
+              : {
+                  partyVoiceNote: row.partyVoiceNote || prev.partyVoiceNote || '',
+                  partyVoiceNoteDuration: Number(
+                    row.partyVoiceNoteDuration ?? prev.partyVoiceNoteDuration ?? 0
+                  ),
+                }),
+            ...(prev.adminNotesDirty
+              ? {}
+              : {
+                  adminNotes:
+                    row.adminNotes !== undefined ? (row.adminNotes ?? '') : prev.adminNotes,
+                }),
+            ...(prev.adminVoiceDirty
+              ? {}
+              : {
+                  adminVoiceNote: row.adminVoiceNote || prev.adminVoiceNote || '',
+                  adminVoiceNoteDuration: Number(
+                    row.adminVoiceNoteDuration ?? prev.adminVoiceNoteDuration ?? 0
+                  ),
+                }),
+          }));
+        })
+        .catch(() => {});
+    }
   };
 
   const handleSave = async () => {
     const lot = ledgerLots.find((l) => l.id === editingId);
     if (!lot) return;
+
+    const rawLotStatus = String(lot.status || '').toLowerCase().trim();
+    const isApprovedOrCompleted =
+      rawLotStatus === 'completed' || rawLotStatus === 'received back';
+    const isPartyApprovedLocked = Boolean(isParty && isApprovedOrCompleted);
+
+    const buildVoiceAndNotesPatch = () => {
+      const out = {};
+      if (!isPartyApprovedLocked) {
+        out.notes = editForm.notes ?? '';
+        if (editForm.partyVoiceDirty) {
+          out.partyVoiceNote = editForm.partyVoiceNote || '';
+          out.partyVoiceNoteDuration = Number(editForm.partyVoiceNoteDuration || 0);
+        }
+      }
+      return out;
+    };
 
     if (ledgerEditKind === 'pendingReview') {
       const err = {};
@@ -1110,7 +1216,7 @@ export default function PartyLedger() {
               completeDate: editForm.completeDate || fallbackToday,
               partyBillAmount: nextLedgerAmount,
               receipt: receiptToSave,
-              notes: editForm.notes ?? '',
+              ...buildVoiceAndNotesPatch(),
               pendingRevision: pendingRevisionPayload ?? prevPe.pendingRevision ?? null,
             },
             lotWorkspaceOpts(lot)
@@ -1131,7 +1237,8 @@ export default function PartyLedger() {
         }
         await Promise.all(reviewTasks);
 
-        setEditingId(null);
+        activeEditLotIdRef.current = null;
+      setEditingId(null);
         setLedgerEditKind(null);
       } catch (e) {
         const msg = e?.message || (typeof e === 'string' ? e : 'Save failed. Please try again.');
@@ -1216,7 +1323,42 @@ export default function PartyLedger() {
         };
       }
 
-      if (editForm.status === 'Completed') {
+      const wasAlreadyCompleted =
+        isApprovedOrCompleted || getDisplayStatus(lot) === 'Completed';
+      if (editForm.status === 'Completed' && wasAlreadyCompleted) {
+        const completedLotUpdates = {};
+        if (editForm.completeDate) {
+          completedLotUpdates.receivedBackDate = editForm.completeDate;
+        }
+        if (partyChanged) {
+          const sel = parties.find((p) => samePartyId(p.id, editForm.partyId));
+          completedLotUpdates.partyId = editForm.partyId;
+          completedLotUpdates.partyName = sel?.name || editForm.partyName;
+        }
+        const peExisting = ledgerPartyEdits[editingId] || {};
+        const completedTasks = [
+          updatePartyEdit(
+            editingId,
+            {
+              completeDate:
+                editForm.completeDate ||
+                formatYmd(peExisting.completeDate) ||
+                formatYmd(lot.receivedBackDate) ||
+                new Date().toISOString().slice(0, 10),
+              partyBillAmount: Math.round(Number(editForm.billAmount) || 0),
+              receipt: receiptToSave,
+              ...buildVoiceAndNotesPatch(),
+              overrideStatus: 'Completed',
+              ...(amountChangeNote ? { amountChangeNote } : {}),
+            },
+            lotWorkspaceOpts(lot)
+          ),
+        ];
+        if (Object.keys(completedLotUpdates).length > 0) {
+          completedTasks.push(updateLot(editingId, completedLotUpdates, lotWorkspaceOpts(lot)));
+        }
+        await Promise.all(completedTasks);
+      } else if (editForm.status === 'Completed') {
         const lotUpdates = {
           status: 'pending approval',
           receivedBackDate: editForm.completeDate || new Date().toISOString().slice(0, 10),
@@ -1233,7 +1375,7 @@ export default function PartyLedger() {
               completeDate: editForm.completeDate || new Date().toISOString().slice(0, 10),
               partyBillAmount: Math.round(Number(editForm.billAmount) || 0),
               receipt: receiptToSave,
-              notes: editForm.notes,
+              ...buildVoiceAndNotesPatch(),
               overrideStatus: 'Pending Approval',
               ...(amountChangeNote ? { amountChangeNote } : {}),
             },
@@ -1241,6 +1383,30 @@ export default function PartyLedger() {
           ),
           updateLot(editingId, lotUpdates, lotWorkspaceOpts(lot)),
         ]);
+      } else if (editForm.status === 'Rejected') {
+        const rejTasks = [
+          updatePartyEdit(
+            editingId,
+            {
+              completeDate: editForm.completeDate || null,
+              partyBillAmount: Math.round(Number(editForm.billAmount) || 0),
+              receipt: receiptToSave,
+              ...buildVoiceAndNotesPatch(),
+            },
+            lotWorkspaceOpts(lot)
+          ),
+        ];
+        if (partyChanged) {
+          const sel = parties.find((p) => samePartyId(p.id, editForm.partyId));
+          rejTasks.push(
+            updateLot(
+              editingId,
+              { partyId: editForm.partyId, partyName: sel?.name || editForm.partyName },
+              lotWorkspaceOpts(lot)
+            )
+          );
+        }
+        await Promise.all(rejTasks);
       } else {
         if (isParty && getDisplayStatus(lot) === 'In Progress' && editForm.status === 'Pending') {
           await Swal.fire({
@@ -1286,7 +1452,7 @@ export default function PartyLedger() {
               completeDate: editForm.completeDate || null,
               partyBillAmount: Math.round(Number(editForm.billAmount) || 0),
               receipt: receiptToSave,
-              notes: editForm.notes,
+              ...buildVoiceAndNotesPatch(),
               overrideStatus: nextOverrideStatus,
             },
             lotWorkspaceOpts(lot)
@@ -1298,6 +1464,7 @@ export default function PartyLedger() {
         await Promise.all(stdTasks);
       }
 
+      activeEditLotIdRef.current = null;
       setEditingId(null);
       setLedgerEditKind(null);
     } catch (e) {
@@ -1315,6 +1482,7 @@ export default function PartyLedger() {
   const totals = useMemo(() => {
     let completedAmount = 0;
     let inProgressAmount = 0;
+    let hasInProgressPartyBill = false;
     let otherAmount = 0;
     let pending = 0;
     let inProgress = 0;
@@ -1324,30 +1492,35 @@ export default function PartyLedger() {
 
     lotsForSummaryStats.forEach((l) => {
       const status = getDisplayStatus(l);
-      const bill = getLedgerAmountForTotals(l);
 
       if (status === 'Completed') {
-        completedAmount += bill;
+        completedAmount += getLedgerAmountForTotals(l);
         completed += 1;
-      } else if (status === 'Pending') {
-        pending += 1;
-      } else if (status === 'In Progress') {
-        inProgressAmount += bill;
-        inProgress += 1;
-      } else if (status === 'Pending review') {
-        otherAmount += bill;
-        pendingReview += 1;
-      } else if (status === 'Rejected') {
-        otherAmount += bill;
-        rejected += 1;
       } else {
-        otherAmount += bill;
+        const activePartyAmt = getActiveLedgerBillDisplay(l);
+        if (status === 'Pending') {
+          pending += 1;
+        } else if (status === 'In Progress') {
+          if (activePartyAmt != null) {
+            inProgressAmount += activePartyAmt;
+            hasInProgressPartyBill = true;
+          }
+          inProgress += 1;
+        } else if (status === 'Pending review') {
+          if (activePartyAmt != null) otherAmount += activePartyAmt;
+          pendingReview += 1;
+        } else if (status === 'Rejected') {
+          if (activePartyAmt != null) otherAmount += activePartyAmt;
+          rejected += 1;
+        } else if (activePartyAmt != null) {
+          otherAmount += activePartyAmt;
+        }
       }
     });
 
     return {
       lots: lotsForSummaryStats.length,
-      billTotal: lotsForSummaryStats.reduce((s, l) => s + getLedgerAmountForTotals(l), 0),
+      billTotal: completedAmount + inProgressAmount + otherAmount,
       completed,
       pending,
       inProgress,
@@ -1356,6 +1529,7 @@ export default function PartyLedger() {
       otherCount: pendingReview + rejected,
       completedAmount,
       inProgressAmount,
+      hasInProgressPartyBill,
       otherAmount,
       withReceipt: lotsForSummaryStats.filter((l) => ledgerPartyEdits[l.id]?.receipt).length,
     };
@@ -1401,6 +1575,22 @@ export default function PartyLedger() {
       return false;
     };
 
+    const sumPartyLedgerLots = (lotsList) => {
+      let partyCompletedAmt = 0;
+      let partyTotalBillAmt = 0;
+      for (const l of lotsList) {
+        if (getDisplayStatus(l) === 'Completed') {
+          const amt = getLedgerAmountForTotals(l);
+          partyCompletedAmt += amt;
+          partyTotalBillAmt += amt;
+        } else {
+          const activePartyAmt = getActiveLedgerBillDisplay(l);
+          if (activePartyAmt != null) partyTotalBillAmt += activePartyAmt;
+        }
+      }
+      return { partyCompletedAmt, partyTotalBillAmt };
+    };
+
     if (partyFilter === 'All') {
       // Reconciled per-party aggregation (matches Parties page vendor accounting):
       // Each party's balance is evaluated independently. Advances of one party do NOT reduce what is owed to another party.
@@ -1443,15 +1633,7 @@ export default function PartyLedger() {
         const lots = lotsByParty.get(pid) || [];
         const pname = String(party.name || '').trim();
 
-        let partyCompletedAmt = 0;
-        let partyTotalBillAmt = 0;
-        for (const l of lots) {
-          const amt = getLedgerAmountForTotals(l);
-          partyTotalBillAmt += amt;
-          if (getDisplayStatus(l) === 'Completed') {
-            partyCompletedAmt += amt;
-          }
-        }
+        const { partyCompletedAmt, partyTotalBillAmt } = sumPartyLedgerLots(lots);
 
         const totalPaid = (paidByPartyId.get(pid) || 0) + (paidByPartyName.get(pname) || 0);
         const receivedFromParty = (receivedByPartyId.get(pid) || 0) + (receivedByPartyName.get(pname) || 0);
@@ -1487,15 +1669,7 @@ export default function PartyLedger() {
     const party = parties.find((p) => samePartyId(p.id, partyFilter));
     const pname = (party?.name || '').trim();
 
-    let partyCompletedAmt = 0;
-    let partyTotalBillAmt = 0;
-    for (const l of lotsForSummaryStats) {
-      const amt = getLedgerAmountForTotals(l);
-      partyTotalBillAmt += amt;
-      if (getDisplayStatus(l) === 'Completed') {
-        partyCompletedAmt += amt;
-      }
-    }
+    const { partyCompletedAmt, partyTotalBillAmt } = sumPartyLedgerLots(lotsForSummaryStats);
 
     const receivedFromBusiness = pays
       .filter((p) => samePartyId(p.partyId, partyFilter) || (pname && String(p.party || '').trim().toLowerCase() === pname.toLowerCase()))
@@ -1622,8 +1796,8 @@ export default function PartyLedger() {
         style={{
           fontSize: 11,
           fontWeight: 600,
-          border: '1px solid #E0E7FF',
-          background: 'linear-gradient(180deg, #F8FAFF 0%, var(--primary-bg, #eef2ff) 100%)',
+          border: '1px solid var(--border, #E0E7FF)',
+          background: 'var(--primary-bg, #eef2ff)',
           color: 'var(--primary, #3730a3)',
           cursor: 'pointer',
           padding: '3px 8px',
@@ -1667,6 +1841,7 @@ export default function PartyLedger() {
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
+                justifyContent: 'center',
                 gap: 6,
                 fontSize: 12,
                 fontWeight: 600,
@@ -1675,9 +1850,12 @@ export default function PartyLedger() {
                 background: showSummaryCards ? 'var(--card-bg, #ffffff)' : 'var(--primary-bg, #eff6ff)',
                 borderRadius: 20,
                 padding: '5px 14px',
+                minWidth: 126,
                 cursor: 'pointer',
                 boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
                 transition: 'all 0.15s ease',
+                whiteSpace: 'nowrap',
+                flexShrink: 0,
               }}
               title={showSummaryCards ? 'Hide summary stat cards for privacy' : 'Show summary stat cards'}
             >
@@ -1729,7 +1907,7 @@ export default function PartyLedger() {
           <button
             type="button"
             className="btn btn-sm"
-            style={{ background: 'var(--warning, #f59e0b)', color: 'var(--card-bg, #ffffff)', border: 'none' }}
+            style={{ background: 'var(--warning, #f59e0b)', color: '#111827', border: 'none', fontWeight: 700 }}
             onClick={jumpToPendingBillRevision}
           >
             Open request
@@ -1886,7 +2064,8 @@ export default function PartyLedger() {
         handleSave={handleSave}
         onClose={() => {
           if (!ledgerSaving) {
-            setEditingId(null);
+            activeEditLotIdRef.current = null;
+      setEditingId(null);
             setLedgerEditKind(null);
             setLedgerFormErrors({});
           }

@@ -12,7 +12,6 @@ export default function CompleteBillModal({
   confirmCompleteBillModal,
   ownerReceivedNet,
   getPartyName,
-  partyEdits,
 }) {
   if (!completeBillModal) return null;
 

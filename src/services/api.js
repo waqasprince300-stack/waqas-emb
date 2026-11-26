@@ -584,6 +584,7 @@ class ApiService {
     const qs = new URLSearchParams();
     if (opts.includeReceipts) qs.set('includeReceipts', '1');
     if (opts.includeLotImages) qs.set('includeLotImages', '1');
+    if (opts.includeVoiceNotes) qs.set('includeVoiceNotes', '1');
     const biz = opts.businessOwnerId != null ? String(opts.businessOwnerId).trim() : '';
     if (biz) qs.set('businessOwnerId', biz);
     const q = qs.toString();

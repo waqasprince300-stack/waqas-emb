@@ -86,27 +86,28 @@ export default function PLReceiptPreviewModal({
           </p>
         </div>
       )}
-      {isParty && (
-        <div style={{ marginTop: 16, display: 'flex', justifyContent: 'center' }}>
-          <button
-            type="button"
-            className="btn btn-ghost"
-            style={{ color: 'var(--danger, #dc2626)', fontWeight: 600 }}
-            onClick={() => {
-              const lotToEdit =
-                (receiptPreview.lotId &&
-                  ledgerLots.find((l) => String(l.id) === String(receiptPreview.lotId))) ||
-                ledgerLots.find((l) => (l.lotNo || l.lotNumber) === receiptPreview.title);
-              setReceiptPreview(null);
-              if (lotToEdit) {
+      {isParty && (() => {
+        const lotToEdit =
+          (receiptPreview.lotId &&
+            ledgerLots.find((l) => String(l.id) === String(receiptPreview.lotId))) ||
+          ledgerLots.find((l) => (l.lotNo || l.lotNumber) === receiptPreview.title);
+        if (!lotToEdit || getDisplayStatus(lotToEdit) === 'Completed') return null;
+        return (
+          <div style={{ marginTop: 16, display: 'flex', justifyContent: 'center' }}>
+            <button
+              type="button"
+              className="btn btn-ghost"
+              style={{ color: 'var(--danger, #dc2626)', fontWeight: 600 }}
+              onClick={() => {
+                setReceiptPreview(null);
                 openEdit(lotToEdit, getDisplayStatus(lotToEdit));
-              }
-            }}
-          >
-            Change or Delete Bill (Open Edit)
-          </button>
-        </div>
-      )}
+              }}
+            >
+              Change or Delete Bill (Open Edit)
+            </button>
+          </div>
+        );
+      })()}
     </Modal>
   );
 }

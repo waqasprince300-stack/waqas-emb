@@ -2,6 +2,7 @@ import React from 'react';
 import { HighlightText, ActionBtn } from '../UI';
 import LotStatusSelect from '../LotStatusSelect';
 import LotEmptyState from './LotEmptyState';
+import { VoiceNotePlayerPill } from '../voice/VoiceNoteControl';
 import { formatDisplayDate } from '../../utils/dateFilters';
 import { workspaceDisplayTitleForLot } from '../../utils/businessWorkspace';
 import { STATUS_OPTIONS } from '../../utils/ghausiaHelpers';
@@ -39,24 +40,25 @@ export default function LotTableDesktop({
   openLinkedLot,
   setDeleteTarget,
   renderOwnerBillableAmount,
+  partyEdits = {},
 }) {
   return (
     <div className="table-wrapper desktop-only-table">
       <div className="table-scroll">
         <table className="ledger-table fixed-grid-table ghausia-lots-table">
           <colgroup>
-            <col style={{ width: '15%' }} />
-            <col style={{ width: '5.5%' }} />
-            <col style={{ width: '10.5%' }} />
+            <col style={{ width: '14%' }} />
             <col style={{ width: '6.5%' }} />
-            <col style={{ width: '4.3%' }} />
-            <col style={{ width: '4.7%' }} />
+            <col style={{ width: '11.5%' }} />
+            <col style={{ width: '6.5%' }} />
+            <col style={{ width: '5.5%' }} />
+            <col style={{ width: '5.5%' }} />
             <col style={{ width: '7.5%' }} />
-            <col style={{ width: '8%' }} />
+            <col style={{ width: '7.5%' }} />
             <col style={{ width: '9.5%' }} />
             <col style={{ width: '11.5%' }} />
+            <col style={{ width: '7%' }} />
             <col style={{ width: '7.5%' }} />
-            <col style={{ width: '9.5%' }} />
           </colgroup>
           <thead>
             <tr>
@@ -134,9 +136,66 @@ export default function LotTableDesktop({
                   </td>
                   <td style={{ fontWeight: 600, whiteSpace: 'nowrap' }}><HighlightText text={l.designNo} query={search} /></td>
                   <td className="desc-col">
-                    <div className="table-cell-clamp-2" title={l.description || ''}>
-                      <HighlightText text={l.description} query={search} />
-                    </div>
+                    {(() => {
+                      const pe = partyEdits[l.id] || {};
+                      const hasPv = Boolean(pe.hasPartyVoiceNote || pe.partyVoiceNote);
+                      const hasAv = Boolean(pe.hasAdminVoiceNote || pe.adminVoiceNote);
+                      const adminNoteText = String(pe.adminNotes || '').trim();
+                      const partyNoteText = String(pe.notes || '').trim();
+                      return (
+                        <>
+                          <div className="table-cell-clamp-2" title={l.description || adminNoteText || ''}>
+                            <HighlightText text={l.description} query={search} />
+                          </div>
+                          {adminNoteText && (
+                            <div
+                              className="table-cell-clamp-2"
+                              title={adminNoteText}
+                              style={{ fontSize: 11, color: 'var(--primary, #1d4ed8)', marginTop: 3, fontWeight: 500 }}
+                            >
+                              Admin: {adminNoteText}
+                            </div>
+                          )}
+                          {partyNoteText && (
+                            <div
+                              className="table-cell-clamp-2"
+                              title={partyNoteText}
+                              style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}
+                            >
+                              Party: {partyNoteText}
+                            </div>
+                          )}
+                          {(hasPv || hasAv) && (
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
+                              {hasAv && (
+                                <VoiceNotePlayerPill
+                                  compact
+                                  lotId={l.id}
+                                  src={pe.adminVoiceNote || ''}
+                                  hasVoiceNote={hasAv}
+                                  duration={pe.adminVoiceNoteDuration || 0}
+                                  label="Admin"
+                                  roleTone="admin"
+                                  businessOwnerId={l.businessOwnerId}
+                                />
+                              )}
+                              {hasPv && (
+                                <VoiceNotePlayerPill
+                                  compact
+                                  lotId={l.id}
+                                  src={pe.partyVoiceNote || ''}
+                                  hasVoiceNote={hasPv}
+                                  duration={pe.partyVoiceNoteDuration || 0}
+                                  label="Party"
+                                  roleTone="party"
+                                  businessOwnerId={l.businessOwnerId}
+                                />
+                              )}
+                            </div>
+                          )}
+                        </>
+                      );
+                    })()}
                   </td>
                   <td>
                     <span
@@ -197,7 +256,7 @@ export default function LotTableDesktop({
                         <span
                           style={{
                             fontSize: 12,
-                            color: 'green',
+                            color: 'var(--success, #15803d)',
                             fontWeight: '500',
                             padding: '2px 8px',
                             borderRadius: 6,
@@ -238,6 +297,8 @@ export default function LotTableDesktop({
                           options={STATUS_OPTIONS}
                           disabled={completionPersistingLotId === l.id || inlineSummaryBusy}
                           onChange={(next) => setLotStatus(l, next)}
+                          wrapStyle={{ width: '100%', minWidth: 0, maxWidth: '100%' }}
+                          style={{ width: '100%', minWidth: 0, fontSize: 12.5 }}
                         />
                         {l.dispatchDate && l.status !== 'pending' && (
                           <div
@@ -258,7 +319,7 @@ export default function LotTableDesktop({
                             style={{
                               fontSize: 11,
                               lineHeight: 1.25,
-                              color: 'green',
+                              color: 'var(--success, #15803d)',
                               marginTop: 1,
                               fontWeight: '500',
                               whiteSpace: 'nowrap',
@@ -302,7 +363,7 @@ export default function LotTableDesktop({
                     {renderOwnerBillableAmount(l)}
                   </td>
                   <td style={{ whiteSpace: 'nowrap' }}>
-                    <div style={{ display: 'flex', gap: 5, flexWrap: 'nowrap', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', alignItems: 'center' }}>
                       <ActionBtn variant="edit" onClick={() => openEdit(l)} />
                       <ActionBtn variant="delete" onClick={() => setDeleteTarget(l)} />
                     </div>
