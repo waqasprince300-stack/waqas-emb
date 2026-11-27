@@ -9,11 +9,13 @@ import LoaderDashboard from '../components/LoaderDashboard';
 import apiService from '../services/api';
 import {
   isWithinDateRange,
-  latestDateFrom,
-  compareRowsByUpdatedNewestFirst,
+  getPartyLedgerLotDate,
+  comparePartyLedgerLots,
+  toLocalYmd,
 } from '../utils/dateFilters';
 import { getPartyLedgerBillDisplay, getPartyLedgerBillNumeric, getAdminLedgerOrBusinessBill } from '../utils/partyBillPrivacy';
 import { workspaceDisplayTitleForLot, normalizedBusinessOwnerId } from '../utils/businessWorkspace';
+import { lotLinkValueFromLot, paymentMatchesLot } from '../utils/lotKeyHelpers';
 import {
   countPendingBillRevisionRequests,
   hasPendingBillRevisionRequest,
@@ -177,6 +179,7 @@ export default function PartyLedger() {
     updateLot,
     updatePartyEdit,
     addPayment,
+    updatePayment,
     parties,
     businessOwners,
     initialDataLoading,
@@ -310,23 +313,18 @@ export default function PartyLedger() {
     return biz ? { businessOwnerId: biz } : {};
   };
 
-  const normalizeLotKey = (v) =>
-    String(v ?? '')
-      .trim()
-      .toLowerCase();
   const lotNumberOf = (lot) => lot?.lotNo || lot?.lotNumber || '';
 
   /** Owner settlement payments linked to this lot (admin already "made payment & settled"). */
   const ownerSettlementForLot = (lot) => {
-    const key = normalizeLotKey(lotNumberOf(lot));
-    if (!key) return [];
+    if (!lot) return [];
     return ledgerPayments.filter(
       (p) =>
         p.type === 'Paid' &&
         String(p.party || '')
           .trim()
           .toLowerCase() === 'owner' &&
-        normalizeLotKey(p.linkedLot) === key
+        paymentMatchesLot(p, lot)
     );
   };
 
@@ -348,29 +346,29 @@ export default function PartyLedger() {
       })
       .filter((lot) =>
         isWithinDateRange(
-          latestDateFrom(lot, [
-            'receivedBackDate',
-            'dispatchDate',
-            'allotDate',
-            'receivedDate',
-            'createdAt',
-          ]),
+          getPartyLedgerLotDate(lot, ledgerPartyEdits[lot.id]),
           dateRange,
           customRange
         )
       );
-  }, [ledgerLots, dateRange, customRange, isAdmin, isParty, workspaceFilter]);
+  }, [ledgerLots, ledgerPartyEdits, dateRange, customRange, isAdmin, isParty, workspaceFilter]);
 
-  const formatYmd = (value) => {
-    if (!value) return '';
-    const d = typeof value === 'string' ? new Date(value) : value;
-    if (Number.isNaN(d.getTime())) return '';
-    return d.toISOString().slice(0, 10);
-  };
+  const formatYmd = (value) => toLocalYmd(value);
 
-  /** Party ledger completion date: party edit override, else Ghausia lot received-back date (syncs to PartyLedger.completeDate on server). */
+  /** Party ledger completion date: party edit override, else Ghausia lot received-back date, else submission timestamp. */
   const getDisplayCompleteDate = (l, pe) => {
-    const ymd = formatYmd(pe.completeDate) || formatYmd(l.receivedBackDate);
+    const ls = String(l?.status || '').toLowerCase().trim();
+    const ov = String(pe?.overrideStatus || '').toLowerCase().trim();
+    const isSubmittedOrDone =
+      ls === 'pending approval' ||
+      ov === 'pending review' ||
+      ov === 'pending approval' ||
+      ['completed', 'complete', 'received back', 'billable'].includes(ls) ||
+      ['completed', 'complete', 'received back', 'billable'].includes(ov);
+    const ymd =
+      formatYmd(pe.completeDate) ||
+      formatYmd(l.receivedBackDate) ||
+      (isSubmittedOrDone ? formatYmd(l.pendingReviewSubmittedAt) : '');
     return ymd || null;
   };
 
@@ -380,9 +378,12 @@ export default function PartyLedger() {
       .toLowerCase();
     if (ls === 'pending approval') return 'Pending review';
     if (ls === 'rejected') return 'Rejected';
+    // Authoritative approved/completed status always wins over any stale PartyEdit.overrideStatus.
+    if (['completed', 'complete', 'received back', 'billable'].includes(ls)) {
+      return 'Completed';
+    }
     const pe = ledgerPartyEdits[l.id] || {};
     const ov = String(pe.overrideStatus || '').trim().toLowerCase();
-    // If overrideStatus explicitly set, honour it
     if (['completed', 'complete', 'received back', 'billable'].includes(ov)) {
       return 'Completed';
     }
@@ -390,11 +391,6 @@ export default function PartyLedger() {
     if (ov === 'rejected') return 'Rejected';
     if (ov === 'pending') return 'Pending';
     if (ov === 'in progress' || ov === 'dispatched') return 'In Progress';
-
-    // If lot status is completed/received back and no override
-    if (['completed', 'complete', 'received back', 'billable'].includes(ls)) {
-      return 'Completed';
-    }
 
     // Otherwise derive from lot status, passing party name to check if known
     const partyNameDisplay = getPartyNameLocal(l.partyId, l.partyName);
@@ -460,7 +456,7 @@ export default function PartyLedger() {
         const bPend = hasPendingBillRevisionRequest(partyEditForLot(ledgerPartyEdits, b));
         if (aPend !== bPend) return aPend ? -1 : 1;
       }
-      return compareRowsByUpdatedNewestFirst(a, b, 'lot');
+      return comparePartyLedgerLots(a, b, ledgerPartyEdits);
     });
   }, [assignedLots, debouncedSearch, searchField, partyFilter, ledgerLotsTab, statusFilter, componentFilter, ledgerPartyEdits, isAdmin]);
 
@@ -748,15 +744,13 @@ export default function PartyLedger() {
       if (ownerChanged && settlements.length > 0) {
         const delta = newOwnerBill - prevOwnerBill;
         const lotNo = lotNumberOf(lot);
-        const common = {
-          party: 'Owner',
-          date: new Date().toISOString().slice(0, 10),
-          linkedLot: String(lotNo),
-        };
+        const linkedLotVal = lotLinkValueFromLot(lot) || String(lotNo);
         if (delta > 0) {
           await addPayment(
             {
-              ...common,
+              party: 'Owner',
+              date: toLocalYmd(),
+              linkedLot: linkedLotVal,
               type: 'Paid',
               amount: delta,
               note: `Bill revision adjustment (+) - lot ${lotNo}: owner bill Rs.${prevOwnerBill.toLocaleString()} -> Rs.${newOwnerBill.toLocaleString()}`,
@@ -764,15 +758,36 @@ export default function PartyLedger() {
             lotWorkspaceOpts(lot)
           );
         } else if (delta < 0) {
-          await addPayment(
-            {
-              ...common,
-              type: 'Received',
-              amount: Math.abs(delta),
-              note: `Bill revision adjustment (-) - lot ${lotNo}: owner bill Rs.${prevOwnerBill.toLocaleString()} -> Rs.${newOwnerBill.toLocaleString()}`,
-            },
-            lotWorkspaceOpts(lot)
+          // Adjust unbilled standalone "Paid -> Owner" settlement rows instead of
+          // creating a fake "Received" cash inflow. Billed settlements belong to
+          // finalized OwnerBills and must be adjusted in Owner Ledger.
+          let remainingToReduce = Math.abs(delta);
+          const unbilledSettlements = settlements.filter(
+            (s) => !s.ownerBillId && !s.billedInBillNo && Number(s.amount || 0) > 0
           );
+          for (const s of unbilledSettlements) {
+            if (remainingToReduce <= 0) break;
+            const sId = s.id || s._id;
+            const sAmt = Number(s.amount || 0);
+            if (!sId || sAmt <= 0) continue;
+            const deduct = Math.min(sAmt, remainingToReduce);
+            const nextAmt = Math.max(0, Math.round(sAmt - deduct));
+            const adjTag = `[Revision adjustment -Rs.${deduct.toLocaleString()}: owner bill Rs.${prevOwnerBill.toLocaleString()} -> Rs.${newOwnerBill.toLocaleString()}]`;
+            const nextNote = s.note ? `${s.note} ${adjTag}` : adjTag;
+            await updatePayment(
+              sId,
+              { amount: nextAmt, note: nextNote },
+              lotWorkspaceOpts(lot)
+            );
+            remainingToReduce -= deduct;
+          }
+          if (remainingToReduce > 0) {
+            await Swal.fire({
+              icon: 'info',
+              title: 'Owner settlement adjustment needed',
+              text: `Lot ${lotNo} owner bill dropped by Rs.${Math.abs(delta).toLocaleString()}, and Rs.${remainingToReduce.toLocaleString()} is already settled inside an Owner Bill (or exceeds unbilled settlements). Apply the deduction in Owner Ledger.`,
+            });
+          }
         }
       }
 
@@ -1026,6 +1041,8 @@ export default function PartyLedger() {
     }
   }, [currentPage, totalPages]);
 
+  const editOpenSeqRef = useRef(0);
+
   const openEdit = (lot, initialStatus) => {
     const pe = ledgerPartyEdits[lot.id] || {};
     const statusForForm = initialStatus || getDisplayStatus(lot);
@@ -1043,15 +1060,18 @@ export default function PartyLedger() {
 
     const hasPv = Boolean(pe.hasPartyVoiceNote || pe.partyVoiceNote);
     const hasAv = Boolean(pe.hasAdminVoiceNote || pe.adminVoiceNote);
+    const hasRcpt = Boolean(pe.hasReceipt || pe.receipt);
 
     setEditForm({
       allotDate: isParty ? (getPartyAllotDate(lot) || '') : (lot.allotDate || ''),
       completeDate:
         existingComplete ||
-        (statusForForm === 'Completed' ? new Date().toISOString().slice(0, 10) : ''),
+        (statusForForm === 'Completed' ? toLocalYmd() : ''),
       status: statusForForm,
       billAmount: initialBill,
       receipt: pe.receipt || '',
+      hasReceipt: hasRcpt,
+      receiptDirty: false,
       notes: pe.notes || '',
       partyVoiceNote: pe.partyVoiceNote || '',
       partyVoiceNoteDuration: Number(pe.partyVoiceNoteDuration || 0),
@@ -1068,24 +1088,36 @@ export default function PartyLedger() {
     });
     setEditingId(lot.id);
     activeEditLotIdRef.current = lot.id;
+    const openSeq = ++editOpenSeqRef.current;
 
-    if ((hasPv && !pe.partyVoiceNote) || (hasAv && !pe.adminVoiceNote)) {
+    const needVoice = (hasPv && !pe.partyVoiceNote) || (hasAv && !pe.adminVoiceNote);
+    const needReceipt = hasRcpt && !pe.receipt;
+    if (needVoice || needReceipt) {
       const targetLotId = lot.id;
       apiService
         .getPartyEditByLotId(targetLotId, {
           includeVoiceNotes: true,
+          includeReceipts: needReceipt,
           businessOwnerId: normalizedBusinessOwnerId(lot.businessOwnerId) || undefined,
           skipTenantHeader: isParty,
         })
         .then((row) => {
           if (!row) return;
+          const serverHasPv = Boolean(row.hasPartyVoiceNote || row.partyVoiceNote);
+          const serverHasAv = Boolean(row.hasAdminVoiceNote || row.adminVoiceNote);
+          const serverHasRcpt = Boolean(row.hasReceipt || row.receipt);
           patchLotVoiceNotes?.(targetLotId, {
             partyVoiceNote: row.partyVoiceNote || '',
             partyVoiceNoteDuration: row.partyVoiceNoteDuration || 0,
+            hasPartyVoiceNote: serverHasPv,
             adminVoiceNote: row.adminVoiceNote || '',
             adminVoiceNoteDuration: row.adminVoiceNoteDuration || 0,
+            hasAdminVoiceNote: serverHasAv,
+            ...(needReceipt && row.receipt !== undefined
+              ? { receipt: row.receipt || '', hasReceipt: serverHasRcpt }
+              : {}),
           });
-          if (activeEditLotIdRef.current !== targetLotId) return;
+          if (editOpenSeqRef.current !== openSeq || activeEditLotIdRef.current !== targetLotId) return;
           setEditForm((prev) => ({
             ...prev,
             ...(prev.partyVoiceDirty
@@ -1095,6 +1127,7 @@ export default function PartyLedger() {
                   partyVoiceNoteDuration: Number(
                     row.partyVoiceNoteDuration ?? prev.partyVoiceNoteDuration ?? 0
                   ),
+                  hasPartyVoiceNote: serverHasPv,
                 }),
             ...(prev.adminNotesDirty
               ? {}
@@ -1109,7 +1142,14 @@ export default function PartyLedger() {
                   adminVoiceNoteDuration: Number(
                     row.adminVoiceNoteDuration ?? prev.adminVoiceNoteDuration ?? 0
                   ),
+                  hasAdminVoiceNote: serverHasAv,
                 }),
+            ...(needReceipt && !prev.receiptDirty && row.receipt !== undefined
+              ? {
+                  receipt: row.receipt || prev.receipt || '',
+                  hasReceipt: serverHasRcpt,
+                }
+              : {}),
           }));
         })
         .catch(() => {});
@@ -1207,38 +1247,46 @@ export default function PartyLedger() {
           };
         }
 
-        const nowD = new Date();
-        const fallbackToday = `${nowD.getFullYear()}-${String(nowD.getMonth() + 1).padStart(2, '0')}-${String(nowD.getDate()).padStart(2, '0')}`;
-        const reviewTasks = [
-          updatePartyEdit(
-            editingId,
-            {
-              completeDate: editForm.completeDate || fallbackToday,
-              partyBillAmount: nextLedgerAmount,
-              receipt: receiptToSave,
-              ...buildVoiceAndNotesPatch(),
-              pendingRevision: pendingRevisionPayload ?? prevPe.pendingRevision ?? null,
-            },
-            lotWorkspaceOpts(lot)
-          ),
-        ];
+        const nextCompleteDate = editForm.completeDate || toLocalYmd();
+        const prevReceivedBackYmd = formatYmd(lot.receivedBackDate);
+        const includeReceipt =
+          !editForm.hasReceipt || editForm.receipt !== '' || editForm.receiptDirty;
+        const revertedBackToOriginalRev =
+          prevPe.pendingRevision &&
+          nextLedgerAmount === Number(prevPe.pendingRevision.fromAmount);
+        const nextPendingRevision = revertedBackToOriginalRev
+          ? null
+          : (pendingRevisionPayload ?? prevPe.pendingRevision ?? null);
+
+        const lotPendingPatch = {};
+        if (nextCompleteDate && nextCompleteDate !== prevReceivedBackYmd) {
+          lotPendingPatch.receivedBackDate = nextCompleteDate;
+        }
         if (partyChanged) {
           const sel = parties.find((p) => samePartyId(p.id, editForm.partyId));
-          reviewTasks.push(
-            updateLot(
-              editingId,
-              {
-                partyId: editForm.partyId,
-                partyName: sel?.name || editForm.partyName,
-              },
-              lotWorkspaceOpts(lot)
-            )
+          lotPendingPatch.partyId = editForm.partyId;
+          lotPendingPatch.partyName = sel?.name || editForm.partyName;
+        }
+        if (Object.keys(lotPendingPatch).length > 0) {
+          await updateLot(editingId, lotPendingPatch, lotWorkspaceOpts(lot));
+        }
+        if (!partyChanged) {
+          await updatePartyEdit(
+            editingId,
+            {
+              completeDate: nextCompleteDate,
+              partyBillAmount: nextLedgerAmount,
+              ...(includeReceipt ? { receipt: receiptToSave } : {}),
+              ...buildVoiceAndNotesPatch(),
+              pendingRevision: nextPendingRevision,
+            },
+            lotWorkspaceOpts(lot)
           );
         }
-        await Promise.all(reviewTasks);
 
+        editOpenSeqRef.current += 1;
         activeEditLotIdRef.current = null;
-      setEditingId(null);
+        setEditingId(null);
         setLedgerEditKind(null);
       } catch (e) {
         const msg = e?.message || (typeof e === 'string' ? e : 'Save failed. Please try again.');
@@ -1285,9 +1333,19 @@ export default function PartyLedger() {
 
       const prevPeStd = ledgerPartyEdits[lot.id] || {};
       const previousLedgerAmount = getPartyLedgerBillNumeric(prevPeStd);
-      const nextLedgerAmount = Math.round(Number(editForm.billAmount) || 0);
+      const hasBillAmountInput = String(editForm.billAmount ?? '').trim() !== '';
+      const shouldWritePartyBillAmount =
+        hasBillAmountInput || prevPeStd.partyBillAmount != null;
+      const nextLedgerAmount = shouldWritePartyBillAmount
+        ? Math.round(Number(editForm.billAmount) || 0)
+        : previousLedgerAmount;
+      const partyBillAmountPatch = shouldWritePartyBillAmount
+        ? { partyBillAmount: nextLedgerAmount }
+        : {};
       const completedAmountChanged =
-        getDisplayStatus(lot) === 'Completed' && previousLedgerAmount !== nextLedgerAmount;
+        getDisplayStatus(lot) === 'Completed' &&
+        shouldWritePartyBillAmount &&
+        previousLedgerAmount !== nextLedgerAmount;
       let amountChangeNote = null;
 
       if (completedAmountChanged) {
@@ -1325,6 +1383,8 @@ export default function PartyLedger() {
 
       const wasAlreadyCompleted =
         isApprovedOrCompleted || getDisplayStatus(lot) === 'Completed';
+      const includeReceipt =
+        !editForm.hasReceipt || editForm.receipt !== '' || editForm.receiptDirty;
       if (editForm.status === 'Completed' && wasAlreadyCompleted) {
         const completedLotUpdates = {};
         if (editForm.completeDate) {
@@ -1336,77 +1396,74 @@ export default function PartyLedger() {
           completedLotUpdates.partyName = sel?.name || editForm.partyName;
         }
         const peExisting = ledgerPartyEdits[editingId] || {};
-        const completedTasks = [
-          updatePartyEdit(
+        if (Object.keys(completedLotUpdates).length > 0) {
+          await updateLot(editingId, completedLotUpdates, lotWorkspaceOpts(lot));
+        }
+        if (!partyChanged) {
+          await updatePartyEdit(
             editingId,
             {
               completeDate:
                 editForm.completeDate ||
                 formatYmd(peExisting.completeDate) ||
                 formatYmd(lot.receivedBackDate) ||
-                new Date().toISOString().slice(0, 10),
-              partyBillAmount: Math.round(Number(editForm.billAmount) || 0),
-              receipt: receiptToSave,
+                toLocalYmd(),
+              ...partyBillAmountPatch,
+              ...(includeReceipt ? { receipt: receiptToSave } : {}),
               ...buildVoiceAndNotesPatch(),
               overrideStatus: 'Completed',
               ...(amountChangeNote ? { amountChangeNote } : {}),
             },
             lotWorkspaceOpts(lot)
-          ),
-        ];
-        if (Object.keys(completedLotUpdates).length > 0) {
-          completedTasks.push(updateLot(editingId, completedLotUpdates, lotWorkspaceOpts(lot)));
+          );
         }
-        await Promise.all(completedTasks);
       } else if (editForm.status === 'Completed') {
+        const submitDate = editForm.completeDate || toLocalYmd();
         const lotUpdates = {
           status: 'pending approval',
-          receivedBackDate: editForm.completeDate || new Date().toISOString().slice(0, 10),
+          receivedBackDate: submitDate,
         };
         if (partyChanged) {
           const sel = parties.find((p) => samePartyId(p.id, editForm.partyId));
           lotUpdates.partyId = editForm.partyId;
           lotUpdates.partyName = sel?.name || editForm.partyName;
         }
-        await Promise.all([
-          updatePartyEdit(
+        await updateLot(editingId, lotUpdates, lotWorkspaceOpts(lot));
+        if (!partyChanged) {
+          await updatePartyEdit(
             editingId,
             {
-              completeDate: editForm.completeDate || new Date().toISOString().slice(0, 10),
-              partyBillAmount: Math.round(Number(editForm.billAmount) || 0),
-              receipt: receiptToSave,
+              completeDate: submitDate,
+              ...partyBillAmountPatch,
+              ...(includeReceipt ? { receipt: receiptToSave } : {}),
               ...buildVoiceAndNotesPatch(),
               overrideStatus: 'Pending Approval',
               ...(amountChangeNote ? { amountChangeNote } : {}),
             },
             lotWorkspaceOpts(lot)
-          ),
-          updateLot(editingId, lotUpdates, lotWorkspaceOpts(lot)),
-        ]);
+          );
+        }
       } else if (editForm.status === 'Rejected') {
-        const rejTasks = [
-          updatePartyEdit(
+        if (partyChanged) {
+          const sel = parties.find((p) => samePartyId(p.id, editForm.partyId));
+          await updateLot(
+            editingId,
+            { partyId: editForm.partyId, partyName: sel?.name || editForm.partyName },
+            lotWorkspaceOpts(lot)
+          );
+        }
+        if (!partyChanged) {
+          await updatePartyEdit(
             editingId,
             {
               completeDate: editForm.completeDate || null,
-              partyBillAmount: Math.round(Number(editForm.billAmount) || 0),
-              receipt: receiptToSave,
+              ...partyBillAmountPatch,
+              ...(includeReceipt ? { receipt: receiptToSave } : {}),
               ...buildVoiceAndNotesPatch(),
             },
             lotWorkspaceOpts(lot)
-          ),
-        ];
-        if (partyChanged) {
-          const sel = parties.find((p) => samePartyId(p.id, editForm.partyId));
-          rejTasks.push(
-            updateLot(
-              editingId,
-              { partyId: editForm.partyId, partyName: sel?.name || editForm.partyName },
-              lotWorkspaceOpts(lot)
-            )
           );
         }
-        await Promise.all(rejTasks);
       } else {
         if (isParty && getDisplayStatus(lot) === 'In Progress' && editForm.status === 'Pending') {
           await Swal.fire({
@@ -1438,32 +1495,32 @@ export default function PartyLedger() {
           }
         } else if (lowerStatus !== 'dispatched') {
           lotUpdates.status = 'dispatched';
-          lotUpdates.dispatchDate = lot.dispatchDate || new Date().toISOString().slice(0, 10);
+          lotUpdates.dispatchDate = lot.dispatchDate || toLocalYmd();
         }
         if (partyChanged) {
           const sel = parties.find((p) => samePartyId(p.id, editForm.partyId));
           lotUpdates.partyId = editForm.partyId;
           lotUpdates.partyName = sel?.name || editForm.partyName;
         }
-        const stdTasks = [
-          updatePartyEdit(
+        if (Object.keys(lotUpdates).length > 0) {
+          await updateLot(editingId, lotUpdates, lotWorkspaceOpts(lot));
+        }
+        if (!partyChanged) {
+          await updatePartyEdit(
             editingId,
             {
               completeDate: editForm.completeDate || null,
-              partyBillAmount: Math.round(Number(editForm.billAmount) || 0),
-              receipt: receiptToSave,
+              ...partyBillAmountPatch,
+              ...(includeReceipt ? { receipt: receiptToSave } : {}),
               ...buildVoiceAndNotesPatch(),
               overrideStatus: nextOverrideStatus,
             },
             lotWorkspaceOpts(lot)
-          ),
-        ];
-        if (Object.keys(lotUpdates).length > 0) {
-          stdTasks.push(updateLot(editingId, lotUpdates, lotWorkspaceOpts(lot)));
+          );
         }
-        await Promise.all(stdTasks);
       }
 
+      editOpenSeqRef.current += 1;
       activeEditLotIdRef.current = null;
       setEditingId(null);
       setLedgerEditKind(null);
@@ -1550,28 +1607,30 @@ export default function PartyLedger() {
     );
     const receiveds = receivedDateScoped.filter(withinWorkspace);
 
-    // Build lookup sets for registered production vendor parties
+    // Build lookup sets for registered production vendor parties and business workspaces
     const partyIdSet = new Set(
       parties.map((p) => String(p.id ?? p._id ?? '').trim()).filter(Boolean)
     );
     const partyNameSet = new Set(
       parties.map((p) => String(p.name || '').trim().toLowerCase()).filter(Boolean)
     );
+    const ownerNamesSet = new Set(
+      (businessOwners || [])
+        .map((bo) => String(bo?.name || '').trim().toLowerCase())
+        .filter(Boolean)
+    );
+    ownerNamesSet.add('owner');
 
     const isVendorPartyPayment = (p) => {
       const pid = String(p.partyId || '').trim();
       const pname = String(p.party || '').trim().toLowerCase();
       if (!pname && !pid) return false;
-      // Exclude Owner or workspace client transactions from vendor totals
-      if (
-        pname === 'owner' ||
-        pname.includes('ghausia') ||
-        pname.includes('style collection')
-      ) {
+      // Exclude Owner or business workspace entity transactions from vendor totals
+      if (pname === 'owner' || (!pid && ownerNamesSet.has(pname) && !partyNameSet.has(pname))) {
         return false;
       }
       if (pid && partyIdSet.has(pid)) return true;
-      if (pname && partyNameSet.has(pname)) return true;
+      if (!pid && pname && partyNameSet.has(pname)) return true;
       return false;
     };
 
@@ -1594,9 +1653,22 @@ export default function PartyLedger() {
     if (partyFilter === 'All') {
       // Reconciled per-party aggregation (matches Parties page vendor accounting):
       // Each party's balance is evaluated independently. Advances of one party do NOT reduce what is owed to another party.
+      const partyIdByLowerName = new Map();
+      for (const party of parties) {
+        const pid = String(party.id ?? party._id ?? '').trim();
+        const lowerName = String(party.name || '').trim().toLowerCase();
+        if (pid && lowerName && !partyIdByLowerName.has(lowerName)) {
+          partyIdByLowerName.set(lowerName, pid);
+        }
+      }
+
       const lotsByParty = new Map();
       for (const l of lotsForSummaryStats) {
-        const pid = String(l.partyId ?? '');
+        let pid = String(l.partyId ?? '').trim();
+        if (!pid) {
+          const lowerLotParty = String(l.partyName || '').trim().toLowerCase();
+          pid = partyIdByLowerName.get(lowerLotParty) || '';
+        }
         if (!lotsByParty.has(pid)) lotsByParty.set(pid, []);
         lotsByParty.get(pid).push(l);
       }
@@ -1606,7 +1678,7 @@ export default function PartyLedger() {
           const k = String(p.partyId);
           byId.set(k, (byId.get(k) || 0) + amt);
         } else {
-          const k = String(p.party || '').trim();
+          const k = String(p.party || '').trim().toLowerCase();
           byName.set(k, (byName.get(k) || 0) + amt);
         }
       };
@@ -1631,7 +1703,7 @@ export default function PartyLedger() {
       for (const party of parties) {
         const pid = String(party.id ?? party._id ?? '');
         const lots = lotsByParty.get(pid) || [];
-        const pname = String(party.name || '').trim();
+        const pname = String(party.name || '').trim().toLowerCase();
 
         const { partyCompletedAmt, partyTotalBillAmt } = sumPartyLedgerLots(lots);
 
@@ -1672,10 +1744,22 @@ export default function PartyLedger() {
     const { partyCompletedAmt, partyTotalBillAmt } = sumPartyLedgerLots(lotsForSummaryStats);
 
     const receivedFromBusiness = pays
-      .filter((p) => samePartyId(p.partyId, partyFilter) || (pname && String(p.party || '').trim().toLowerCase() === pname.toLowerCase()))
+      .filter(
+        (p) =>
+          samePartyId(p.partyId, partyFilter) ||
+          ((!p.partyId || String(p.partyId).trim() === '') &&
+            pname &&
+            String(p.party || '').trim().toLowerCase() === pname.toLowerCase())
+      )
       .reduce((s, p) => s + Number(p.amount || 0), 0);
     const paidToBusiness = receiveds
-      .filter((p) => samePartyId(p.partyId, partyFilter) || (pname && String(p.party || '').trim().toLowerCase() === pname.toLowerCase()))
+      .filter(
+        (p) =>
+          samePartyId(p.partyId, partyFilter) ||
+          ((!p.partyId || String(p.partyId).trim() === '') &&
+            pname &&
+            String(p.party || '').trim().toLowerCase() === pname.toLowerCase())
+      )
       .reduce((s, p) => s + Number(p.amount || 0), 0);
 
     return {
@@ -1694,6 +1778,7 @@ export default function PartyLedger() {
     lotsForSummaryStats,
     ledgerPayments,
     parties,
+    businessOwners,
     totals.billTotal,
     totals.completedAmount,
     dateRange,
@@ -1742,7 +1827,7 @@ export default function PartyLedger() {
         lot.id,
         {
           status: 'dispatched',
-          dispatchDate: new Date().toISOString().slice(0, 10),
+          dispatchDate: toLocalYmd(),
         },
         lotWorkspaceOpts(lot)
       );

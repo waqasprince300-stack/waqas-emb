@@ -19,6 +19,8 @@ import {
   INITIAL_PARTY_EDITS,
   mergePartyEditsFromRemote,
 } from '../utils/lotNormalizer';
+import { toLocalYmd } from '../utils/dateFilters';
+import { clearOwnerBillsSessionCache } from '../utils/ownerBillCache';
 
 import { usePartiesData, INITIAL_PARTIES } from '../hooks/usePartiesData';
 import { useBusinessOwnersData } from '../hooks/useBusinessOwnersData';
@@ -738,8 +740,18 @@ export function AppProvider({ children }) {
       const lotId = payload && payload.lotId != null ? String(payload.lotId) : '';
       if (lotId) pendingLotIds.add(lotId);
 
-      const action = payload && payload.action != null ? String(payload.action) : '';
       const currentUserId = String(user?._id || user?.id || '');
+      const isOwnWriteEcho =
+        Boolean(payload?.actorUserId) &&
+        Boolean(currentUserId) &&
+        String(payload.actorUserId) === currentUserId &&
+        isRefreshSuppressed();
+      if (isOwnWriteEcho) {
+        if (lotId) pendingLotIds.delete(lotId);
+        return;
+      }
+
+      const action = payload && payload.action != null ? String(payload.action) : '';
       const isTargetMe = !payload?.targetUserId || String(payload.targetUserId) === currentUserId;
 
       if (action === 'notification_read_all' && isTargetMe) {
@@ -821,24 +833,34 @@ export function AppProvider({ children }) {
         return;
       }
 
-      if (
-        action === 'lot_rejected' ||
-        action === 'lot_pending_review' ||
-        action === 'bill_revision_request' ||
-        action === 'bill_revision_approved' ||
-        action === 'bill_revision_rejected' ||
-        action === 'payment_recorded' ||
-        action === 'lot_dispatched' ||
-        action === 'lot_assigned' ||
-        action === 'lot_approved' ||
-        action === 'payment_updated' ||
-        action === 'payment_deleted' ||
-        action === 'lots_billed' ||
-        action === 'lots_unbilled' ||
-        action === 'owner_bill_created' ||
-        action === 'owner_bill_updated' ||
-        action === 'owner_bill_deleted'
-      ) {
+      const adminActions = new Set([
+        'lot_pending_review',
+        'bill_revision_request',
+        'lots_billed',
+        'lots_unbilled',
+        'owner_bill_created',
+        'owner_bill_updated',
+        'owner_bill_deleted',
+      ]);
+      const partyActions = new Set([
+        'lot_rejected',
+        'lot_approved',
+        'lot_dispatched',
+        'lot_assigned',
+        'bill_revision_approved',
+        'bill_revision_rejected',
+      ]);
+      const sharedPaymentActions = new Set([
+        'payment_recorded',
+        'payment_updated',
+        'payment_deleted',
+      ]);
+      const shouldNotifyRole =
+        sharedPaymentActions.has(action) ||
+        (user?.role === 'admin' && adminActions.has(action)) ||
+        (user?.role === 'party' && partyActions.has(action));
+
+      if (shouldNotifyRole) {
         setPendingLotNotice({
           action,
           lotId: lotId || (payload.paymentId != null ? String(payload.paymentId) : ''),
@@ -895,18 +917,25 @@ export function AppProvider({ children }) {
   }, [
     isAuthenticated,
     user?.role,
+    user?.id,
     user?._id,
     runLightBootstrapRefresh,
     invalidateLotReceipt,
     isRefreshSuppressed,
     refreshNotifications,
+    setNotifications,
+    setNotificationUnreadCount,
     setPendingLotNotice,
+    clearPendingLotNotice,
     setActiveAnnouncement,
     user?.partyId,
   ]);
 
   useEffect(() => {
-    if (!isAuthenticated) disconnectRealtime();
+    if (!isAuthenticated) {
+      disconnectRealtime();
+      clearOwnerBillsSessionCache();
+    }
   }, [isAuthenticated]);
 
   // Business Owner CRUD helpers
@@ -1045,7 +1074,14 @@ export function AppProvider({ children }) {
       }
       if (patch && (Object.prototype.hasOwnProperty.call(patch, 'partyId') || Object.prototype.hasOwnProperty.call(patch, 'status'))) {
         const idStr = String(id);
-        const isReassigned = Object.prototype.hasOwnProperty.call(patch, 'partyId');
+        const prevLot =
+          ghausiaLots.find((x) => String(x.id) === idStr) ||
+          adminReportingLots.find((x) => String(x.id) === idStr) ||
+          partyCrossLots.find((x) => String(x.id) === idStr);
+        const isReassigned =
+          Object.prototype.hasOwnProperty.call(patch, 'partyId') &&
+          Boolean(prevLot) &&
+          String(patch.partyId || '') !== String(prevLot.partyId || '');
         const syncPe = (prev) => {
           const existingPe = prev[idStr];
           if (!existingPe) return prev;
@@ -1085,7 +1121,7 @@ export function AppProvider({ children }) {
       }
       return isArr ? updatedLots : updatedLots[0];
     },
-    [trackWrite, user?.role]
+    [trackWrite, user?.role, ghausiaLots, adminReportingLots, partyCrossLots]
   );
 
   const deleteLot = useCallback(
@@ -1151,51 +1187,57 @@ export function AppProvider({ children }) {
 
   const markLotsBilledLocally = useCallback((lotsBilled, billInfo) => {
     if (!lotsBilled || lotsBilled.length === 0) return;
+    const billBizId = String(billInfo?.businessOwnerId || '').trim();
     const lotIdSet = new Set(
       lotsBilled
-        .map((l) => String(l.lotId || l.id || l._id || ''))
+        .map((l) => String(l.lotId || l.id || l._id || '').trim())
         .filter(Boolean)
     );
-    const lotNoSet = new Set(
-      lotsBilled
-        .map((l) => String(l.lotNo || l.lotNumber || '').trim().toLowerCase())
-        .filter(Boolean)
-    );
-    const cleanLotNoSet = new Set(
-      lotsBilled
-        .map((l) =>
-          String(l.lotNo || l.lotNumber || '')
-            .trim()
-            .replace(/-[dD]$/, '')
-            .replace(/\([dD]\)$/, '')
-            .toLowerCase()
-        )
-        .filter(Boolean)
-    );
+
+    const normalizeBilledBaseKey = (raw, suitComponent, isRework) => {
+      const s = String(raw || '').trim().toLowerCase();
+      if (!s) return '';
+      const comp = String(suitComponent || 'main').toLowerCase() === 'dupatta' ? 'dupatta' : 'main';
+      const rw = isRework ? '1' : '0';
+      return `${comp}:${rw}:${s}`;
+    };
+
+    const exactKeysMap = new Map();
+    for (const b of lotsBilled) {
+      const k = normalizeBilledBaseKey(
+        b.lotNo || b.lotNumber,
+        b.suitComponent,
+        Boolean(b.isRework)
+      );
+      if (k) exactKeysMap.set(k, b);
+    }
 
     const applyUpdates = (arr) =>
       arr.map((lot) => {
         const curLotId = String(lot.id || lot._id || '');
-        const curLotNo = String(lot.lotNo || lot.lotNumber || '').trim().toLowerCase();
-        const curCleanLotNo = curLotNo.replace(/-[dD]$/, '').replace(/\([dD]\)$/, '');
+        const lotBizId = String(lot.businessOwnerId?._id ?? lot.businessOwnerId ?? '').trim();
+        if (billBizId && lotBizId && billBizId !== lotBizId) {
+          return lot;
+        }
 
         const matchId = Boolean(curLotId && lotIdSet.has(curLotId));
-        const matchNo = Boolean(
-          (curLotNo && lotNoSet.has(curLotNo)) ||
-          (curCleanLotNo && cleanLotNoSet.has(curCleanLotNo))
+        const matchCombinedChild =
+          lot.suitComponent === 'dupatta' &&
+          lot.linkedLotId &&
+          lotIdSet.has(String(lot.linkedLotId)) &&
+          (lot.ownerBillingChoice === 'combined' || Number(lot.billAmount || 0) === 0);
+        const curKey = normalizeBilledBaseKey(
+          lot.lotNo || lot.lotNumber,
+          lot.suitComponent,
+          Boolean(lot.isRework)
         );
+        const matchByKey = !lotIdSet.size && curKey && exactKeysMap.has(curKey);
 
-        if (matchId || matchNo) {
-          const matchBilled = lotsBilled.find((l) => {
-            const lid = String(l.lotId || l.id || l._id || '');
-            const lno = String(l.lotNo || l.lotNumber || '').trim().toLowerCase();
-            const lclean = lno.replace(/-[dD]$/, '').replace(/\([dD]\)$/, '');
-            return (
-              (lid && curLotId && lid === curLotId) ||
-              (lno && curLotNo && lno === curLotNo) ||
-              (lclean && curCleanLotNo && lclean === curCleanLotNo)
-            );
-          });
+        if (matchId || matchCombinedChild || matchByKey) {
+          const matchBilled =
+            lotsBilled.find(
+              (l) => curLotId && String(l.lotId || l.id || l._id || '').trim() === curLotId
+            ) || (curKey ? exactKeysMap.get(curKey) : null);
 
           const updated = {
             ...lot,
@@ -1203,11 +1245,11 @@ export function AppProvider({ children }) {
             ownerBillId: billInfo?.id || billInfo?._id || lot.ownerBillId,
             billedInBillNo: billInfo?.billNo || lot.billedInBillNo,
             billedInBookNo: billInfo?.bookNo || lot.billedInBookNo,
-            completionApprovedAt: new Date().toISOString(),
-            receivedBackDate: lot.receivedBackDate || new Date().toISOString().slice(0, 10),
+            completionApprovedAt: lot.completionApprovedAt || new Date().toISOString(),
+            receivedBackDate: lot.receivedBackDate || toLocalYmd(),
           };
 
-          if (matchBilled) {
+          if (matchBilled && !matchCombinedChild) {
             const r = Number(matchBilled.rate || 0);
             const a = Number(matchBilled.amount || 0);
             if (r > 0) updated.rate = r;
@@ -1227,19 +1269,15 @@ export function AppProvider({ children }) {
   }, []);
 
   const revertLotsBilledLocally = useCallback((billId, billNo, bookNo, businessOwnerId) => {
+    const cleanBiz = String(businessOwnerId || '').trim();
     const applyUpdates = (arr) =>
       arr.map((lot) => {
         const matchBillId = billId && String(lot.ownerBillId || '') === String(billId);
-        const sameBiz =
-          !businessOwnerId ||
-          !lot.businessOwnerId ||
-          String(lot.businessOwnerId) === String(businessOwnerId);
-        const sameBook =
-          !bookNo ||
-          !lot.billedInBookNo ||
-          String(lot.billedInBookNo) === String(bookNo);
+        const lotBiz = String(lot.businessOwnerId?._id ?? lot.businessOwnerId ?? '').trim();
+        const sameBiz = !cleanBiz || lotBiz === cleanBiz;
+        const sameBook = !bookNo || String(lot.billedInBookNo || '') === String(bookNo);
         const matchBillNo =
-          billNo &&
+          Boolean(billNo) &&
           String(lot.billedInBillNo || '') === String(billNo) &&
           sameBook &&
           sameBiz;
@@ -1298,7 +1336,7 @@ export function AppProvider({ children }) {
         [idStr]: {
           ...(prev[idStr] || {}),
           overrideStatus: 'Completed',
-          completeDate: normalized.receivedBackDate || prev[idStr]?.completeDate,
+          completeDate: prev[idStr]?.completeDate || normalized.receivedBackDate,
           pendingRevision: undefined,
         },
       });
@@ -1339,7 +1377,9 @@ export function AppProvider({ children }) {
       const { businessOwnerId } = opts;
       try {
         const result = await trackWrite(
-          apiService.upsertPartyEditByLotId(lotId, data, businessOwnerId)
+          apiService.upsertPartyEditByLotId(lotId, data, businessOwnerId, {
+            skipTenantHeader: user?.role === 'party',
+          })
         );
         const imgs = Array.isArray(result.lotImages) ? result.lotImages : undefined;
         const lotImagesCount =

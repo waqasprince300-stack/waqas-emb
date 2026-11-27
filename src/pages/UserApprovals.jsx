@@ -1,19 +1,18 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { Trash2 } from 'lucide-react';
 import apiService from '../services/api';
 import { useApp } from '../context/AppContext';
 import LoaderDashboard from '../components/LoaderDashboard';
-import { EmptyState } from '../components/UI';
+import DeletePartyLoginModal from '../components/DeletePartyLoginModal';
+import { EmptyState, SearchBar } from '../components/UI';
 import { compareRowsByUpdatedNewestFirst } from '../utils/dateFilters';
+import { formatApiError } from '../utils/formatApiError';
+import {
+  ACCOUNT_STATUS_FILTER_OPTIONS,
+  getAccountStatusBadge,
+} from '../utils/userStatusBadges';
 
 const getUserId = (user) => String(user?._id || user?.id || '');
-
-const STATUS_BADGES = {
-  pending: { color: 'var(--warning, #92400e)', bg: 'var(--warning-bg, #fef3c7)', border: 'var(--warning-bg, #fcd34d)' },
-  approved: { color: 'var(--success, #166534)', bg: 'var(--success-bg, #dcfce7)', border: 'var(--success-bg, #86efac)' },
-  disabled: { color: 'var(--danger, #991b1b)', bg: 'var(--danger-bg, #fee2e2)', border: 'var(--danger-bg, #fca5a5)' },
-  rejected: { color: 'var(--text-secondary, #475569)', bg: 'var(--border, #f1f5f9)', border: 'var(--border, #cbd5e1)' },
-  default: { color: 'var(--text-secondary, #475569)', bg: 'var(--border, #f1f5f9)', border: 'var(--border, #cbd5e1)' },
-};
 
 /** Mongo populate may expose `partyId` as `{ _id, name }` — API approve body expects an id string. */
 function normalizePartyIdRef(raw) {
@@ -35,6 +34,11 @@ export default function UserApprovals() {
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState('');
   const [error, setError] = useState('');
+  const [feedback, setFeedback] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleteModalError, setDeleteModalError] = useState('');
   const [approvalForms, setApprovalForms] = useState({});
 
   const loadUsers = async () => {
@@ -154,18 +158,162 @@ export default function UserApprovals() {
     }
   };
 
+  const confirmDeleteUser = async () => {
+    if (!deleteTarget) return;
+    const id = getUserId(deleteTarget);
+    setSavingId(id);
+    setDeleteModalError('');
+    setError('');
+    setFeedback('');
+    try {
+      await apiService.deleteUser(id);
+      setUsers((current) => current.filter((item) => getUserId(item) !== id));
+      setApprovalForms((prev) => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+      setFeedback(
+        `Deleted party login for ${deleteTarget.name || deleteTarget.email}. Linked party lots, ledger entries, and payments remain intact.`
+      );
+      setDeleteTarget(null);
+    } catch (err) {
+      setDeleteModalError(formatApiError(err, 'Unable to delete party user login'));
+    } finally {
+      setSavingId('');
+    }
+  };
+
   const counts = useMemo(() => {
-    const c = { pending: 0, approved: 0, disabled: 0, rejected: 0 };
+    const c = { all: users.length, pending: 0, approved: 0, disabled: 0, rejected: 0 };
     for (const u of users) {
-      if (u.status in c) c[u.status] += 1;
+      if (u.status in c && u.status !== 'all') c[u.status] += 1;
     }
     return c;
   }, [users]);
 
-  const sortedUsers = useMemo(
-    () => [...users].sort((a, b) => compareRowsByUpdatedNewestFirst(a, b, 'user')),
-    [users]
-  );
+  const sortedUsers = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    return [...users]
+      .filter((u) => {
+        if (statusFilter !== 'all' && u.status !== statusFilter) return false;
+        if (!q) return true;
+        return (
+          String(u.name || '').toLowerCase().includes(q) ||
+          String(u.email || '').toLowerCase().includes(q) ||
+          String(u.phone || '').toLowerCase().includes(q) ||
+          String(u.partyName || '').toLowerCase().includes(q)
+        );
+      })
+      .sort((a, b) => compareRowsByUpdatedNewestFirst(a, b, 'user'));
+  }, [users, searchQuery, statusFilter]);
+
+  const getUserRowView = (user) => {
+    const id = getUserId(user);
+    const form = approvalForms[id] || { partyId: normalizedPartyIdFromUser(user) };
+    const isPending = user.status === 'pending';
+    const isApproved = user.status === 'approved';
+    const isDisabled = user.status === 'disabled';
+    return {
+      id,
+      form,
+      isSaving: savingId === id,
+      canEditParty: isPending || isApproved || isDisabled,
+      partyChanged:
+        !isPending &&
+        normalizePartyIdRef(form.partyId).trim() !== normalizedPartyIdFromUser(user),
+      badge: getAccountStatusBadge(user.status),
+    };
+  };
+
+  const renderUserActions = (user, { fullWidth = false, partyChanged = false } = {}) => {
+    const id = getUserId(user);
+    const isPending = user.status === 'pending';
+    const isApproved = user.status === 'approved';
+    const isDisabled = user.status === 'disabled';
+    const isSaving = savingId === id;
+    const flexStyle = fullWidth ? { flex: 1 } : undefined;
+
+    return (
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        {isPending && (
+          <>
+            <button
+              className="btn btn-success btn-sm"
+              style={flexStyle}
+              disabled={isSaving}
+              onClick={() => approveUser(user)}
+            >
+              Approve
+            </button>
+            <button
+              className="btn btn-ghost btn-sm"
+              style={{
+                color: 'var(--danger, #b91c1c)',
+                borderColor: 'var(--danger-bg, #fecaca)',
+                ...flexStyle,
+              }}
+              disabled={isSaving}
+              onClick={() => rejectUser(user)}
+            >
+              Reject
+            </button>
+          </>
+        )}
+
+        {(isApproved || isDisabled) && partyChanged && (
+          <button
+            className="btn btn-primary btn-sm"
+            style={flexStyle}
+            disabled={isSaving}
+            onClick={() => saveParty(user)}
+          >
+            Save party
+          </button>
+        )}
+
+        {isApproved && (
+          <button
+            className="btn btn-ghost btn-sm"
+            style={{
+              color: 'var(--danger, #b91c1c)',
+              borderColor: 'var(--danger-bg, #fecaca)',
+              ...flexStyle,
+            }}
+            disabled={isSaving}
+            onClick={() => disableUser(user)}
+          >
+            Disable
+          </button>
+        )}
+
+        {isDisabled && (
+          <button
+            className="btn btn-success btn-sm"
+            style={flexStyle}
+            disabled={isSaving}
+            onClick={() => enableUser(user)}
+          >
+            Enable
+          </button>
+        )}
+
+        <button
+          type="button"
+          className="btn btn-danger btn-sm"
+          style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 5, ...flexStyle }}
+          disabled={isSaving}
+          onClick={() => {
+            setDeleteModalError('');
+            setDeleteTarget(user);
+          }}
+        >
+          <Trash2 size={13} />
+          Delete
+        </button>
+      </div>
+    );
+  };
 
   if (loading) {
     return (
@@ -188,13 +336,36 @@ export default function UserApprovals() {
         <div>
           <div className="page-title">Users / Approvals</div>
           <div className="page-subtitle">
-            Approve party users, switch their linked party, or disable / re-enable access.
+            Approve party users, switch their linked party, disable/enable access, or safely delete login accounts.
           </div>
         </div>
         <button className="btn btn-ghost" onClick={loadUsers}>
           Refresh
         </button>
       </div>
+
+      {feedback && (
+        <div
+          style={{
+            marginBottom: 14,
+            padding: '10px 14px',
+            borderRadius: 8,
+            fontSize: 13.5,
+            background: 'var(--success-bg, #f0fdf4)',
+            border: '1px solid var(--success, #86efac)',
+            color: 'var(--success, #166534)',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            gap: 12,
+          }}
+        >
+          <span>{feedback}</span>
+          <button type="button" className="btn btn-xs btn-ghost" onClick={() => setFeedback('')}>
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {error && <div className="alert alert-warning">{error}</div>}
 
@@ -203,22 +374,24 @@ export default function UserApprovals() {
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
           gap: 12,
-          marginBottom: 18,
+          marginBottom: 14,
         }}
       >
         {[
-          { label: 'Pending', value: counts.pending, color: 'var(--warning, #b45309)' },
-          { label: 'Approved', value: counts.approved, color: 'var(--success, #15803d)' },
-          { label: 'Disabled', value: counts.disabled, color: 'var(--danger, #b91c1c)' },
-          { label: 'Rejected', value: counts.rejected, color: 'var(--text-muted, #64748b)' },
+          { key: 'pending', label: 'Pending', value: counts.pending, color: 'var(--warning, #b45309)' },
+          { key: 'approved', label: 'Approved', value: counts.approved, color: 'var(--success, #15803d)' },
+          { key: 'disabled', label: 'Disabled', value: counts.disabled, color: 'var(--danger, #b91c1c)' },
+          { key: 'rejected', label: 'Rejected', value: counts.rejected, color: 'var(--text-muted, #64748b)' },
         ].map((card) => (
           <div
             key={card.label}
+            onClick={() => setStatusFilter((prev) => (prev === card.key ? 'all' : card.key))}
             style={{
               background: 'var(--card-bg, #fff)',
-              border: '1px solid var(--border)',
+              border: statusFilter === card.key ? `1.5px solid ${card.color}` : '1px solid var(--border)',
               borderRadius: 10,
               padding: '14px 16px',
+              cursor: 'pointer',
             }}
           >
             <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>
@@ -229,6 +402,48 @@ export default function UserApprovals() {
             </div>
           </div>
         ))}
+      </div>
+
+      <div
+        style={{
+          display: 'flex',
+          gap: 10,
+          flexWrap: 'wrap',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          marginBottom: 14,
+        }}
+      >
+        <div style={{ flex: '1 1 260px' }}>
+          <SearchBar
+            value={searchQuery}
+            onChange={setSearchQuery}
+            placeholder="Search user by name, email, phone, or linked party..."
+            resultCount={sortedUsers.length}
+          />
+        </div>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          {ACCOUNT_STATUS_FILTER_OPTIONS.map((opt) => {
+            const active = statusFilter === opt.value;
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => setStatusFilter(opt.value)}
+                className="btn btn-xs"
+                style={{
+                  background: active ? 'var(--primary)' : 'var(--card-bg)',
+                  color: active ? 'var(--primary-text, #fff)' : 'var(--text-secondary)',
+                  border: `1px solid ${active ? 'var(--primary)' : 'var(--border)'}`,
+                  borderRadius: 999,
+                  padding: '5px 12px',
+                }}
+              >
+                {opt.label} ({counts[opt.value] ?? 0})
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       <div className="table-wrapper desktop-only-table">
@@ -252,19 +467,7 @@ export default function UserApprovals() {
                 </tr>
               ) : (
                 sortedUsers.map((user) => {
-                  const id = getUserId(user);
-                  const form = approvalForms[id] || { partyId: normalizedPartyIdFromUser(user) };
-                  const isPending = user.status === 'pending';
-                  const isApproved = user.status === 'approved';
-                  const isDisabled = user.status === 'disabled';
-                  const isRejected = user.status === 'rejected';
-                  const isSaving = savingId === id;
-                  const canEditParty = isPending || isApproved || isDisabled;
-                  const partyChanged =
-                    !isPending &&
-                    normalizePartyIdRef(form.partyId).trim() !== normalizedPartyIdFromUser(user);
-
-                  const badge = STATUS_BADGES[user.status] || STATUS_BADGES.default;
+                  const { id, form, isSaving, canEditParty, partyChanged, badge } = getUserRowView(user);
 
                   return (
                     <tr key={id}>
@@ -311,62 +514,7 @@ export default function UserApprovals() {
                         </select>
                       </td>
                       <td>
-                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                          {isPending && (
-                            <>
-                              <button
-                                className="btn btn-success btn-sm"
-                                disabled={isSaving}
-                                onClick={() => approveUser(user)}
-                              >
-                                Approve
-                              </button>
-                              <button
-                                className="btn btn-ghost btn-sm"
-                                style={{ color: 'var(--danger, #b91c1c)', borderColor: 'var(--danger-bg, #fecaca)' }}
-                                disabled={isSaving}
-                                onClick={() => rejectUser(user)}
-                              >
-                                Reject
-                              </button>
-                            </>
-                          )}
-
-                          {(isApproved || isDisabled) && partyChanged && (
-                            <button
-                              className="btn btn-primary btn-sm"
-                              disabled={isSaving}
-                              onClick={() => saveParty(user)}
-                            >
-                              Save party
-                            </button>
-                          )}
-
-                          {isApproved && (
-                            <button
-                              className="btn btn-ghost btn-sm"
-                              style={{ color: 'var(--danger, #b91c1c)', borderColor: 'var(--danger-bg, #fecaca)' }}
-                              disabled={isSaving}
-                              onClick={() => disableUser(user)}
-                            >
-                              Disable
-                            </button>
-                          )}
-
-                          {isDisabled && (
-                            <button
-                              className="btn btn-success btn-sm"
-                              disabled={isSaving}
-                              onClick={() => enableUser(user)}
-                            >
-                              Enable
-                            </button>
-                          )}
-
-                          {isRejected && (
-                            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>—</span>
-                          )}
-                        </div>
+                        {renderUserActions(user, { partyChanged })}
                       </td>
                     </tr>
                   );
@@ -383,15 +531,7 @@ export default function UserApprovals() {
           <EmptyState message="No users found" />
         ) : (
           sortedUsers.map((user) => {
-            const id = getUserId(user);
-            const form = approvalForms[id] || { partyId: normalizedPartyIdFromUser(user) };
-            const isPending = user.status === 'pending';
-            const isApproved = user.status === 'approved';
-            const isDisabled = user.status === 'disabled';
-            const isSaving = savingId === id;
-            const canEditParty = isPending || isApproved || isDisabled;
-            const partyChanged = !isPending && normalizePartyIdRef(form.partyId).trim() !== normalizedPartyIdFromUser(user);
-            const badge = STATUS_BADGES[user.status] || STATUS_BADGES.default;
+            const { id, form, isSaving, canEditParty, partyChanged, badge } = getUserRowView(user);
 
             return (
               <div key={`mob-${id}`} className="ghausia-mobile-card" style={{ padding: '16px' }}>
@@ -444,28 +584,20 @@ export default function UserApprovals() {
                   </select>
                 </div>
 
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  {isPending && (
-                    <>
-                      <button className="btn btn-success btn-sm" disabled={isSaving} onClick={() => approveUser(user)} style={{ flex: 1 }}>Approve</button>
-                      <button className="btn btn-ghost btn-sm" style={{ color: 'var(--danger, #b91c1c)', borderColor: 'var(--danger-bg, #fecaca)', flex: 1 }} disabled={isSaving} onClick={() => rejectUser(user)}>Reject</button>
-                    </>
-                  )}
-                  {(isApproved || isDisabled) && partyChanged && (
-                    <button className="btn btn-primary btn-sm" disabled={isSaving} onClick={() => saveParty(user)} style={{ flex: 1 }}>Save party</button>
-                  )}
-                  {isApproved && (
-                    <button className="btn btn-ghost btn-sm" style={{ color: 'var(--danger, #b91c1c)', borderColor: 'var(--danger-bg, #fecaca)', flex: 1 }} disabled={isSaving} onClick={() => disableUser(user)}>Disable</button>
-                  )}
-                  {isDisabled && (
-                    <button className="btn btn-success btn-sm" disabled={isSaving} onClick={() => enableUser(user)} style={{ flex: 1 }}>Enable</button>
-                  )}
-                </div>
+                {renderUserActions(user, { fullWidth: true, partyChanged })}
               </div>
             );
           })
         )}
       </div>
+
+      <DeletePartyLoginModal
+        user={deleteTarget}
+        busy={Boolean(savingId)}
+        error={deleteModalError}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={confirmDeleteUser}
+      />
     </div>
   );
 }

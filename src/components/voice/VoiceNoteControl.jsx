@@ -42,9 +42,11 @@ function readAudioFileDuration(dataUrl) {
   return new Promise((resolve) => {
     const audio = new Audio();
     let settled = false;
+    let timeoutId = null;
     const done = (val) => {
       if (settled) return;
       settled = true;
+      if (timeoutId) clearTimeout(timeoutId);
       audio.onloadedmetadata = null;
       audio.ontimeupdate = null;
       audio.onerror = null;
@@ -67,7 +69,7 @@ function readAudioFileDuration(dataUrl) {
       }
     };
     audio.onerror = () => done(0);
-    setTimeout(() => done(0), 2500);
+    timeoutId = setTimeout(() => done(0), 2500);
     audio.src = dataUrl;
   });
 }
@@ -98,6 +100,9 @@ function normalizeUploadedAudioDataUrl(dataUrl, fallbackMime = 'audio/mpeg') {
   if (/^data:application\/octet-stream/i.test(s)) {
     return s.replace(/^data:application\/octet-stream/i, `data:${fallbackMime}`);
   }
+  if (/^data:(?:;)?base64,/i.test(s)) {
+    return s.replace(/^data:(?:;)?base64,/i, `data:${fallbackMime};base64,`);
+  }
   return s;
 }
 
@@ -125,8 +130,12 @@ export function VoiceNotePlayerPill({
   const [errorMsg, setErrorMsg] = useState('');
   const audioRef = useRef(null);
   const mountedRef = useRef(true);
+  const localSrcRef = useRef(src || '');
+  const identityRef = useRef(`${lotId || ''}:${roleTone}`);
+  const playTokenRef = useRef(0);
 
   const stopAudio = useCallback(() => {
+    playTokenRef.current += 1;
     const audio = audioRef.current;
     if (audio) {
       audio.pause();
@@ -153,19 +162,35 @@ export function VoiceNotePlayerPill({
   }, []);
 
   useEffect(() => {
-    const audio = audioRef.current;
-    if (audio) {
-      audio.pause();
-      audio.currentTime = 0;
+    const nextIdentity = `${lotId || ''}:${roleTone}`;
+    const sameIdentity = identityRef.current === nextIdentity;
+    identityRef.current = nextIdentity;
+    const nextSrc = src || '';
+    // Do not pause/reset playback when our own lazy-fetch populates the `src` prop for the audio already loaded.
+    const isSelfHydratedEcho =
+      sameIdentity &&
+      hasVoiceNote &&
+      Boolean(nextSrc) &&
+      nextSrc === localSrcRef.current;
+
+    if (!isSelfHydratedEcho) {
+      const audio = audioRef.current;
+      if (audio) {
+        audio.pause();
+        audio.currentTime = 0;
+      }
+      if (activePlayerControl?.audio === audio) {
+        activePlayerControl = null;
+      }
+      setPlaying(false);
+      setCurrentTime(0);
+      setErrorMsg('');
+      localSrcRef.current = nextSrc;
+      setLocalSrc(nextSrc);
     }
-    if (activePlayerControl?.audio === audio) {
-      activePlayerControl = null;
-    }
-    setPlaying(false);
-    setCurrentTime(0);
-    setErrorMsg('');
-    setLocalSrc(src || '');
-    setResolvedDuration(Number(duration) > 0 ? Math.round(Number(duration)) : 0);
+    setResolvedDuration((prev) =>
+      Number(duration) > 0 ? Math.round(Number(duration)) : (isSelfHydratedEcho ? prev : 0)
+    );
   }, [src, hasVoiceNote, lotId, roleTone, duration]);
 
   if (!hasVoiceNote && !localSrc) return null;
@@ -177,6 +202,7 @@ export function VoiceNotePlayerPill({
       return;
     }
 
+    const myToken = ++playTokenRef.current;
     if (activePlayerControl && activePlayerControl.audio !== audioRef.current) {
       activePlayerControl.stop?.();
     }
@@ -210,7 +236,7 @@ export function VoiceNotePlayerPill({
           businessOwnerId: businessOwnerId || undefined,
           skipTenantHeader: isParty,
         });
-        if (!mountedRef.current) return;
+        if (!mountedRef.current || playTokenRef.current !== myToken) return;
         const field = roleTone === 'admin' ? 'adminVoiceNote' : 'partyVoiceNote';
         const durField =
           roleTone === 'admin' ? 'adminVoiceNoteDuration' : 'partyVoiceNoteDuration';
@@ -218,6 +244,11 @@ export function VoiceNotePlayerPill({
           roleTone === 'admin' ? 'hasAdminVoiceNote' : 'hasPartyVoiceNote';
         playSrc = String(row?.[field] || '').trim();
         const serverDur = Number(row?.[durField] || 0);
+        if (playSrc) {
+          localSrcRef.current = playSrc;
+          setLocalSrc(playSrc);
+          if (serverDur > 0) setResolvedDuration(Math.round(serverDur));
+        }
         if (row) {
           patchLotVoiceNotes?.(lotId, {
             ...(row.partyVoiceNote !== undefined
@@ -234,21 +265,19 @@ export function VoiceNotePlayerPill({
               : {}),
           });
         }
-        if (playSrc) {
-          setLocalSrc(playSrc);
-          if (serverDur > 0) setResolvedDuration(Math.round(serverDur));
-        } else {
+        if (!playSrc) {
           patchLotVoiceNotes?.(lotId, {
             [field]: '',
             [durField]: 0,
             [hasField]: false,
           });
+          localSrcRef.current = '';
           setLocalSrc('');
           setErrorMsg('Voice note not found');
           return;
         }
       } catch (err) {
-        if (mountedRef.current) {
+        if (mountedRef.current && playTokenRef.current === myToken) {
           setErrorMsg(err?.message || 'Could not load voice note');
         }
         return;
@@ -257,7 +286,10 @@ export function VoiceNotePlayerPill({
       }
     }
 
-    if (!playSrc || !mountedRef.current) return;
+    if (!playSrc || !mountedRef.current || playTokenRef.current !== myToken) return;
+    if (activePlayerControl && activePlayerControl.audio !== audio) {
+      activePlayerControl.stop?.();
+    }
 
     const srcKey = `${playSrc.length}:${playSrc.slice(0, 64)}:${playSrc.slice(-64)}`;
     if (audio.dataset.srcKey !== srcKey) {
@@ -308,7 +340,7 @@ export function VoiceNotePlayerPill({
   };
 
   const totalSec = resolvedDuration || (Number.isFinite(audioRef.current?.duration) ? Math.round(audioRef.current.duration) : 0);
-  const progressPct = totalSec > 0 ? Math.min(100, (currentTime / totalSec) * 100) : playing ? 50 : 0;
+  const progressPct = totalSec > 0 ? Math.min(100, (currentTime / totalSec) * 100) : 0;
 
   const isAdminTone = roleTone === 'admin';
   const accent = isAdminTone ? 'var(--primary, #1e40af)' : 'var(--success, #15803d)';
@@ -435,6 +467,7 @@ function useVoiceRecorderControl(onChange) {
 
   const startRecording = async () => {
     if (startingRef.current || recording || processing) return;
+    activePlayerControl?.stop?.();
     setRecError('');
     if (typeof window !== 'undefined' && window.isSecureContext === false) {
       setRecError('Mic recording requires HTTPS (or localhost). Click the clip (📎) icon to upload an audio file.');
@@ -502,12 +535,14 @@ function useVoiceRecorderControl(onChange) {
         const finalSec = Math.max(1, elapsedRef.current);
         const wasCancelled = cancelledRef.current;
         const chunks = [...chunksRef.current];
-        const rawMime = chunks[0]?.type || recorder.mimeType || mimeType || 'audio/webm';
-        const recMime = rawMime.startsWith('video/mp4')
-          ? rawMime.replace(/^video\/mp4/, 'audio/mp4')
-          : rawMime.startsWith('video/webm')
-            ? rawMime.replace(/^video\/webm/, 'audio/webm')
-            : rawMime;
+        const rawMime = String(chunks[0]?.type || recorder.mimeType || mimeType || 'audio/webm').trim();
+        const recMime = /^video\/mp4/i.test(rawMime)
+          ? rawMime.replace(/^video\/mp4/i, 'audio/mp4')
+          : /^video\/webm/i.test(rawMime)
+            ? rawMime.replace(/^video\/webm/i, 'audio/webm')
+            : !rawMime || /^application\/octet-stream/i.test(rawMime)
+              ? 'audio/webm'
+              : rawMime;
         cleanupMedia();
         if (!mountedRef.current) return;
         setRecording(false);
@@ -634,17 +669,22 @@ function useVoiceRecorderControl(onChange) {
       setRecError('Please select a valid audio file.');
       return;
     }
+    setProcessing(true);
     try {
       const rawUrl = await blobToDataUrl(file);
       const dataUrl = normalizeUploadedAudioDataUrl(rawUrl, extMime || 'audio/mpeg');
+      if (!mountedRef.current) return;
       if (dataUrl.length > MAX_AUDIO_DATA_URL_CHARS) {
         setRecError('Audio file is too large (max ~8.5 MB file size).');
         return;
       }
       const dur = await readAudioFileDuration(dataUrl);
+      if (!mountedRef.current) return;
       onChange?.(dataUrl, dur);
     } catch {
-      setRecError('Could not read audio file.');
+      if (mountedRef.current) setRecError('Could not read audio file.');
+    } finally {
+      if (mountedRef.current) setProcessing(false);
     }
   };
 
@@ -708,6 +748,7 @@ export function NoteWithVoiceField({
   roleTone = 'party',
   rows = 2,
   pillLabel,
+  onBusyChange,
 }) {
   const fileInputRef = useRef(null);
   const {
@@ -720,6 +761,10 @@ export function NoteWithVoiceField({
     cancelRecording,
     handleAudioUpload,
   } = useVoiceRecorderControl(onVoiceChange);
+
+  useEffect(() => {
+    onBusyChange?.(Boolean(recording || processing));
+  }, [recording, processing, onBusyChange]);
 
   const hasAttached = Boolean(voiceValue) || Boolean(hasVoiceNote);
   const canModify = !locked && !readOnly;
@@ -978,10 +1023,12 @@ export function VoiceNoteField({
   readOnly = false,
   roleTone = 'party',
   helperText = '',
+  onBusyChange,
 }) {
   const fileInputRef = useRef(null);
   const {
     recording,
+    processing,
     elapsedSec,
     recError,
     startRecording,
@@ -989,6 +1036,10 @@ export function VoiceNoteField({
     cancelRecording,
     handleAudioUpload,
   } = useVoiceRecorderControl(onChange);
+
+  useEffect(() => {
+    onBusyChange?.(Boolean(recording || processing));
+  }, [recording, processing, onBusyChange]);
 
   const hasAttached = Boolean(value) || Boolean(hasVoiceNote);
   const canModify = !locked && !readOnly;
@@ -1058,6 +1109,10 @@ export function VoiceNoteField({
             Cancel
           </button>
         </div>
+      ) : processing ? (
+        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>
+          Processing audio…
+        </span>
       ) : (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           {hasAttached ? (

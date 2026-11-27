@@ -22,7 +22,10 @@ import {
   isWithinDateRange,
   latestDateFrom,
   compareRowsByUpdatedNewestFirst,
+  compareWorkspaceLots,
+  comparePartyLedgerLots,
   compareBillableLotsNewestFirst,
+  getPartyLedgerLotDate,
   formatDisplayDate,
 } from '../utils/dateFilters';
 import { workspaceDisplayTitleForLot } from '../utils/businessWorkspace';
@@ -37,10 +40,17 @@ import { normalizeFabric } from '../utils/ghausiaHelpers';
 import { apiService } from '../services/api';
 import { formatLakhCrore } from '../utils/numberToWords';
 
-function lotRelevantDate(l) {
+function lotRelevantDate(l, partyEdit = null, isPartyView = false) {
+  if (isPartyView) {
+    return getPartyLedgerLotDate(l, partyEdit);
+  }
   const st = String(l?.status || '').toLowerCase().trim();
-  if (st === 'dispatched' && l?.dispatchDate) return l.dispatchDate;
-  if (st === 'received back' && l?.receivedBackDate) return l.receivedBackDate;
+  if (st === 'dispatched' && (l?.dispatchedAt || l?.dispatchDate)) {
+    return l.dispatchedAt || l.dispatchDate;
+  }
+  if (st === 'received back' && (l?.completionApprovedAt || l?.receivedBackDate)) {
+    return l.completionApprovedAt || l.receivedBackDate;
+  }
   if (st === 'completed') {
     return l?.completionApprovedAt || l?.receivedBackDate || l?.allotDate || l?.createdAt;
   }
@@ -49,20 +59,26 @@ function lotRelevantDate(l) {
 
 function lotBelongsToPartyUser(lot, partyId, partyName) {
   const pid = String(partyId || '').trim();
-  const pname = String(partyName || '').trim();
+  const pname = String(partyName || '').trim().toLowerCase();
   if (!pid && !pname) return false;
   if (pid && String(lot.partyId || '').trim() === pid) return true;
-  if (pname && String(lot.partyName || '').trim() === pname) return true;
+  if (
+    pname &&
+    (!lot.partyId || String(lot.partyId).trim() === '') &&
+    String(lot.partyName || '').trim().toLowerCase() === pname
+  ) {
+    return true;
+  }
   return false;
 }
 
 function paymentBelongsToPartyUser(payment, partyId, partyName) {
   const pid = String(partyId || '').trim();
-  const pname = String(partyName || '').trim();
+  const pname = String(partyName || '').trim().toLowerCase();
   if (payment.partyId != null && String(payment.partyId).trim() !== '') {
     return String(payment.partyId) === pid;
   }
-  return String(payment.party || '').trim() === pname;
+  return Boolean(pname) && String(payment.party || '').trim().toLowerCase() === pname;
 }
 
 function getPageNumbers(current, total) {
@@ -102,6 +118,7 @@ export default function Dashboard() {
     initialDataLoading,
     partyCrossLots,
     partyCrossPayments,
+    partyCrossPartyEdits,
     payments,
     businessOwners,
     reportingPartyEdits,
@@ -187,6 +204,11 @@ export default function Dashboard() {
     return partyCrossPayments.length ? partyCrossPayments : payments;
   }, [isParty, partyCrossPayments, reportingPayments, payments]);
 
+  const partyEditsPool = useMemo(() => {
+    if (!isParty) return reportingPartyEdits;
+    return Object.keys(partyCrossPartyEdits || {}).length ? partyCrossPartyEdits : reportingPartyEdits;
+  }, [isParty, partyCrossPartyEdits, reportingPartyEdits]);
+
   const scopedLots = useMemo(() => {
     const lots =
       isParty && (partyUserId || partyNameTrim)
@@ -194,18 +216,21 @@ export default function Dashboard() {
         : lotsPool;
     return lots.filter((lot) =>
       isWithinDateRange(
-        latestDateFrom(lot, [
-          'receivedBackDate',
-          'dispatchDate',
-          'allotDate',
-          'receivedDate',
-          'createdAt',
-        ]),
+        isParty
+          ? getPartyLedgerLotDate(lot, partyEditsPool[lot.id])
+          : latestDateFrom(lot, [
+              'completionApprovedAt',
+              'receivedBackDate',
+              'dispatchDate',
+              'allotDate',
+              'receivedDate',
+              'createdAt',
+            ]),
         dateRange,
         customRange
       )
     );
-  }, [lotsPool, isParty, partyUserId, partyNameTrim, dateRange, customRange]);
+  }, [lotsPool, isParty, partyUserId, partyNameTrim, partyEditsPool, dateRange, customRange]);
 
   const scopedPayments = useMemo(() => {
     const list =
@@ -217,24 +242,36 @@ export default function Dashboard() {
     );
   }, [paymentsPool, isParty, partyUserId, partyNameTrim, dateRange, customRange]);
 
-  /** Minimal party dashboard stats (counts + paid total); null for admin views */
+  /** Minimal party dashboard stats (counts honoring PartyEdit overrideStatus + net payments); null for admin views */
   const partyMiniStatsCards = useMemo(() => {
     if (!isParty) return null;
-    const by = (s) => scopedLots.filter((l) => l.status === s).length;
-    const paidTotal = scopedPayments
+    const effectivePartyStatus = (l) => {
+      const ls = String(l.status || '').toLowerCase().trim();
+      if (ls === 'pending approval' || ls === 'rejected') return ls;
+      if (ls === 'completed' || ls === 'received back') return ls;
+      const ov = String(partyEditsPool[l.id]?.overrideStatus || '').toLowerCase().trim();
+      if (ov === 'pending review' || ov === 'pending approval') return 'pending approval';
+      if (ov === 'rejected') return 'rejected';
+      if (ov === 'in progress') return 'in progress';
+      if (ov === 'pending') return 'pending';
+      return ls;
+    };
+    const statusList = scopedLots.map(effectivePartyStatus);
+    const by = (s) => statusList.filter((st) => st === s).length;
+    const nonTally = scopedPayments.filter((p) => p.type !== 'Tally');
+    const paidFromBiz = nonTally
       .filter((p) => p.type === 'Paid')
       .reduce((s, p) => s + (Number(p.amount) || 0), 0);
+    const returnedToBiz = nonTally
+      .filter((p) => p.type === 'Received')
+      .reduce((s, p) => s + (Number(p.amount) || 0), 0);
+    const paidTotal = paidFromBiz - returnedToBiz;
     const partyApprovedDone = by('received back') + by('completed');
     const partyNeedsAttention = by('pending approval') + by('rejected');
     const partyInProgressRough =
       by('pending') +
       by('dispatched') +
-      scopedLots.filter((l) =>
-        String(l.status || '')
-          .toLowerCase()
-          .trim()
-          .includes('in progress')
-      ).length;
+      statusList.filter((st) => st.includes('in progress')).length;
     return [
       {
         label: 'My lots',
@@ -263,18 +300,23 @@ export default function Dashboard() {
       {
         label: 'Paid to you',
         display: `₨${paidTotal.toLocaleString()}`,
-        lakhCrore: formatLakhCrore(paidTotal),
+        lakhCrore: formatLakhCrore(Math.abs(paidTotal)),
         color: 'var(--success, #166534)',
-        sub: 'Payments from the business',
+        sub: returnedToBiz > 0 ? 'Net payments received from business' : 'Payments from the business',
       },
     ];
-  }, [isParty, scopedLots, scopedPayments]);
+  }, [isParty, scopedLots, scopedPayments, partyEditsPool]);
+
+  const nonTallyScopedPayments = useMemo(
+    () => scopedPayments.filter((p) => p.type !== 'Tally'),
+    [scopedPayments]
+  );
 
   const paidToNonOwnerParties = useMemo(() => {
-    return scopedPayments
-      .filter((p) => p.type === 'Paid' && String(p.party || '').toLowerCase() !== 'owner')
+    return nonTallyScopedPayments
+      .filter((p) => p.type === 'Paid' && String(p.party || '').toLowerCase().trim() !== 'owner')
       .reduce((s, p) => s + (Number(p.amount) || 0), 0);
-  }, [scopedPayments]);
+  }, [nonTallyScopedPayments]);
 
   const recentPayments = useMemo(
     () =>
@@ -491,8 +533,12 @@ export default function Dashboard() {
       const target = recentLotsStatusFilter.toLowerCase().trim();
       list = scopedLots.filter((l) => String(l.status || '').toLowerCase().trim() === target);
     }
-    return [...list].sort((a, b) => compareRowsByUpdatedNewestFirst(a, b, 'lot'));
-  }, [scopedLots, recentLotsStatusFilter]);
+    return [...list].sort((a, b) =>
+      isParty
+        ? comparePartyLedgerLots(a, b, partyEditsPool)
+        : compareWorkspaceLots(a, b)
+    );
+  }, [scopedLots, recentLotsStatusFilter, isParty, partyEditsPool]);
 
   const totalRecentPages = Math.max(1, Math.ceil(filteredRecentLots.length / recentLotsPageSize));
 
@@ -564,18 +610,20 @@ export default function Dashboard() {
   // WIP Value Calculation
   const wipLots = scopedLots.filter(l => ['dispatched', 'pending approval', 'received back'].includes(String(l.status || '').toLowerCase()));
   const wipValue = wipLots.reduce((sum, l) => {
-    const edit = reportingPartyEdits[l.id] || {};
     const bill = getBusinessBillAmount(l) || 0;
     return sum + Number(bill);
   }, 0);
 
   const { billable, billableTotal, completedTotal, totalLotValue } = lotStats;
 
-  const ownerIn = scopedPayments
-    .filter((p) => p.type === 'Received' && String(p.party || '').toLowerCase() === 'owner')
+  const ownerIn = nonTallyScopedPayments
+    .filter((p) => p.type === 'Received' && String(p.party || '').toLowerCase().trim() === 'owner')
     .reduce((s, p) => s + (Number(p.amount) || 0), 0);
-  /** Cash movements shown on dashboard: owner receipts vs payouts to parties (excludes "owner" payees). */
-  const netOwnerVsParties = ownerIn - paidToNonOwnerParties;
+  const receivedFromNonOwnerParties = nonTallyScopedPayments
+    .filter((p) => p.type === 'Received' && String(p.party || '').toLowerCase().trim() !== 'owner')
+    .reduce((s, p) => s + (Number(p.amount) || 0), 0);
+  /** Net workspace cash matching Payments summary: (owner + party cash received) − paid out to parties. */
+  const netOwnerVsParties = ownerIn + receivedFromNonOwnerParties - paidToNonOwnerParties;
 
   const paymentTypeClass = (p) => {
     if (p.type === 'Received') return 'dash-pay-type--in';
@@ -1572,7 +1620,7 @@ export default function Dashboard() {
                         shortIdFallback: isParty,
                         partyObj: currentPartyObj,
                       });
-                      const lotDateStr = formatDisplayDate(lotRelevantDate(l));
+                      const lotDateStr = formatDisplayDate(lotRelevantDate(l, partyEditsPool[l.id], isParty));
                       return (
                         <li
                           key={l.id}
@@ -1735,7 +1783,7 @@ export default function Dashboard() {
                             })()}
                           </td>
                           <td style={{ color: 'var(--text-secondary)', fontSize: 12, whiteSpace: 'nowrap' }}>
-                            {formatDisplayDate(lotRelevantDate(l))}
+                            {formatDisplayDate(lotRelevantDate(l, partyEditsPool[l.id], isParty))}
                           </td>
                           <td>
                             <SafeStatusBadge
@@ -2059,7 +2107,9 @@ export default function Dashboard() {
               <div style={{ textAlign: 'right' }}>
                 <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Date</span>
                 <div style={{ fontWeight: 600, fontSize: 13, marginTop: 4 }}>
-                  {formatDisplayDate(lotRelevantDate(selectedLotDetail))}
+                  {formatDisplayDate(
+                    lotRelevantDate(selectedLotDetail, partyEditsPool[selectedLotDetail.id], isParty)
+                  )}
                 </div>
               </div>
             </div>

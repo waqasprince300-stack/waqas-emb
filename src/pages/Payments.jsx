@@ -14,6 +14,7 @@ import {
   formatDisplayDate,
   DateRangeSelect,
   isWithinDateRange,
+  toLocalYmd,
 } from '../utils/dateFilters';
 import { getAdminLedgerOrBusinessBill, getPartyLedgerBillNumeric } from '../utils/partyBillPrivacy';
 import {
@@ -22,7 +23,12 @@ import {
   isOwnerBillSettlement,
 } from '../utils/paymentDisplay';
 
-import { normalizeLotKey, lotDisplayRef } from '../utils/lotKeyHelpers';
+import {
+  normalizeLotKey,
+  lotDisplayRef,
+  lotLinkValueFromLot,
+  scopedLinkedLotKey,
+} from '../utils/lotKeyHelpers';
 import useDebounce from '../hooks/useDebounce';
 import { numberToWords, formatLakhCrore } from '../utils/numberToWords';
 
@@ -36,11 +42,11 @@ function isLotPartyBillableStatus(status) {
 
 function partyRecordMatchesUser(partyIdOnRow, partyNameOnRow, userPartyId, userPartyName) {
   const pid = String(userPartyId || '').trim();
-  const pname = String(userPartyName || '').trim();
+  const pname = String(userPartyName || '').trim().toLowerCase();
   if (partyIdOnRow != null && String(partyIdOnRow).trim() !== '') {
     return String(partyIdOnRow) === pid;
   }
-  return String(partyNameOnRow || '').trim() === pname;
+  return Boolean(pname) && String(partyNameOnRow || '').trim().toLowerCase() === pname;
 }
 
 /** How a row appears for party login (mirror vs admin bookkeeping). */
@@ -65,10 +71,25 @@ function presentationType(row, isParty) {
   return row.type;
 }
 
-function findLotByLinkedValue(reportingLots, linkedLotValue) {
+function findLotByLinkedValue(reportingLots, linkedLotValue, businessOwnerId = '') {
   if (!linkedLotValue || !reportingLots?.length) return undefined;
-  const key = normalizeLotKey(linkedLotValue);
-  return reportingLots.find((l) => normalizeLotKey(lotDisplayRef(l)) === key);
+  const biz = String(businessOwnerId || '').trim();
+  const rawLinked = String(linkedLotValue || '').trim();
+  const key = normalizeLotKey(rawLinked.replace(/\s*\(rework\)\s*/i, ''));
+  const linkedIsRework = /\(rework\)/i.test(rawLinked);
+  const candidates = reportingLots.filter((l) => {
+    const lotNoKey = normalizeLotKey(lotDisplayRef(l));
+    if (lotNoKey !== key) return false;
+    if (biz) {
+      const lotBiz = String(l.businessOwnerId?._id ?? l.businessOwnerId ?? '').trim();
+      if (lotBiz && lotBiz !== biz) return false;
+    }
+    return true;
+  });
+  return (
+    candidates.find((l) => Boolean(l.isRework) === linkedIsRework) ||
+    candidates[0]
+  );
 }
 
 /** Admin: bill for party payout — party ledger when set & positive, else business bill on lot. */
@@ -82,12 +103,18 @@ function partyLedgerBillForLot(lot, partyEditsMap) {
 function resolveLinkedLotDesignDisplay(payment, lotsPool) {
   const linked = String(payment?.linkedLot || '').trim();
   if (!linked) return { lotLabel: '', designLabel: '', isCombinedDupatta: false };
+  const pBiz = String(
+    payment?.businessOwnerId?._id ??
+      payment?.businessOwnerId ??
+      payment?.ownerWorkspaceId ??
+      ''
+  ).trim();
   if (payment._synthetic && payment.linkedDesignNo) {
-    const lot = findLotByLinkedValue(lotsPool, linked);
+    const lot = findLotByLinkedValue(lotsPool, linked, pBiz);
     const isCombinedDupatta = Boolean(lot && lot.suitComponent === 'dupatta' && (lot.billAmount === 0 || !lot.billAmount));
     return { lotLabel: linked, designLabel: String(payment.linkedDesignNo).trim(), isCombinedDupatta };
   }
-  const lot = findLotByLinkedValue(lotsPool, linked);
+  const lot = findLotByLinkedValue(lotsPool, linked, pBiz);
   const design = lot?.designNo != null ? String(lot.designNo).trim() : '';
   const isCombinedDupatta = Boolean(lot && lot.suitComponent === 'dupatta' && (lot.billAmount === 0 || !lot.billAmount));
   return { lotLabel: linked, designLabel: design, isCombinedDupatta };
@@ -200,11 +227,13 @@ export default function Payments() {
   }, []);
 
   const visibleDbPayments = useMemo(() => {
-    if (!isParty) return reportingPayments;
+    if (!isParty) return reportingPayments.filter((p) => p.type !== 'Tally');
     const pool = partyCrossPayments.length ? partyCrossPayments : payments;
     const pid = String(user?.partyId || '').trim();
     const pname = String(user?.partyName || '').trim();
-    return pool.filter((p) => partyRecordMatchesUser(p.partyId, p.party, pid, pname));
+    return pool.filter(
+      (p) => p.type !== 'Tally' && partyRecordMatchesUser(p.partyId, p.party, pid, pname)
+    );
   }, [isParty, reportingPayments, partyCrossPayments, payments, user?.partyId, user?.partyName]);
 
   const syntheticPartyBills = useMemo(() => {
@@ -212,24 +241,11 @@ export default function Payments() {
     const pid = String(user?.partyId || '').trim();
     const pname = String(user?.partyName || '').trim();
     const lotsPool = partyCrossLots.length ? partyCrossLots : ghausiaLots;
-    const linkedLotKeys = new Set(
-      visibleDbPayments
-        .filter(
-          (p) =>
-            p.type === 'Paid' &&
-            p.linkedLot &&
-            String(p.party || '')
-              .toLowerCase()
-              .trim() !== 'owner'
-        )
-        .map((p) => normalizeLotKey(p.linkedLot))
-    );
     const rows = [];
     for (const l of lotsPool) {
       if (!partyRecordMatchesUser(l.partyId, l.partyName, pid, pname)) continue;
       if (!isLotPartyBillableStatus(l.status)) continue;
-      const ref = lotDisplayRef(l);
-      if (ref && linkedLotKeys.has(normalizeLotKey(ref))) continue;
+      const ref = lotLinkValueFromLot(l);
 
       const pe = partyCrossPartyEdits[l.id] || {};
       const amt = getPartyLedgerBillNumeric(pe);
@@ -248,16 +264,12 @@ export default function Payments() {
         l.allotDate ||
         l.createdAt;
 
-      const parsedDate = parseDateFlexible(rawDate);
-      let dateStr = '';
-      if (typeof rawDate === 'string' && /^\d{4}-\d{2}-\d{2}/.test(rawDate.trim())) {
-        dateStr = rawDate.trim().slice(0, 10);
-      } else if (parsedDate instanceof Date) {
-        dateStr = parsedDate.toISOString().slice(0, 10);
-      } else {
-        dateStr = String(l.allotDate || '').slice(0, 10);
-      }
-
+      const dateStr = toLocalYmd(rawDate) || toLocalYmd(l.allotDate);
+      const submittedOnSameDay =
+        l.pendingReviewSubmittedAt && toLocalYmd(l.pendingReviewSubmittedAt) === dateStr
+          ? l.pendingReviewSubmittedAt
+          : null;
+      const parsedDate = parseDateFlexible(submittedOnSameDay || rawDate);
       const isoDate = parsedDate instanceof Date ? parsedDate.toISOString() : undefined;
 
       rows.push({
@@ -282,7 +294,6 @@ export default function Payments() {
     user?.partyName,
     partyCrossLots,
     ghausiaLots,
-    visibleDbPayments,
     partyCrossPartyEdits,
   ]);
 
@@ -422,7 +433,8 @@ export default function Payments() {
       new Set(
         reportingPayments
           .filter((p) => p.type === 'Received' && p.linkedLot)
-          .map((p) => normalizeLotKey(p.linkedLot))
+          .map((p) => scopedLinkedLotKey(p.linkedLot, paymentBusinessOwnerId(p)))
+          .filter(Boolean)
       ),
     [reportingPayments]
   );
@@ -432,7 +444,8 @@ export default function Payments() {
       new Set(
         reportingPayments
           .filter((p) => p.type === 'Paid' && p.linkedLot)
-          .map((p) => normalizeLotKey(p.linkedLot))
+          .map((p) => scopedLinkedLotKey(p.linkedLot, paymentBusinessOwnerId(p)))
+          .filter(Boolean)
       ),
     [reportingPayments]
   );
@@ -500,12 +513,13 @@ export default function Payments() {
     return { billed, paidFromAdmin, paidToBusiness, due };
   }, [isParty, syntheticPartyBills, visibleDbPayments]);
 
-  /** Payments included in admin summary cards (respects Owner / workspace filter). */
+  /** Payments included in admin summary cards (respects Owner / workspace filter; excludes non-cash Tally snapshots). */
   const adminSummaryPaymentsPool = useMemo(() => {
-    if (!isAdmin) return reportingPayments;
-    if (ownerNameFilter === 'All') return reportingPayments;
+    const nonTally = reportingPayments.filter((p) => p.type !== 'Tally');
+    if (!isAdmin) return nonTally;
+    if (ownerNameFilter === 'All') return nonTally;
     const wid = String(ownerNameFilter).trim();
-    return reportingPayments.filter((p) => paymentBusinessOwnerId(p) === wid);
+    return nonTally.filter((p) => paymentBusinessOwnerId(p) === wid);
   }, [isAdmin, reportingPayments, ownerNameFilter]);
 
   const paidToNonOwnerParties = useMemo(() => {
@@ -576,15 +590,20 @@ export default function Payments() {
         'Select which business / collection this owner payment belongs to.';
     }
     if (form.linkedLot) {
-      const key = normalizeLotKey(form.linkedLot);
-      const dup = reportingPayments.some(
-        (p) => p.type === form.type && p.linkedLot && normalizeLotKey(p.linkedLot) === key
-      );
+      const targetBiz =
+        String(form.ownerWorkspaceId || activeBusinessOwnerId || '').trim();
+      const scopedKey = scopedLinkedLotKey(form.linkedLot, targetBiz);
+      const dup = reportingPayments.some((p) => {
+        if (p.type !== form.type || !p.linkedLot) return false;
+        const pBiz = paymentBusinessOwnerId(p);
+        if (targetBiz && pBiz && targetBiz !== pBiz) return false;
+        return scopedLinkedLotKey(p.linkedLot, pBiz) === scopedKey;
+      });
       if (dup) {
         newErrors.linkedLot =
           form.type === 'Received'
-            ? 'An owner payment is already linked to this lot. Each lot can only be used once.'
-            : 'A party payment is already linked to this lot. Each lot can only be paid once.';
+            ? 'An owner payment is already linked to this lot in this workspace. Each lot can only be used once.'
+            : 'A party payment is already linked to this lot in this workspace. Each lot can only be paid once.';
       }
     }
     setErrors(newErrors);

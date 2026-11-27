@@ -7,16 +7,37 @@ import { useApp } from '../context/AppContext';
 import { Modal, FormGroup, EmptyState, SearchBar } from '../components/UI';
 import Loader from '../components/Loader';
 import LoaderDashboard from '../components/LoaderDashboard';
-import { compareRowsByUpdatedNewestFirst, formatDisplayDateTime } from '../utils/dateFilters';
+import {
+  comparePartyLedgerLots,
+  formatDisplayDateTime,
+  parseDateValue,
+} from '../utils/dateFilters';
 import { getAdminLedgerOrBusinessBill } from '../utils/partyBillPrivacy';
 
-import { normalizeLotKey, lotKeyFromLot } from '../utils/lotKeyHelpers';
+import {
+  paymentMatchesLot,
+} from '../utils/lotKeyHelpers';
 import useDebounce from '../hooks/useDebounce';
 
 function hasOwnerReceivedForLot(lot, payments) {
-  const k = normalizeLotKey(lotKeyFromLot(lot));
-  if (!k || !Array.isArray(payments)) return false;
-  return payments.some((p) => String(p.party || '').trim().toLowerCase() === 'owner' && normalizeLotKey(p.linkedLot) === k);
+  if (!lot || !Array.isArray(payments)) return false;
+  return payments.some(
+    (p) =>
+      String(p.party || '').trim().toLowerCase() === 'owner' &&
+      paymentMatchesLot(p, lot)
+  );
+}
+
+function settledOwnerAmountForLot(lot, payments) {
+  if (!lot || !Array.isArray(payments)) return 0;
+  return payments
+    .filter(
+      (p) =>
+        p.type === 'Paid' &&
+        String(p.party || '').trim().toLowerCase() === 'owner' &&
+        paymentMatchesLot(p, lot)
+    )
+    .reduce((sum, p) => sum + Number(p.amount || 0), 0);
 }
 
 function pendingRevisionIsReal(pe) {
@@ -122,8 +143,13 @@ export default function ReviewLots() {
       }
       return matchQ;
     });
-    return [...list].sort((a, b) => compareRowsByUpdatedNewestFirst(a, b, 'lot'));
-  }, [reportingLots, debouncedSearch, searchField, parties]);
+    return [...list].sort((a, b) => {
+      const subA = parseDateValue(a?.pendingReviewSubmittedAt)?.getTime() || 0;
+      const subB = parseDateValue(b?.pendingReviewSubmittedAt)?.getTime() || 0;
+      if (subB !== subA) return subB - subA;
+      return comparePartyLedgerLots(a, b, reportingPartyEdits);
+    });
+  }, [reportingLots, reportingPartyEdits, debouncedSearch, searchField, parties]);
 
   /** Deep link: /review-lots?lotId=… → focus that pending lot. */
   const deepLinkScrollTimerRef = useRef(null);
@@ -225,8 +251,20 @@ export default function ReviewLots() {
           }
         });
         
-        if (!customAmount) return; // Cancelled second popup
+        if (customAmount == null || String(customAmount).trim() === '') return; // Cancelled second popup
         finalOwnerBillAmount = Number(customAmount);
+        const alreadySettled = settledOwnerAmountForLot(lot, reportingPayments);
+        if (finalOwnerBillAmount < alreadySettled) {
+          const confirmLower = await Swal.fire({
+            icon: 'warning',
+            title: 'Reduced below settled amount',
+            html: `<div style="font-size:13.5px;line-height:1.5;">You entered <strong>₨${finalOwnerBillAmount.toLocaleString()}</strong>, which is <strong>₨${(alreadySettled - finalOwnerBillAmount).toLocaleString()} less</strong> than what was already billed to Owner (<strong>₨${alreadySettled.toLocaleString()}</strong>). Unpaid billable will show ₨0 — record a Katoti/credit in Owner Bills if reducing an already finalized bill. Continue?</div>`,
+            showCancelButton: true,
+            confirmButtonText: 'Continue',
+            cancelButtonText: 'Cancel',
+          });
+          if (!confirmLower.isConfirmed) return;
+        }
         skipBillable = false; // Go to billable to settle difference
       }
 
@@ -260,20 +298,45 @@ export default function ReviewLots() {
     }
 
     // Normal workflow for lots NOT billed to owner yet
-    const ok = await Swal.fire({
-      title: 'Approve completion?',
-      text: `${lot.lotNo || lot.lotNumber} will become billable to owner (received back).`,
-      icon: 'question',
-      showCancelButton: true,
-      confirmButtonText: 'Approve',
-      cancelButtonText: 'Cancel',
-    });
-    if (!ok.isConfirmed) return;
-    
+    let normalBillingBody = {};
+    if (pendingRevisionIsReal(pe)) {
+      const partyBillNow = Number(pe?.partyBillAmount ?? peBill(lot.id, lot));
+      const curOwnerBill = Number(lot.billAmount || 0);
+      const revRes = await Swal.fire({
+        title: 'Party updated the bill amount',
+        icon: 'question',
+        html: `<div style="font-size:13.5px;line-height:1.55;text-align:left;">
+          <div><strong>Current Owner Bill:</strong> ₨${curOwnerBill.toLocaleString()}</div>
+          <div><strong>Party Requested Amount:</strong> ₨${partyBillNow.toLocaleString()}</div>
+          <div style="margin-top:8px;color:var(--text-secondary);">Do you want to update the Owner Business Bill to match before moving this lot to Billable?</div>
+        </div>`,
+        showCancelButton: true,
+        showDenyButton: true,
+        confirmButtonText: `Update Owner Bill (₨${partyBillNow.toLocaleString()})`,
+        denyButtonText: `Keep ₨${curOwnerBill.toLocaleString()}`,
+        cancelButtonText: 'Cancel',
+      });
+      if (revRes.isDismissed) return;
+      if (revRes.isConfirmed) {
+        normalBillingBody = { ownerBillingChoice: 'sync_party' };
+      }
+    } else {
+      const ok = await Swal.fire({
+        title: 'Approve completion?',
+        text: `${lot.lotNo || lot.lotNumber} will become billable to owner (received back).`,
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonText: 'Approve',
+        cancelButtonText: 'Cancel',
+      });
+      if (!ok.isConfirmed) return;
+    }
+
     setBusyId(lot.id);
     try {
       await approveLotCompletion(lot.id, {
         businessOwnerId: lot.businessOwnerId,
+        ...normalBillingBody,
       });
       Swal.fire({
         toast: true,

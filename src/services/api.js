@@ -302,6 +302,58 @@ class ApiService {
     });
   }
 
+  async disableOrganizationAdmin(id, reason = '') {
+    const safe = encodeURIComponent(String(id ?? '').trim());
+    return this.request(`/super-admin/admins/${safe}/disable`, {
+      method: 'PATCH',
+      body: JSON.stringify({ reason }),
+    });
+  }
+
+  async enableOrganizationAdmin(id) {
+    const safe = encodeURIComponent(String(id ?? '').trim());
+    return this.request(`/super-admin/admins/${safe}/enable`, {
+      method: 'PATCH',
+      body: JSON.stringify({}),
+    });
+  }
+
+  async deleteOrganizationAdmin(id, confirmEmail = '') {
+    const safe = encodeURIComponent(String(id ?? '').trim());
+    return this.request(`/super-admin/admins/${safe}`, {
+      method: 'DELETE',
+      body: JSON.stringify({ confirmEmail }),
+    });
+  }
+
+  async getSuperAdminPartyUsers() {
+    return this.request('/super-admin/party-users');
+  }
+
+  async disableSuperAdminPartyUser(id, reason = '') {
+    const safe = encodeURIComponent(String(id ?? '').trim());
+    return this.request(`/super-admin/party-users/${safe}/disable`, {
+      method: 'PATCH',
+      body: JSON.stringify({ reason }),
+    });
+  }
+
+  async enableSuperAdminPartyUser(id) {
+    const safe = encodeURIComponent(String(id ?? '').trim());
+    return this.request(`/super-admin/party-users/${safe}/enable`, {
+      method: 'PATCH',
+      body: JSON.stringify({}),
+    });
+  }
+
+  async deleteSuperAdminPartyUser(id) {
+    const safe = encodeURIComponent(String(id ?? '').trim());
+    return this.request(`/super-admin/party-users/${safe}`, {
+      method: 'DELETE',
+      body: JSON.stringify({}),
+    });
+  }
+
   // Users / Approvals
   async getUsers() {
     return this.request('/users');
@@ -348,6 +400,14 @@ class ApiService {
     return this.request(`/users/${safe}/party`, {
       method: 'PATCH',
       body: JSON.stringify(data ?? {}),
+    });
+  }
+
+  async deleteUser(id) {
+    const safe = encodeURIComponent(String(id ?? '').trim());
+    return this.request(`/users/${safe}`, {
+      method: 'DELETE',
+      body: JSON.stringify({}),
     });
   }
 
@@ -609,14 +669,14 @@ class ApiService {
     });
   }
 
-  async upsertPartyEditByLotId(lotId, data, businessOwnerId) {
+  async upsertPartyEditByLotId(lotId, data, businessOwnerId, opts = {}) {
     return this.request(
       `/partyEdits/lot/${lotId}`,
       {
         method: 'PUT',
         body: JSON.stringify(data),
       },
-      { businessOwnerId }
+      { businessOwnerId, ...metaPartySkipTenant(opts) }
     );
   }
 

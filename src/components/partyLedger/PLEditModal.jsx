@@ -5,6 +5,7 @@ import Loader from '../Loader';
 import { receiptPreviewKind } from '../receipt/ReceiptThumb';
 import { NoteWithVoiceField, NoteReadOnlyBox } from '../voice/VoiceNoteControl';
 import { normalizedBusinessOwnerId } from '../../utils/businessWorkspace';
+import { toLocalYmd } from '../../utils/dateFilters';
 import {
   partyFacingLedgerDisplayLabel,
   partyFacingLotStatusLabel,
@@ -120,6 +121,7 @@ export default function PLEditModal({
   getDisplayStatus,
   samePartyId,
 }) {
+  const [voiceBusy, setVoiceBusy] = React.useState(false);
   if (!editingId || !editingLot) return null;
 
   const isAlreadyCompleted =
@@ -148,13 +150,15 @@ export default function PLEditModal({
           <button
             type="submit"
             className="btn btn-primary"
-            disabled={ledgerSaving}
+            disabled={ledgerSaving || voiceBusy}
             style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
           >
             {ledgerSaving ? (
               <>
                 <Loader /> {isSubmittingForApproval ? 'Sending for Approval...' : 'Saving...'}
               </>
+            ) : voiceBusy ? (
+              'Finish voice note first…'
             ) : isSubmittingForApproval ? (
               'Send for Approval'
             ) : (
@@ -305,7 +309,9 @@ export default function PLEditModal({
                 setEditForm((f) => ({
                   ...f,
                   status: next,
-                  ...(next !== 'Completed' ? { completeDate: '' } : {}),
+                  ...(next === 'Completed'
+                    ? { completeDate: f.completeDate || toLocalYmd() }
+                    : { completeDate: '' }),
                 }));
                 setLedgerFormErrors({});
               }}
@@ -380,20 +386,20 @@ export default function PLEditModal({
             const file = e.target.files?.[0];
             e.target.value = '';
             if (!file) {
-              setEditForm((f) => ({ ...f, receipt: '' }));
+              setEditForm((f) => ({ ...f, receipt: '', hasReceipt: false, receiptDirty: true }));
               return;
             }
             try {
               const stored = await readReceiptAsStoredValue(file);
               const cropped = await finalizeLedgerReceiptStoredValue(stored);
-              setEditForm((f) => ({ ...f, receipt: cropped }));
+              setEditForm((f) => ({ ...f, receipt: cropped, hasReceipt: Boolean(cropped), receiptDirty: true }));
             } catch (err) {
               await Swal.fire({
                 icon: 'error',
                 title: 'Could not process file',
                 text: err?.message || 'Try a smaller JPG/PNG. PDFs must be under a few MB.',
               });
-              setEditForm((f) => ({ ...f, receipt: '' }));
+              setEditForm((f) => ({ ...f, receipt: '', hasReceipt: false, receiptDirty: true }));
             }
           }}
         />
@@ -445,7 +451,7 @@ export default function PLEditModal({
                   className="btn btn-ghost btn-sm"
                   aria-label="Remove receipt"
                   title="Remove receipt"
-                  onClick={() => setEditForm((f) => ({ ...f, receipt: '' }))}
+                  onClick={() => setEditForm((f) => ({ ...f, receipt: '', hasReceipt: false, receiptDirty: true }))}
                   style={{
                     position: 'absolute',
                     top: -8,
@@ -499,7 +505,7 @@ export default function PLEditModal({
                   className="btn btn-ghost btn-sm"
                   aria-label="Remove receipt"
                   title="Remove receipt"
-                  onClick={() => setEditForm((f) => ({ ...f, receipt: '' }))}
+                  onClick={() => setEditForm((f) => ({ ...f, receipt: '', hasReceipt: false, receiptDirty: true }))}
                   style={{
                     width: 28,
                     height: 28,
@@ -571,6 +577,7 @@ export default function PLEditModal({
               hasVoiceNote={Boolean(editForm.hasPartyVoiceNote || editForm.partyVoiceNote)}
               duration={editForm.partyVoiceNoteDuration || 0}
               locked={isPartyApprovedLocked}
+              onBusyChange={setVoiceBusy}
               placeholder={
                 isPartyApprovedLocked
                   ? 'Locked after approval — contact admin to change'

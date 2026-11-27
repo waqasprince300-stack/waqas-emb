@@ -2,9 +2,16 @@ import { normalizedBusinessOwnerId, workspaceLabelEmbeddedInLot } from './busine
 
 export const normalizeDateString = (value) => {
   if (!value) return '';
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+  }
   const date = typeof value === 'string' ? new Date(value) : value;
   if (Number.isNaN(date.getTime())) return '';
-  return date?.toISOString()?.slice(0, 10);
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
 };
 
 /** API may populate `businessOwnerId` as `{ _id, name }`; UI keeps a string id. */
@@ -108,6 +115,16 @@ export const mergePartyEditsFromRemote = (remotePartyEdits, prev = {}, opts = {}
   Object.keys(incoming).forEach((lotId) => {
     const remote = incoming[lotId];
     const existing = prev[lotId];
+    const existingUpdatedMs = existing?.updatedAt ? new Date(existing.updatedAt).getTime() : 0;
+    const remoteUpdatedMs = remote?.updatedAt ? new Date(remote.updatedAt).getTime() : 0;
+    // If another device updated this PartyEdit while cached media blobs weren't included in bootstrap,
+    // clear stale hydrated media blobs so the next open/play fetches the latest version instead of serving stale audio/images.
+    const remoteIsNewer =
+      Boolean(existing) &&
+      Number.isFinite(remoteUpdatedMs) &&
+      Number.isFinite(existingUpdatedMs) &&
+      remoteUpdatedMs > existingUpdatedMs;
+
     const remoteReceipt = remote.receipt;
     const remoteClearedReceipt =
       remote.hasReceipt === false && (remoteReceipt == null || String(remoteReceipt).trim() === '');
@@ -116,7 +133,9 @@ export const mergePartyEditsFromRemote = (remotePartyEdits, prev = {}, opts = {}
         ? ''
         : remoteReceipt != null && remoteReceipt !== ''
           ? remoteReceipt
-          : (existing?.receipt ?? '');
+          : remoteIsNewer
+            ? ''
+            : (existing?.receipt ?? '');
 
     const remoteHasLotImagesArray = Array.isArray(remote.lotImages);
     const remoteLotImages = remoteHasLotImagesArray ? remote.lotImages : undefined;
@@ -144,7 +163,9 @@ export const mergePartyEditsFromRemote = (remotePartyEdits, prev = {}, opts = {}
       ? ''
       : remotePartyVoice != null && remotePartyVoice !== ''
         ? remotePartyVoice
-        : (existing?.partyVoiceNote ?? '');
+        : remoteIsNewer
+          ? ''
+          : (existing?.partyVoiceNote ?? '');
 
     const remoteAdminVoice = remote.adminVoiceNote;
     const remoteClearedAdminVoice =
@@ -154,7 +175,9 @@ export const mergePartyEditsFromRemote = (remotePartyEdits, prev = {}, opts = {}
       ? ''
       : remoteAdminVoice != null && remoteAdminVoice !== ''
         ? remoteAdminVoice
-        : (existing?.adminVoiceNote ?? '');
+        : remoteIsNewer
+          ? ''
+          : (existing?.adminVoiceNote ?? '');
 
     const merged = {
       ...remote,
@@ -196,7 +219,7 @@ export const mergePartyEditsFromRemote = (remotePartyEdits, prev = {}, opts = {}
       merged.lotImages = [];
     } else if (remoteLotImages !== undefined) {
       merged.lotImages = remoteLotImages;
-    } else if (Array.isArray(existing?.lotImages) && existing.lotImages.length > 0) {
+    } else if (!remoteIsNewer && Array.isArray(existing?.lotImages) && existing.lotImages.length > 0) {
       merged.lotImages = existing.lotImages;
     }
 

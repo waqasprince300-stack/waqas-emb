@@ -9,6 +9,7 @@ import { formatLakhCrore } from '../../utils/numberToWords';
 import { useApp } from '../../context/AppContext';
 import OwnerBillModal from './OwnerBillModal';
 import OwnerBillsListModal from './OwnerBillsListModal';
+import { clearOwnerBillsSessionCache } from '../../utils/ownerBillCache';
 
 const localTodayISO = () => {
   const d = new Date();
@@ -30,9 +31,9 @@ function TallyModal({ ownerId, ownerName, onClose, onAdded }) {
     try {
       await apiService.createPayment({
         type: 'Tally',
-        party: ownerName,
+        party: 'Owner',
         date: date,
-        note: `Matched up to: ${note}`,
+        note: `Matched up to: ${note}${ownerName ? ` (${ownerName})` : ''}`,
         amount: 0,
         businessOwnerId: ownerId,
       }, ownerId);
@@ -147,14 +148,14 @@ export default function OwnerLedgerModal({ ownerId, ownerName, payments, lots, o
 
   const parseBaqayaFromTally = (p) => {
     if (!p) return null;
-    if (p.amount != null && Number(p.amount) > 0) {
+    if (p.amount != null && Number.isFinite(Number(p.amount))) {
       return Number(p.amount);
     }
     const note = String(p.note || '');
-    const m = note.match(/Baqaya:\s*Rs\s*([0-9,]+)/i);
+    const m = note.match(/Baqaya:\s*Rs\s*(-?[0-9,]+)/i);
     if (m) {
       const parsed = Number(m[1].replace(/,/g, ''));
-      if (!Number.isNaN(parsed) && parsed > 0) return parsed;
+      if (Number.isFinite(parsed)) return parsed;
     }
     return null;
   };
@@ -381,7 +382,8 @@ export default function OwnerLedgerModal({ ownerId, ownerName, payments, lots, o
     : null;
 
   const calculatedNet = withBalance.length ? withBalance[withBalance.length - 1].balanceAfter : 0;
-  const netBalance = latestBillBaqaya != null && (calculatedNet === 0 || !withBalance.some(r => r.paymentType === 'Tally' && r.tallyBaqaya != null))
+  const hasAnyTally = withBalance.some((r) => r.paymentType === 'Tally' && r.tallyBaqaya != null);
+  const netBalance = latestBillBaqaya != null && !hasAnyTally
     ? latestBillBaqaya
     : calculatedNet;
 
@@ -878,6 +880,7 @@ export default function OwnerLedgerModal({ ownerId, ownerName, payments, lots, o
                 ownerId
               );
             }
+            clearOwnerBillsSessionCache(ownerId);
             markLotsBilledLocally?.(billedLots, savedBill);
             onRefresh?.();
             fetchBills();
@@ -898,6 +901,7 @@ export default function OwnerLedgerModal({ ownerId, ownerName, payments, lots, o
             setShowBillModal(true);
           }}
           onBillDeleted={(b) => {
+            clearOwnerBillsSessionCache(ownerId);
             revertLotsBilledLocally?.(b?.id || b?._id, b?.billNo, b?.bookNo, ownerId);
             onRefresh?.();
             fetchBills();

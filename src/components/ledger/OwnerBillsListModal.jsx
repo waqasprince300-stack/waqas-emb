@@ -4,6 +4,7 @@ import apiService from '../../services/api';
 import Loader from '../Loader';
 import { Modal } from '../UI';
 import { formatDisplayDate } from '../../utils/dateFilters';
+import { clearOwnerBillsSessionCache } from '../../utils/ownerBillCache';
 
 /**
  * OwnerBillsListModal
@@ -61,6 +62,7 @@ export default function OwnerBillsListModal({
     if (res.isConfirmed) {
       try {
         await apiService.deleteOwnerBill(b.id || b._id, ownerId);
+        clearOwnerBillsSessionCache(ownerId);
         Swal.fire({
           toast: true,
           position: 'top-end',

@@ -175,11 +175,15 @@ export default function PaymentModal({
             onChange={(e) => setPayForm((f) => ({ ...f, linkedLot: e.target.value }))}
           >
             <option value="">None</option>
-            {collectionLots.map((l) => (
-              <option key={l.id} value={l.lotNumber}>
-                {(l.lotNumber || l.lotNo) ? `${l.lotNumber || l.lotNo} / ${l.designNo || '—'}` : `(No Lot) / ${l.designNo || '—'}`}
-              </option>
-            ))}
+            {collectionLots.map((l) => {
+              const rawNo = String(l.lotNumber || l.lotNo || '').trim();
+              const optVal = l.isRework && rawNo ? `${rawNo} (Rework)` : rawNo;
+              return (
+                <option key={l.id} value={optVal}>
+                  {optVal ? `${optVal} / ${l.designNo || '—'}` : `(No Lot) / ${l.designNo || '—'}`}
+                </option>
+              );
+            })}
           </select>
         </FormGroup>
         <FormGroup label="Note">

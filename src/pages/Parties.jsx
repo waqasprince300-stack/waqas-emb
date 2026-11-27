@@ -7,9 +7,13 @@ import LoaderDashboard from '../components/LoaderDashboard';
 import {
   DateRangeSelect,
   isWithinDateRange,
-  latestDateFrom,
-  dateRangeLabel,
+  formatDisplayDate,
   formatDisplayDateTime,
+  dateRangeLabel,
+  getPartyLedgerLotDate,
+  getPartyLedgerEntryTimeMs,
+  getPaymentEntryTimeMs,
+  getEffectivePartyLotStatus,
 } from '../utils/dateFilters';
 import { getAdminLedgerOrBusinessBill, getPartyLedgerBillDisplay } from '../utils/partyBillPrivacy';
 import useDebounce from '../hooks/useDebounce';
@@ -228,14 +232,22 @@ function formatMoney(n) {
 /** Party payment filter: match getLotStats (partyId preferred, else exact name). */
 function paymentMatchesParty(p, party, getPartyName) {
   const pid = String(party.id ?? party._id ?? '');
-  const pname = String(getPartyName(pid) || party.name || '').trim();
+  const pname = String(getPartyName(pid) || party.name || '').trim().toLowerCase();
   if (p.partyId != null && String(p.partyId).trim() !== '') {
     return String(p.partyId) === pid;
   }
-  return String(p.party || '').trim() === pname;
+  return Boolean(pname) && String(p.party || '').trim().toLowerCase() === pname;
+}
+
+function compactAmountFontSize(str, base = 13) {
+  if (!str) return base;
+  if (str.length > 14) return Math.max(11, base - 2);
+  if (str.length > 12) return Math.max(11.5, base - 1);
+  return base;
 }
 
 function PartyStatTile({ label, count, amountStr, accent, bgTint, hideAmount }) {
+  const displayAmount = hideAmount ? '****' : amountStr;
   return (
     <div
       style={{
@@ -246,6 +258,7 @@ function PartyStatTile({ label, count, amountStr, accent, bgTint, hideAmount }) 
         flexDirection: 'column',
         gap: 6,
         minHeight: 86,
+        minWidth: 0,
       }}
     >
       <div
@@ -260,7 +273,125 @@ function PartyStatTile({ label, count, amountStr, accent, bgTint, hideAmount }) 
         {label}
       </div>
       <div style={{ fontSize: 26, fontWeight: 800, color: 'var(--text-primary, #1e293b)', lineHeight: 1 }}>{count}</div>
-      <div style={{ fontSize: 13, fontWeight: 600, color: accent, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{hideAmount ? '****' : amountStr}</div>
+      <div
+        title={hideAmount ? undefined : amountStr}
+        style={{
+          fontSize: compactAmountFontSize(displayAmount, 13),
+          fontWeight: 600,
+          color: accent,
+          fontVariantNumeric: 'tabular-nums',
+          lineHeight: 1.25,
+          overflowWrap: 'anywhere',
+        }}
+      >
+        {displayAmount}
+      </div>
+    </div>
+  );
+}
+
+function PartyFinancialStats({ stats, hideAmounts }) {
+  const totalBillStr = stats.total > 0 ? (hideAmounts ? '****' : formatMoney(stats.totalValue)) : '—';
+  const paidStr = hideAmounts ? '****' : formatMoney(stats.paid);
+  const remainingStr = hideAmounts ? '****' : formatMoney(Math.abs(stats.remaining));
+
+  const summaryItems = [
+    {
+      label: 'Total bill',
+      value: totalBillStr,
+      color: 'var(--text-primary, #1e293b)',
+    },
+    {
+      label: 'Paid',
+      value: paidStr,
+      color: 'var(--success, #10b981)',
+    },
+  ];
+
+  return (
+    <div
+      style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+        gap: 10,
+      }}
+    >
+      {summaryItems.map((item) => (
+        <div
+          key={item.label}
+          style={{
+            background: 'var(--primary-bg, #f8fafc)',
+            borderRadius: 8,
+            padding: '10px 12px',
+            minWidth: 0,
+          }}
+        >
+          <div
+            style={{
+              fontSize: 10,
+              fontWeight: 700,
+              color: 'var(--text-muted, #64748b)',
+              textTransform: 'uppercase',
+              letterSpacing: '0.03em',
+            }}
+          >
+            {item.label}
+          </div>
+          <div
+            title={hideAmounts ? undefined : item.value}
+            style={{
+              fontSize: compactAmountFontSize(item.value, 13),
+              fontWeight: 800,
+              color: item.color,
+              marginTop: 4,
+              lineHeight: 1.25,
+              fontVariantNumeric: 'tabular-nums',
+              overflowWrap: 'anywhere',
+            }}
+          >
+            {item.value}
+          </div>
+        </div>
+      ))}
+      <div
+        style={{
+          gridColumn: '1 / -1',
+          background: stats.remaining > 0 ? 'var(--danger-bg, #fef2f2)' : 'var(--primary-bg, #f8fafc)',
+          borderRadius: 8,
+          padding: '10px 12px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 8,
+          flexWrap: 'wrap',
+          minWidth: 0,
+        }}
+      >
+        <div
+          style={{
+            fontSize: 10.5,
+            fontWeight: 700,
+            color: 'var(--text-muted, #64748b)',
+            textTransform: 'uppercase',
+            letterSpacing: '0.04em',
+          }}
+        >
+          {stats.remaining >= 0 ? 'Remaining' : 'Advance'}
+        </div>
+        <div
+          title={hideAmounts ? undefined : remainingStr}
+          style={{
+            fontSize: compactAmountFontSize(remainingStr, 14),
+            fontWeight: 800,
+            color: stats.remaining > 0 ? 'var(--danger, #ef4444)' : 'var(--success, #10b981)',
+            lineHeight: 1.25,
+            fontVariantNumeric: 'tabular-nums',
+            overflowWrap: 'anywhere',
+          }}
+        >
+          {remainingStr}
+        </div>
+      </div>
     </div>
   );
 }
@@ -419,25 +550,18 @@ export default function Parties() {
     () =>
       reportingLots.filter((lot) =>
         isWithinDateRange(
-          latestDateFrom(lot, [
-            'updatedAt',
-            'createdAt',
-            'receivedBackDate',
-            'dispatchDate',
-            'allotDate',
-            'receivedDate',
-          ]),
+          getPartyLedgerLotDate(lot, reportingPartyEdits[lot.id]),
           dateRange,
           customRange
         )
       ),
-    [reportingLots, dateRange, customRange]
+    [reportingLots, reportingPartyEdits, dateRange, customRange]
   );
 
   const rangedPayments = useMemo(
     () =>
       reportingPayments.filter((payment) =>
-        isWithinDateRange(payment.updatedAt || payment.date, dateRange, customRange)
+        isWithinDateRange(payment.date || payment.createdAt, dateRange, customRange)
       ),
     [reportingPayments, dateRange, customRange]
   );
@@ -524,9 +648,22 @@ export default function Parties() {
 
   /** Pre-compute stats for every party in one pass instead of scanning all lots per card. */
   const statsByPartyId = useMemo(() => {
+    const partyIdByLowerName = new Map();
+    for (const party of parties) {
+      const pid = String(party.id ?? party._id ?? '').trim();
+      const lowerName = String(party.name || '').trim().toLowerCase();
+      if (pid && lowerName && !partyIdByLowerName.has(lowerName)) {
+        partyIdByLowerName.set(lowerName, pid);
+      }
+    }
+
     const lotsByParty = new Map();
     for (const l of rangedLots) {
-      const pid = String(l.partyId ?? '');
+      let pid = String(l.partyId ?? '').trim();
+      if (!pid) {
+        const lowerLotParty = String(l.partyName || '').trim().toLowerCase();
+        pid = partyIdByLowerName.get(lowerLotParty) || '';
+      }
       if (!lotsByParty.has(pid)) lotsByParty.set(pid, []);
       lotsByParty.get(pid).push(l);
     }
@@ -536,7 +673,7 @@ export default function Parties() {
         const k = String(p.partyId);
         byId.set(k, (byId.get(k) || 0) + amt);
       } else {
-        const k = String(p.party || '').trim();
+        const k = String(p.party || '').trim().toLowerCase();
         byName.set(k, (byName.get(k) || 0) + amt);
       }
     };
@@ -553,9 +690,9 @@ export default function Parties() {
 
     const result = new Map();
     for (const party of parties) {
-      const pid = String(party.id ?? '');
+      const pid = String(party.id ?? party._id ?? '');
       const lots = lotsByParty.get(pid) || [];
-      const partyName = String(party.name || 'Unknown').trim();
+      const partyNameLower = String(party.name || 'Unknown').trim().toLowerCase();
       let activeAmount = 0;
       let hasActivePartyBill = false;
       let completedAmount = 0;
@@ -574,9 +711,9 @@ export default function Parties() {
           active += 1;
         }
       }
-      const totalPaid = (paidByPartyId.get(pid) || 0) + (paidByPartyName.get(partyName) || 0);
+      const totalPaid = (paidByPartyId.get(pid) || 0) + (paidByPartyName.get(partyNameLower) || 0);
       const receivedFromParty =
-        (receivedByPartyId.get(pid) || 0) + (receivedByPartyName.get(partyName) || 0);
+        (receivedByPartyId.get(pid) || 0) + (receivedByPartyName.get(partyNameLower) || 0);
       // Align with Party Ledger: remaining = completed bill − paid + received from party
       result.set(pid, {
         total: lots.length,
@@ -1081,38 +1218,7 @@ export default function Parties() {
                       hideAmount={hideAmounts}
                     />
                   </div>
-                  <div
-                    style={{
-                      display: 'grid',
-                      gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
-                      gap: 8,
-                    }}
-                  >
-                    <div style={{ background: 'var(--primary-bg, #f8fafc)', borderRadius: 8, padding: '10px 8px', overflow: 'hidden' }}>
-                      <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted, #64748b)', textTransform: 'uppercase' }}>
-                        Total bill
-                      </div>
-                      <div style={{ fontSize: 'clamp(11.5px, 1vw, 13px)', fontWeight: 800, color: 'var(--text-primary, #1e293b)', marginTop: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {stats.total > 0 ? (hideAmounts ? '****' : formatMoney(stats.totalValue)) : '—'}
-                      </div>
-                    </div>
-                    <div style={{ background: 'var(--primary-bg, #f8fafc)', borderRadius: 8, padding: '10px 8px', overflow: 'hidden' }}>
-                      <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted, #64748b)', textTransform: 'uppercase' }}>
-                        Paid
-                      </div>
-                      <div style={{ fontSize: 'clamp(11.5px, 1vw, 13px)', fontWeight: 800, color: 'var(--success, #10b981)', marginTop: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {hideAmounts ? '****' : formatMoney(stats.paid)}
-                      </div>
-                    </div>
-                    <div style={{ background: stats.remaining > 0 ? 'var(--danger-bg, #fef2f2)' : 'var(--primary-bg, #f8fafc)', borderRadius: 8, padding: '10px 8px', overflow: 'hidden' }}>
-                      <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted, #64748b)', textTransform: 'uppercase' }}>
-                        {stats.remaining >= 0 ? 'Remaining' : 'Advance'}
-                      </div>
-                      <div style={{ fontSize: 'clamp(11.5px, 1vw, 13px)', fontWeight: 800, color: stats.remaining > 0 ? 'var(--danger, #ef4444)' : 'var(--success, #10b981)', marginTop: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {hideAmounts ? '****' : formatMoney(Math.abs(stats.remaining))}
-                      </div>
-                    </div>
-                  </div>
+                  <PartyFinancialStats stats={stats} hideAmounts={hideAmounts} />
                 </div>
 
                 {/* Actions */}
@@ -1194,8 +1300,8 @@ export default function Parties() {
               const raw = [];
 
               partyPayments.forEach((p) => {
-                const when = latestDateFrom(p, ['updatedAt', 'date']);
-                const sortMs = when ? when.getTime() : 0;
+                const sortMs = getPaymentEntryTimeMs(p);
+                const when = sortMs ? new Date(sortMs) : null;
                 const amt = Number(p.amount || 0);
                 const isReceived = p.type === 'Received';
                 raw.push({
@@ -1217,30 +1323,23 @@ export default function Parties() {
               partyLots.forEach((l) => {
                 const pe = reportingPartyEdits[l.id] || {};
                 const bill = getAdminLedgerOrBusinessBill(l, pe);
-                const when = latestDateFrom(l, [
-                  'updatedAt',
-                  'createdAt',
-                  'receivedBackDate',
-                  'dispatchDate',
-                  'allotDate',
-                  'receivedDate',
-                ]);
-                const sortMs = when ? when.getTime() : 0;
-                  const statusLower = (pe.overrideStatus || l.status || '').toLowerCase().trim();
-                  raw.push({
-                    rowKey: `lot-${l.id}`,
-                    kind: 'lot',
-                    id: l.id,
-                    sortMs,
-                    whenDate: when,
-                    lotNo: l.lotNo || l.lotNumber,
-                    designNo: l.designNo,
-                    status: pe.overrideStatus || l.status,
-                    diye: 0,
-                    liye: ['completed', 'received back', 'billable'].includes(statusLower) ? bill : 0,
-                    lot: l,
-                    partyEdit: pe,
-                  });
+                const sortMs = getPartyLedgerEntryTimeMs(l, pe);
+                const when = sortMs ? new Date(sortMs) : null;
+                const effStatus = getEffectivePartyLotStatus(l, pe);
+                raw.push({
+                  rowKey: `lot-${l.id}`,
+                  kind: 'lot',
+                  id: l.id,
+                  sortMs,
+                  whenDate: when,
+                  lotNo: l.lotNo || l.lotNumber,
+                  designNo: l.designNo,
+                  status: pe.overrideStatus || l.status,
+                  diye: 0,
+                  liye: effStatus === 'completed' ? bill : 0,
+                  lot: l,
+                  partyEdit: pe,
+                });
               });
 
               raw.sort((a, b) => {
@@ -1373,7 +1472,13 @@ export default function Parties() {
                       
                       let formattedDate = '—';
                       if (when) {
-                        formattedDate = formatDisplayDateTime(when).replace(/ pm/i, ' PM').replace(/ am/i, ' AM');
+                        const hasExplicitTime =
+                          when.getHours() !== 0 ||
+                          when.getMinutes() !== 0 ||
+                          when.getSeconds() !== 0;
+                        formattedDate = hasExplicitTime
+                          ? formatDisplayDateTime(when).replace(/ pm/i, ' PM').replace(/ am/i, ' AM')
+                          : formatDisplayDate(when);
                       }
 
                       return (

@@ -5,6 +5,7 @@ import Loader from '../Loader';
 import { useApp } from '../../context/AppContext';
 import { apiService } from '../../services/api';
 import { NoteWithVoiceField, NoteReadOnlyBox } from '../voice/VoiceNoteControl';
+import { toLocalYmd } from '../../utils/dateFilters';
 import { generateSerialLotNumbers, previewSerialLotNumbers } from '../../utils/lotSerial';
 import {
   getRecentPartyIds,
@@ -39,7 +40,9 @@ function LotForm({
 }) {
   const { patchLotVoiceNotes } = useApp();
   const [adminNotes, setAdminNotes] = useState(() => initialPartyEdit?.adminNotes || '');
+  const initialAdminNotesRef = useRef(initialPartyEdit?.adminNotes || '');
   const adminNotesDirtyRef = useRef(false);
+  const [adminVoiceBusy, setAdminVoiceBusy] = useState(false);
   const [adminVoiceNote, setAdminVoiceNote] = useState(() => initialPartyEdit?.adminVoiceNote || '');
   const [adminVoiceNoteDuration, setAdminVoiceNoteDuration] = useState(() =>
     Number(initialPartyEdit?.adminVoiceNoteDuration || 0)
@@ -77,7 +80,9 @@ function LotForm({
           adminVoiceNoteDuration: row.adminVoiceNoteDuration || 0,
         });
         if (!adminNotesDirtyRef.current && row.adminNotes !== undefined) {
-          setAdminNotes(row.adminNotes ?? '');
+          const nextNotes = row.adminNotes ?? '';
+          initialAdminNotesRef.current = nextNotes;
+          setAdminNotes(nextNotes);
         }
         if (!adminVoiceDirtyRef.current) {
           setAdminVoiceNote(row.adminVoiceNote || '');
@@ -107,7 +112,7 @@ function LotForm({
     billAmount: '',
     //  totalAmount: '',
     //  notes: '',
-    allotDate: new Date().toISOString().slice(0, 10),
+    allotDate: toLocalYmd(),
     partyId: '',
     partyName: '',
     status: 'pending',
@@ -429,7 +434,7 @@ function LotForm({
 
     const adminNotesChanged =
       !isAdminNoteLocked &&
-      (adminNotes !== (initialPartyEdit?.adminNotes || '') || adminVoiceDirty);
+      (adminNotes !== initialAdminNotesRef.current || adminVoiceDirty);
     const _adminNoteMeta = adminNotesChanged
       ? {
           adminNotes,
@@ -1471,6 +1476,7 @@ function LotForm({
             adminVoiceDirtyRef.current = true;
             setAdminVoiceDirty(true);
           }}
+          onBusyChange={setAdminVoiceBusy}
         />
 
         <NoteReadOnlyBox
@@ -1502,13 +1508,15 @@ function LotForm({
         <button
           type="submit"
           className="btn btn-primary"
-          disabled={saving}
+          disabled={saving || adminVoiceBusy}
           style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
         >
           {saving ? (
             <>
               <Loader /> Saving...
             </>
+          ) : adminVoiceBusy ? (
+            'Finish voice note first…'
           ) : (
             saveButtonLabel
           )}

@@ -5,6 +5,7 @@ import Loader from '../Loader';
 import { Modal } from '../UI';
 import { formatDisplayDate } from '../../utils/dateFilters';
 import { formatLakhCrore } from '../../utils/numberToWords';
+import { clearOwnerBillsSessionCache } from '../../utils/ownerBillCache';
 
 /**
  * OwnerBillModal (Sleek, High-Contrast & Professional Design)
@@ -204,6 +205,7 @@ export default function OwnerBillModal({
         lotNo: String(l.lotNo || l.lotNumber || ''),
         designNo: String(l.designNo || ''),
         suitComponent: String(l.suitComponent || 'main'),
+        isRework: Boolean(l.isRework),
         quantity: qty,
         rate: rate,
         amount: finalAmt,
@@ -264,6 +266,8 @@ export default function OwnerBillModal({
   candidateLotsRef.current = candidateLots;
   const defaultsLoadedRef = useRef(false);
   const dismissedRolloverRef = useRef(false);
+  const userEditedBookOrBillRef = useRef(false);
+  const userEditedSabqaRef = useRef(false);
 
   // Background Defaults & Settled Payments Sync (Runs cleanly for both new and edit mode)
   useEffect(() => {
@@ -276,8 +280,8 @@ export default function OwnerBillModal({
         if (!isMounted) return;
         defaultsLoadedRef.current = true;
 
-        const next = res?.nextDefaults || {};
         // Save settledPaymentIds so picker marks payments already used in OTHER bills
+        const next = res?.nextDefaults || {};
         const currentBillPayIds = new Set(
           (existingBill?.paymentsReceived || [])
             .map((p) => String(p.paymentId || p.id || p._id || '').trim())
@@ -290,14 +294,19 @@ export default function OwnerBillModal({
 
         if (isEditing) return;
 
-        if (next.nextBookNo) setBookNo(next.nextBookNo);
-        if (next.nextBillNo) setBillNo(next.nextBillNo);
-        if (res?.bills && res.bills.length > 0) {
-          if (next.lastSabqaBaqaya !== undefined) {
-            setSabqaInput(String(Number(next.lastSabqaBaqaya || 0)));
+        if (!userEditedBookOrBillRef.current) {
+          if (next.nextBookNo) setBookNo(next.nextBookNo);
+          if (next.nextBillNo) setBillNo(next.nextBillNo);
+        }
+        if (!userEditedSabqaRef.current) {
+          const finalizedList = (res?.bills || []).filter((b) => b.status !== 'draft');
+          if (finalizedList.length > 0) {
+            if (next.lastSabqaBaqaya !== undefined) {
+              setSabqaInput(String(Number(next.lastSabqaBaqaya || 0)));
+            }
+          } else if (Number.isFinite(Number(initialPreviousBalance)) && Number(initialPreviousBalance) !== 0) {
+            setSabqaInput(String(Number(initialPreviousBalance)));
           }
-        } else if (initialPreviousBalance > 0) {
-          setSabqaInput(String(initialPreviousBalance));
         }
         if (next.lastBillDate) {
           setLastBillInfo(`Pichla bill ${formatDisplayDate(next.lastBillDate)} ko finalize hua tha.`);
@@ -559,6 +568,7 @@ export default function OwnerBillModal({
 
   // 100-Bill Book Transition prompt
   const handleBillNoChange = (val) => {
+    userEditedBookOrBillRef.current = true;
     const num = Number(val || 0);
     setBillNo(num);
     if (num <= 100) {
@@ -659,6 +669,7 @@ export default function OwnerBillModal({
       } else {
         savedResult = await apiService.createOwnerBill(payload, ownerId);
       }
+      clearOwnerBillsSessionCache(ownerId);
 
       const billedCandidateLotsCount = validLots.filter((l) => Boolean(l.lotId)).length;
       const remainingCount = Math.max(0, billableCandidateCount - billedCandidateLotsCount);
@@ -1480,6 +1491,7 @@ export default function OwnerBillModal({
                   min="1"
                   value={bookNo}
                   onChange={(e) => {
+                    userEditedBookOrBillRef.current = true;
                     const v = e.target.value;
                     setBookNo(v === '' ? '' : Math.max(1, Number(v) || 1));
                   }}
@@ -1503,7 +1515,6 @@ export default function OwnerBillModal({
                 <input
                   type="number"
                   min="1"
-                  max="100"
                   value={billNo}
                   onChange={(e) => handleBillNoChange(e.target.value)}
                   className="owner-bill-input"
@@ -1560,6 +1571,7 @@ export default function OwnerBillModal({
                 inputMode="numeric"
                 value={sabqaInput}
                 onChange={(e) => {
+                  userEditedSabqaRef.current = true;
                   const cleaned = e.target.value.replace(/[^0-9.-]/g, '');
                   setSabqaInput(cleaned);
                 }}

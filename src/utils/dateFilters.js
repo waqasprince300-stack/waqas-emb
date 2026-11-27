@@ -51,6 +51,17 @@ export const parseDateValue = (value) => {
 
 const pad2 = (n) => String(n).padStart(2, '0');
 
+/** Convert Date or ISO/YYYY-MM-DD string to local calendar YYYY-MM-DD (never shifts back in UTC+5). */
+export function toLocalYmd(value = new Date()) {
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+  }
+  const date = parseDateValue(value);
+  if (!date) return '';
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
+}
+
 /** Display dates as day/month/year (DD/MM/YYYY). */
 export const formatDisplayDate = (value, fallback = '—') => {
   const date = parseDateValue(value);
@@ -136,6 +147,222 @@ export const latestDateFrom = (item, keys) => {
   });
   return latest;
 };
+
+/**
+ * Resolve the effective party-facing status key for a lot (accounting for PartyEdit overrideStatus).
+ */
+export function getEffectivePartyLotStatus(lot, partyEdit) {
+  const ls = String(lot?.status || '').toLowerCase().trim();
+  if (ls === 'pending approval') return 'pending approval';
+  if (ls === 'rejected') return 'rejected';
+  const ov = String(partyEdit?.overrideStatus || '').toLowerCase().trim();
+  if (['completed', 'complete', 'received back', 'billable'].includes(ov)) return 'completed';
+  if (ov === 'pending review' || ov === 'pending approval') return 'pending approval';
+  if (ov === 'rejected') return 'rejected';
+  if (ov === 'in progress' || ov === 'dispatched') return 'dispatched';
+  if (ov === 'pending') return 'pending';
+  if (['completed', 'complete', 'received back', 'billable'].includes(ls)) return 'completed';
+  if (['dispatched', 'in progress', 'processing'].includes(ls)) return 'dispatched';
+  return 'pending';
+}
+
+/**
+ * Workspace stage date:
+ * - Before dispatch (pending): allotDate -> receivedDate -> createdAt
+ * - Dispatched & later stages (anchored to dispatch, ignoring updatedAt/approval):
+ *   dispatchedAt (when same day as dispatchDate) -> dispatchDate -> allotDate -> receivedDate -> createdAt
+ */
+export function getWorkspaceLotDate(lot) {
+  if (!lot) return null;
+  const status = String(lot.status || '').toLowerCase().trim();
+  const isDispatchedOrBeyond = status !== 'pending' && Boolean(lot.dispatchedAt || lot.dispatchDate);
+
+  if (isDispatchedOrBeyond) {
+    if (lot.dispatchDate && lot.dispatchedAt) {
+      const dDay = toLocalYmd(lot.dispatchDate);
+      const tsDay = toLocalYmd(lot.dispatchedAt);
+      if (dDay && dDay === tsDay) {
+        return parseDateValue(lot.dispatchedAt);
+      }
+      return parseDateValue(lot.dispatchDate);
+    }
+    return parseDateValue(
+      lot.dispatchedAt || lot.dispatchDate || lot.allotDate || lot.receivedDate || lot.createdAt
+    );
+  }
+
+  return parseDateValue(lot.allotDate || lot.receivedDate || lot.createdAt);
+}
+
+function getWorkspaceSameDayMs(lot, dayStr) {
+  if (!lot || !dayStr) return null;
+  const status = String(lot.status || '').toLowerCase().trim();
+  const isDispatchedOrBeyond = status !== 'pending' && Boolean(lot.dispatchedAt || lot.dispatchDate);
+
+  if (isDispatchedOrBeyond) {
+    if (lot.dispatchedAt && toLocalYmd(lot.dispatchedAt) === dayStr) {
+      return parseDateValue(lot.dispatchedAt)?.getTime() || null;
+    }
+    if (lot.dispatchDate && /T\d{2}:\d{2}/.test(String(lot.dispatchDate)) && toLocalYmd(lot.dispatchDate) === dayStr) {
+      return parseDateValue(lot.dispatchDate)?.getTime() || null;
+    }
+    return null;
+  }
+
+  if (lot.createdAt && toLocalYmd(lot.createdAt) === dayStr) {
+    return parseDateValue(lot.createdAt)?.getTime() || null;
+  }
+  return null;
+}
+
+/**
+ * Party Ledger / Parties page lot date (freezes on party submission/completion date):
+ * - Pending review / Completed / Received back:
+ *   pe.completeDate -> lot.receivedBackDate -> lot.pendingReviewSubmittedAt -> dispatchDate -> allotDate -> createdAt
+ *   (NEVER uses completionApprovedAt or updatedAt so admin approval days later never shifts party ledger dates)
+ * - Dispatched / Rejected: dispatchDate -> dispatchedAt -> allotDate -> receivedDate -> createdAt
+ * - Pending: allotDate -> receivedDate -> createdAt
+ */
+export function getPartyLedgerLotDate(lot, partyEdit) {
+  if (!lot) return null;
+  const effStatus = getEffectivePartyLotStatus(lot, partyEdit);
+
+  if (effStatus === 'completed' || effStatus === 'pending approval') {
+    const raw =
+      partyEdit?.completeDate ||
+      lot.receivedBackDate ||
+      lot.pendingReviewSubmittedAt ||
+      lot.dispatchDate ||
+      lot.dispatchedAt ||
+      lot.allotDate ||
+      lot.receivedDate ||
+      lot.createdAt;
+    return parseDateValue(raw);
+  }
+
+  if (effStatus === 'dispatched' || effStatus === 'rejected') {
+    return parseDateValue(
+      lot.dispatchDate ||
+      lot.dispatchedAt ||
+      lot.allotDate ||
+      lot.receivedDate ||
+      lot.createdAt
+    );
+  }
+
+  return parseDateValue(lot.allotDate || lot.receivedDate || lot.createdAt);
+}
+
+/** Exact same-day timestamp (ms) for sorting / chronological tie-breaking in Party Ledger & View Ledger. */
+export function getPartyLedgerEntryTimeMs(lot, partyEdit) {
+  const baseDate = getPartyLedgerLotDate(lot, partyEdit);
+  if (!baseDate) return 0;
+  const dayStr = toLocalYmd(baseDate);
+  const effStatus = getEffectivePartyLotStatus(lot, partyEdit);
+
+  if (
+    (effStatus === 'completed' || effStatus === 'pending approval') &&
+    lot?.pendingReviewSubmittedAt &&
+    toLocalYmd(lot.pendingReviewSubmittedAt) === dayStr
+  ) {
+    return parseDateValue(lot.pendingReviewSubmittedAt)?.getTime() || baseDate.getTime();
+  }
+  if (lot?.dispatchedAt && toLocalYmd(lot.dispatchedAt) === dayStr) {
+    return parseDateValue(lot.dispatchedAt)?.getTime() || baseDate.getTime();
+  }
+  if (lot?.createdAt && toLocalYmd(lot.createdAt) === dayStr) {
+    return parseDateValue(lot.createdAt)?.getTime() || baseDate.getTime();
+  }
+  return baseDate.getTime();
+}
+
+/** Payment timeline timestamp (ms): uses p.date calendar day + p.createdAt time when on the same day. */
+export function getPaymentEntryTimeMs(payment) {
+  const baseDate = parseDateValue(payment?.date || payment?.createdAt);
+  if (!baseDate) return 0;
+  const dayStr = toLocalYmd(baseDate);
+  if (payment?.createdAt && toLocalYmd(payment.createdAt) === dayStr) {
+    return parseDateValue(payment.createdAt)?.getTime() || baseDate.getTime();
+  }
+  return baseDate.getTime();
+}
+
+function getPartyLedgerSameDayMs(lot, partyEdit, dayStr) {
+  if (!lot || !dayStr) return null;
+  const effStatus = getEffectivePartyLotStatus(lot, partyEdit);
+  if (effStatus === 'completed' || effStatus === 'pending approval') {
+    if (lot.pendingReviewSubmittedAt && toLocalYmd(lot.pendingReviewSubmittedAt) === dayStr) {
+      return parseDateValue(lot.pendingReviewSubmittedAt)?.getTime() || null;
+    }
+    return null;
+  }
+  if (effStatus === 'dispatched' || effStatus === 'rejected') {
+    if (lot.dispatchedAt && toLocalYmd(lot.dispatchedAt) === dayStr) {
+      return parseDateValue(lot.dispatchedAt)?.getTime() || null;
+    }
+    return null;
+  }
+  if (lot.createdAt && toLocalYmd(lot.createdAt) === dayStr) {
+    return parseDateValue(lot.createdAt)?.getTime() || null;
+  }
+  return null;
+}
+
+function compareDayThenOptionalTimestamp(dayA, tsA, dayB, tsB, a, b) {
+  if (dayA && dayB) {
+    if (dayA !== dayB) return dayB.localeCompare(dayA);
+  } else if (dayB && !dayA) {
+    return 1;
+  } else if (dayA && !dayB) {
+    return -1;
+  }
+
+  if (tsA && tsB) {
+    if (tsA !== tsB) return tsB - tsA;
+  } else if (tsA && !tsB) {
+    return -1;
+  } else if (tsB && !tsA) {
+    return 1;
+  }
+
+  const lotCmp = compareLotNumbers(a, b);
+  if (lotCmp !== 0) return lotCmp;
+
+  return fallbackIdCompare(a, b);
+}
+
+/**
+ * Workspace comparator:
+ * 1. Calendar day of Workspace stage date (pending -> allotDate/createdAt, dispatched -> dispatchedAt/dispatchDate)
+ * 2. Exact dispatch/create timestamp on the same day so newly dispatched lots jump strictly to the top
+ * 3. Lot number descending, then ID
+ */
+export function compareWorkspaceLots(a, b) {
+  const dateA = getWorkspaceLotDate(a);
+  const dateB = getWorkspaceLotDate(b);
+  const dayA = dateA ? toLocalYmd(dateA) : '';
+  const dayB = dateB ? toLocalYmd(dateB) : '';
+  const tsA = getWorkspaceSameDayMs(a, dayA);
+  const tsB = getWorkspaceSameDayMs(b, dayB);
+  return compareDayThenOptionalTimestamp(dayA, tsA, dayB, tsB, a, b);
+}
+
+/**
+ * Party Ledger comparator:
+ * Freezes lot order on the party's submission/completion date (and submission time on the same day).
+ * Admin approval later never moves the lot's date or row position.
+ */
+export function comparePartyLedgerLots(a, b, partyEditsMap = {}) {
+  const peA = partyEditsMap?.[a?.id];
+  const peB = partyEditsMap?.[b?.id];
+  const dateA = getPartyLedgerLotDate(a, peA);
+  const dateB = getPartyLedgerLotDate(b, peB);
+  const dayA = dateA ? toLocalYmd(dateA) : '';
+  const dayB = dateB ? toLocalYmd(dateB) : '';
+  const tsA = getPartyLedgerSameDayMs(a, peA, dayA);
+  const tsB = getPartyLedgerSameDayMs(b, peB, dayB);
+  return compareDayThenOptionalTimestamp(dayA, tsA, dayB, tsB, a, b);
+}
 
 /**
  * Extract the business date for a lot (ignoring technical updatedAt).

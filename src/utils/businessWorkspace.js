@@ -125,6 +125,9 @@ export function workspaceDisplayTitleForLot(lot, ownersRows, opts = {}) {
         return p.workspaceAlias && p.workspaceAlias.trim() ? p.workspaceAlias.trim() : '—';
       }
     }
+    if (p.showWorkspace === false) {
+      return p.workspaceAlias && p.workspaceAlias.trim() ? p.workspaceAlias.trim() : '—';
+    }
     if (p.workspaceAlias && p.workspaceAlias.trim()) {
       return p.workspaceAlias.trim();
     }

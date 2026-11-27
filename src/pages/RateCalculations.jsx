@@ -5,6 +5,7 @@ import Swal from 'sweetalert2';
 import { Modal, FormGroup, ActionBtn } from '../components/UI';
 
 import { useAuth } from '../context/AuthContext';
+import { useApp } from '../context/AppContext';
 
 import { apiService } from '../services/api';
 
@@ -34,6 +35,7 @@ import Loader from '../components/Loader';
 
 export default function StitchCalculator() {
   const { isParty } = useAuth();
+  const { activeBusinessOwnerId } = useApp();
 
   const [customParts, setCustomParts] = useState(() => loadCustomStitchParts());
 
@@ -101,13 +103,7 @@ export default function StitchCalculator() {
 
   const format = formatCalcNum;
 
-  useEffect(() => {
-    if (!isParty) {
-      void loadSavedDesigns();
-    }
-  }, [isParty]);
-
-  const loadSavedDesigns = async () => {
+  const loadSavedDesigns = useCallback(async () => {
     setLoading(true);
 
     try {
@@ -119,7 +115,13 @@ export default function StitchCalculator() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    if (!isParty) {
+      void loadSavedDesigns();
+    }
+  }, [isParty, activeBusinessOwnerId, loadSavedDesigns]);
 
   const updateRow = useCallback((index, patch) => {
     setRows((prev) => {
@@ -179,6 +181,12 @@ export default function StitchCalculator() {
       return;
     }
 
+    const validPieces = Math.max(1, Math.round(Number(pieces) || 0));
+    if (!Number.isFinite(Number(pieces)) || Number(pieces) < 1) {
+      Swal.fire({ icon: 'warning', title: 'Invalid pieces', text: 'Number of pieces must be at least 1.' });
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -191,13 +199,13 @@ export default function StitchCalculator() {
 
         rate,
 
-        pieces: Number(pieces),
+        pieces: validPieces,
 
         grandTotal,
 
         onePieceRate,
 
-        totalCost,
+        totalCost: onePieceRate * validPieces,
 
         createdAt: new Date().toISOString(),
       };
