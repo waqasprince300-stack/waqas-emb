@@ -536,7 +536,7 @@ export default function PLEditModal({
                 className="btn btn-ghost btn-sm"
                 aria-label="Remove receipt"
                 title="Remove receipt"
-                onClick={() => setEditForm((f) => ({ ...f, receipt: '' }))}
+                onClick={() => setEditForm((f) => ({ ...f, receipt: '', hasReceipt: false, receiptDirty: true }))}
                 style={{
                   width: 28,
                   height: 28,

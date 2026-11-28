@@ -611,6 +611,8 @@ export default function Parties() {
         .trim();
       if (ls === 'pending approval') return 'pending_approval';
       if (ls === 'rejected') return 'rejected';
+      // Authoritative completed/received back status always wins over any stale PartyEdit.overrideStatus.
+      if (['completed', 'complete', 'received back', 'billable'].includes(ls)) return 'completed';
       const pe = reportingPartyEdits[l.id] || {};
       const raw = String(pe.overrideStatus || l.status || '').toLowerCase();
       if (raw === 'received back') return 'completed';
@@ -699,10 +701,12 @@ export default function Parties() {
       let active = 0;
       let completed = 0;
       for (const l of lots) {
-        if (lotStatusKey(l) === 'completed') {
+        const sk = lotStatusKey(l);
+        if (sk === 'completed') {
           completedAmount += lotBillAmount(l);
           completed += 1;
-        } else {
+        } else if (sk !== 'rejected') {
+          // Rejected lots are neither active nor completed - exclude from both counts
           const partyAmt = activePartyBill(l);
           if (partyAmt != null) {
             activeAmount += partyAmt;
@@ -953,7 +957,9 @@ export default function Parties() {
             value: parties.filter((p) =>
               rangedLots.some(
                 (l) =>
-                  String(l.partyId ?? '') === String(p.id ?? '') && lotStatusKey(l) !== 'completed'
+                  String(l.partyId ?? '') === String(p.id ?? '') &&
+                  lotStatusKey(l) !== 'completed' &&
+                  lotStatusKey(l) !== 'rejected'
               )
             ).length,
             color: 'var(--warning, #d97706)',

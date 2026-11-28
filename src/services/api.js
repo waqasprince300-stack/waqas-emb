@@ -56,6 +56,10 @@ export function registerSessionExpiredHandler(fn) {
   sessionExpiryNotified = false;
 }
 
+export function resetSessionExpiredFlag() {
+  sessionExpiryNotified = false;
+}
+
 function notifySessionExpired() {
   if (sessionExpiryNotified) return;
   sessionExpiryNotified = true;
@@ -365,10 +369,14 @@ class ApiService {
 
   async approveUser(id, data) {
     const safe = encodeURIComponent(String(id ?? '').trim());
-    return this.request(`/users/${safe}/approve`, {
-      method: 'PATCH',
-      body: JSON.stringify(data ?? {}),
-    });
+    return this.request(
+      `/users/${safe}/approve`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify(data ?? {}),
+      },
+      { skipBusinessOwnerHeader: true }
+    );
   }
 
   async rejectUser(id) {
@@ -397,10 +405,14 @@ class ApiService {
 
   async updateUserParty(id, data) {
     const safe = encodeURIComponent(String(id ?? '').trim());
-    return this.request(`/users/${safe}/party`, {
-      method: 'PATCH',
-      body: JSON.stringify(data ?? {}),
-    });
+    return this.request(
+      `/users/${safe}/party`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify(data ?? {}),
+      },
+      { skipBusinessOwnerHeader: true }
+    );
   }
 
   async deleteUser(id) {

@@ -32,6 +32,7 @@ export default function PLRevisionReviewModal({
       : toA
     : ownerBill;
   const delta = newOwner - ownerBill;
+  const partyDelta = toA - fromA;
 
   return (
     <Modal
@@ -90,10 +91,10 @@ export default function PLRevisionReviewModal({
           </strong>{' '}
           <span
             style={{
-              color: delta === 0 ? 'var(--text-muted, #64748b)' : toA - fromA >= 0 ? 'var(--success, #0f766e)' : 'var(--danger, #dc2626)',
+              color: partyDelta === 0 ? 'var(--text-muted, #64748b)' : partyDelta > 0 ? 'var(--success, #0f766e)' : 'var(--danger, #dc2626)',
             }}
           >
-            ({toA - fromA >= 0 ? '+' : '−'}₨{Math.abs(toA - fromA).toLocaleString()})
+            ({partyDelta >= 0 ? '+' : '−'}₨{Math.abs(partyDelta).toLocaleString()})
           </span>
         </div>
         {req.reason ? (
@@ -200,7 +201,7 @@ export default function PLRevisionReviewModal({
           <div style={{ marginTop: 6, color: 'var(--warning, #92400e)', fontWeight: 600 }}>
             {delta > 0
               ? `Adjustment: extra Paid → Owner payment of ₨${delta.toLocaleString()} will be recorded.`
-              : `Adjustment: reversing Received ← Owner payment of ₨${Math.abs(delta).toLocaleString()} will be recorded.`}
+              : `Adjustment: unbilled Paid → Owner settlement(s) will be reduced by ₨${Math.abs(delta).toLocaleString()} (billed settlements must be adjusted in Owner Ledger).`}
           </div>
         )}
       </div>

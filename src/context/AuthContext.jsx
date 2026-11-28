@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import apiService, { registerSessionExpiredHandler } from '../services/api';
+import apiService, { registerSessionExpiredHandler, resetSessionExpiredFlag } from '../services/api';
 import { disconnectRealtime } from '../services/realtime';
 import { getDeviceId, getDeviceLabel } from '../utils/deviceId';
 
@@ -54,6 +54,7 @@ export function AuthProvider({ children }) {
   });
 
   const saveSession = useCallback((nextSession) => {
+    resetSessionExpiredFlag();
     localStorage.setItem(SESSION_KEY, JSON.stringify(nextSession));
     setSession(nextSession);
     const u = nextSession?.user;

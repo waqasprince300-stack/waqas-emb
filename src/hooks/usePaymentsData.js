@@ -3,10 +3,19 @@ import { apiService } from '../services/api';
 
 export const INITIAL_PAYMENTS = [];
 
-export function usePaymentsData({ trackWrite, userRole }) {
+export function usePaymentsData({ trackWrite, userRole, activeBusinessOwnerId }) {
   const [payments, setPayments] = useState(INITIAL_PAYMENTS);
   const [adminReportingPayments, setAdminReportingPayments] = useState(INITIAL_PAYMENTS);
   const [partyCrossPayments, setPartyCrossPayments] = useState(INITIAL_PAYMENTS);
+
+  const isWithinActiveScope = useCallback(
+    (bizId) => {
+      const target = String(bizId ?? '').trim();
+      const active = String(activeBusinessOwnerId ?? '').trim();
+      return !target || !active || target === active;
+    },
+    [activeBusinessOwnerId]
+  );
 
   const addPayment = useCallback(
     async (p, opts = {}) => {
@@ -14,7 +23,9 @@ export function usePaymentsData({ trackWrite, userRole }) {
       const payment = await trackWrite(
         apiService.createPayment({ ...p, amount: Number(p.amount) }, businessOwnerId)
       );
-      setPayments((arr) => [...arr, payment]);
+      if (isWithinActiveScope(payment?.businessOwnerId ?? businessOwnerId)) {
+        setPayments((arr) => [...arr, payment]);
+      }
       if (userRole === 'admin') {
         setAdminReportingPayments((arr) => [...arr, payment]);
       }
@@ -23,7 +34,7 @@ export function usePaymentsData({ trackWrite, userRole }) {
       }
       return payment;
     },
-    [trackWrite, userRole]
+    [trackWrite, userRole, isWithinActiveScope]
   );
 
   const updatePayment = useCallback(
@@ -35,7 +46,11 @@ export function usePaymentsData({ trackWrite, userRole }) {
       const idStr = String(id);
       const applyUpdate = (arr) =>
         arr.map((x) => (String(x.id || x._id) === idStr ? { ...x, ...updated } : x));
-      setPayments(applyUpdate);
+      if (isWithinActiveScope(updated?.businessOwnerId ?? businessOwnerId)) {
+        setPayments(applyUpdate);
+      } else {
+        setPayments((arr) => arr.filter((x) => String(x.id || x._id) !== idStr));
+      }
       if (userRole === 'admin') {
         setAdminReportingPayments(applyUpdate);
       }
@@ -44,7 +59,7 @@ export function usePaymentsData({ trackWrite, userRole }) {
       }
       return updated;
     },
-    [trackWrite, userRole]
+    [trackWrite, userRole, isWithinActiveScope]
   );
 
   const deletePayment = useCallback(

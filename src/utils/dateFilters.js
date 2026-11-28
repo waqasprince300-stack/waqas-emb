@@ -155,13 +155,14 @@ export function getEffectivePartyLotStatus(lot, partyEdit) {
   const ls = String(lot?.status || '').toLowerCase().trim();
   if (ls === 'pending approval') return 'pending approval';
   if (ls === 'rejected') return 'rejected';
+  // Authoritative approved/completed status always wins over any stale PartyEdit.overrideStatus.
+  if (['completed', 'complete', 'received back', 'billable'].includes(ls)) return 'completed';
   const ov = String(partyEdit?.overrideStatus || '').toLowerCase().trim();
   if (['completed', 'complete', 'received back', 'billable'].includes(ov)) return 'completed';
   if (ov === 'pending review' || ov === 'pending approval') return 'pending approval';
   if (ov === 'rejected') return 'rejected';
   if (ov === 'in progress' || ov === 'dispatched') return 'dispatched';
   if (ov === 'pending') return 'pending';
-  if (['completed', 'complete', 'received back', 'billable'].includes(ls)) return 'completed';
   if (['dispatched', 'in progress', 'processing'].includes(ls)) return 'dispatched';
   return 'pending';
 }

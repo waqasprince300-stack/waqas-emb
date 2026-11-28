@@ -49,7 +49,7 @@ export default function CompleteBillModal({
             Cancel
           </button>
           <button type="submit" className="btn btn-primary">
-            {!isCombDup && completeBillModal.unpaidBalance === 0
+            {!isCombDup && completeBillModal.totalBill > 0 && completeBillModal.unpaidBalance === 0
               ? 'Complete'
               : fromBillable
                 ? 'Complete & settle'
@@ -69,7 +69,7 @@ export default function CompleteBillModal({
         >
           This lot&apos;s bill is <strong style={{ color: 'var(--warning, #d97706)' }}>combined</strong> with the main lot. You can complete and settle it directly (₨0 bill).
         </p>
-      ) : completeBillModal.unpaidBalance === 0 ? (
+      ) : completeBillModal.totalBill > 0 && completeBillModal.unpaidBalance === 0 ? (
         <p
           style={{
             textAlign: 'left',
@@ -145,7 +145,7 @@ export default function CompleteBillModal({
         <strong>Party:</strong> {partyLabel}
         <br />
       </div>
-      {!isCombDup && completeBillModal.unpaidBalance > 0 && (
+      {!isCombDup && (completeBillModal.totalBill <= 0 || completeBillModal.unpaidBalance > 0) && (
         <FormGroup
           label={rawBill > 0 ? 'Baqi udhaar amount (₨) — zaroorat ho toh change karein' : 'Vasool ki gayi amount (₨) *'}
         >

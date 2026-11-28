@@ -178,6 +178,10 @@ export function VoiceNotePlayerPill({
       if (audio) {
         audio.pause();
         audio.currentTime = 0;
+        if (!nextSrc) {
+          audio.dataset.srcKey = '';
+          audio.removeAttribute('src');
+        }
       }
       if (activePlayerControl?.audio === audio) {
         activePlayerControl = null;
@@ -271,6 +275,8 @@ export function VoiceNotePlayerPill({
             [durField]: 0,
             [hasField]: false,
           });
+          audio.dataset.srcKey = '';
+          audio.removeAttribute('src');
           localSrcRef.current = '';
           setLocalSrc('');
           setErrorMsg('Voice note not found');

@@ -113,6 +113,7 @@ export function AppProvider({ children }) {
     markNotificationRead,
     markAllNotificationsRead,
     markNotificationsReadByContext,
+    applyLocalNotificationsReadByContext,
     clearPendingLotNotice,
     pendingLotNotice,
     setPendingLotNotice,
@@ -131,7 +132,7 @@ export function AppProvider({ children }) {
     addPayment,
     updatePayment,
     deletePayment,
-  } = usePaymentsData({ trackWrite, userRole: user?.role });
+  } = usePaymentsData({ trackWrite, userRole: user?.role, activeBusinessOwnerId });
 
   // 4. Lots and Party Edits State
   const [ghausiaLots, setGhausiaLots] = useState(INITIAL_GHAUSIA);
@@ -781,54 +782,12 @@ export function AppProvider({ children }) {
       }
 
       if (action === 'notifications_marked_read' && isTargetMe) {
-        const now = new Date().toISOString();
-        const targetLotId = payload.lotId ? String(payload.lotId).trim() : '';
-        const category = payload.category ? String(payload.category) : '';
-        const notifType = payload.type ? String(payload.type) : '';
-        const notifTypes = Array.isArray(payload.types) ? payload.types : [];
-
-        let matchedCount = 0;
-        setNotifications((prev) =>
-          prev.map((n) => {
-            if (n.readAt) return n;
-            let match = false;
-            if (targetLotId && String(n.lotId || '').trim() === targetLotId) match = true;
-            if (notifType && String(n.type || '') === notifType) match = true;
-            if (notifTypes.length > 0 && notifTypes.includes(String(n.type || ''))) match = true;
-            if (category === 'review_lots' && String(n.type || '') === 'lot_pending_review') match = true;
-            if (
-              category === 'party_ledger' &&
-              [
-                'lot_rejected',
-                'lot_approved',
-                'lot_dispatched',
-                'lot_assigned',
-                'lot_updated',
-                'lot_deleted',
-                'bill_revision_approved',
-                'bill_revision_rejected',
-              ].includes(String(n.type || ''))
-            ) {
-              match = true;
-            }
-            if (category === 'bill_revision' && String(n.type || '') === 'bill_revision_request') match = true;
-            if (
-              category === 'payments' &&
-              ['payment_recorded', 'payment_updated', 'payment_deleted'].includes(String(n.type || ''))
-            ) {
-              match = true;
-            }
-
-            if (match) {
-              matchedCount++;
-              return { ...n, readAt: now };
-            }
-            return n;
-          })
-        );
-        if (matchedCount > 0) {
-          setNotificationUnreadCount((c) => Math.max(0, c - matchedCount));
-        }
+        applyLocalNotificationsReadByContext({
+          category: payload.category ? String(payload.category) : '',
+          type: payload.type ? String(payload.type) : '',
+          types: Array.isArray(payload.types) ? payload.types : [],
+          lotId: payload.lotId ? String(payload.lotId).trim() : '',
+        });
         void refreshNotifications();
         return;
       }
@@ -923,6 +882,7 @@ export function AppProvider({ children }) {
     invalidateLotReceipt,
     isRefreshSuppressed,
     refreshNotifications,
+    applyLocalNotificationsReadByContext,
     setNotifications,
     setNotificationUnreadCount,
     setPendingLotNotice,
@@ -1015,6 +975,16 @@ export function AppProvider({ children }) {
     ]
   );
 
+  const belongsToActiveBusinessScope = useCallback(
+    (lotBiz, fallbackBiz = '') => {
+      const active = String(activeBusinessOwnerId ?? '').trim();
+      if (!active) return true;
+      const resolved = String(lotBiz ?? fallbackBiz ?? '').trim();
+      return !resolved || resolved === active;
+    },
+    [activeBusinessOwnerId]
+  );
+
   // Lot CRUD Handlers
   const addLot = useCallback(
     async (lot, opts = {}) => {
@@ -1022,21 +992,28 @@ export function AppProvider({ children }) {
       const response = await trackWrite(apiService.createGhausiaLot(lot, businessOwnerId));
       if (Array.isArray(response)) {
         const normArray = response.map(normalizeLotData);
-        setGhausiaLots((arr) => [...arr, ...normArray]);
+        const scopedArray = normArray.filter((l) =>
+          belongsToActiveBusinessScope(l.businessOwnerId, businessOwnerId)
+        );
+        if (scopedArray.length > 0) {
+          setGhausiaLots((arr) => [...arr, ...scopedArray]);
+        }
         if (user?.role === 'admin') {
           setAdminReportingLots((arr) => [...arr, ...normArray]);
         }
         return normArray;
       } else {
         const created = normalizeLotData(response);
-        setGhausiaLots((arr) => [...arr, created]);
+        if (belongsToActiveBusinessScope(created.businessOwnerId, businessOwnerId)) {
+          setGhausiaLots((arr) => [...arr, created]);
+        }
         if (user?.role === 'admin') {
           setAdminReportingLots((arr) => [...arr, created]);
         }
         return created;
       }
     },
-    [trackWrite, user?.role]
+    [trackWrite, user?.role, belongsToActiveBusinessScope]
   );
 
   const updateLot = useCallback(
@@ -1045,14 +1022,27 @@ export function AppProvider({ children }) {
       const response = await trackWrite(apiService.updateGhausiaLot(id, patch, businessOwnerId));
 
       const isArr = Array.isArray(response);
-      const updatedLots = isArr ? response.map(normalizeLotData) : [normalizeLotData(response)];
+      const rawList = isArr
+        ? response
+        : Array.isArray(response?.lots)
+          ? response.lots
+          : [response];
+      const deletedLinkedIdStr =
+        !isArr && response?.deletedLinkedId ? String(response.deletedLinkedId) : null;
+      const updatedLots = rawList.filter(Boolean).map(normalizeLotData);
 
-      const applyUpdates = (arr) => {
+      const applyUpdates = (arr, { enforceActiveScope = false } = {}) => {
         let next = [...arr];
+        if (deletedLinkedIdStr) {
+          next = next.filter((x) => String(x.id) !== deletedLinkedIdStr);
+        }
         for (const lot of updatedLots) {
           const lotIdStr = String(lot.id);
-          const idx = next.findIndex(x => String(x.id) === lotIdStr);
-          if (idx !== -1) {
+          const inScope = !enforceActiveScope || belongsToActiveBusinessScope(lot.businessOwnerId);
+          const idx = next.findIndex((x) => String(x.id) === lotIdStr);
+          if (!inScope) {
+            if (idx !== -1) next.splice(idx, 1);
+          } else if (idx !== -1) {
             next[idx] = lot;
           } else {
             next.push(lot);
@@ -1061,33 +1051,44 @@ export function AppProvider({ children }) {
         return next;
       };
 
-      setGhausiaLots((arr) => {
-        const has = arr.some((x) => String(x.id) === String(id));
-        if (!has) return arr;
-        return applyUpdates(arr);
-      });
+      setGhausiaLots((arr) => applyUpdates(arr, { enforceActiveScope: true }));
       if (user?.role === 'admin') {
         setAdminReportingLots((arr) => applyUpdates(arr));
       }
       if (user?.role === 'party') {
         setPartyCrossLots((arr) => applyUpdates(arr));
       }
-      if (patch && (Object.prototype.hasOwnProperty.call(patch, 'partyId') || Object.prototype.hasOwnProperty.call(patch, 'status'))) {
+      if (
+        deletedLinkedIdStr ||
+        (patch && (Object.prototype.hasOwnProperty.call(patch, 'partyId') || Object.prototype.hasOwnProperty.call(patch, 'status')))
+      ) {
         const idStr = String(id);
         const prevLot =
           ghausiaLots.find((x) => String(x.id) === idStr) ||
           adminReportingLots.find((x) => String(x.id) === idStr) ||
           partyCrossLots.find((x) => String(x.id) === idStr);
         const isReassigned =
+          Boolean(patch) &&
           Object.prototype.hasOwnProperty.call(patch, 'partyId') &&
           Boolean(prevLot) &&
           String(patch.partyId || '') !== String(prevLot.partyId || '');
+        const shouldClearOverride =
+          Boolean(patch) &&
+          (Object.prototype.hasOwnProperty.call(patch, 'partyId') ||
+            Object.prototype.hasOwnProperty.call(patch, 'status'));
         const syncPe = (prev) => {
-          const existingPe = prev[idStr];
-          if (!existingPe) return prev;
+          const base = deletedLinkedIdStr
+            ? (() => {
+                const copy = { ...prev };
+                delete copy[deletedLinkedIdStr];
+                return copy;
+              })()
+            : prev;
+          const existingPe = base[idStr];
+          if (!existingPe || !shouldClearOverride) return base;
           if (isReassigned) {
             return {
-              ...prev,
+              ...base,
               [idStr]: {
                 ...existingPe,
                 notes: '',
@@ -1108,7 +1109,7 @@ export function AppProvider({ children }) {
             };
           }
           return {
-            ...prev,
+            ...base,
             [idStr]: {
               ...existingPe,
               overrideStatus: '',
@@ -1121,7 +1122,7 @@ export function AppProvider({ children }) {
       }
       return isArr ? updatedLots : updatedLots[0];
     },
-    [trackWrite, user?.role, ghausiaLots, adminReportingLots, partyCrossLots]
+    [trackWrite, user?.role, ghausiaLots, adminReportingLots, partyCrossLots, belongsToActiveBusinessScope]
   );
 
   const deleteLot = useCallback(

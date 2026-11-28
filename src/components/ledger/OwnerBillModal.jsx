@@ -173,9 +173,12 @@ export default function OwnerBillModal({
         lotNo: String(l.lotNo || l.lotNumber || ''),
         designNo: String(l.designNo || ''),
         suitComponent: String(l.suitComponent || 'main'),
+        isRework: Boolean(l.isRework),
         quantity: Number(l.quantity || 0),
         rate: Number(l.rate || 0),
         amount: Number(l.amount || 0),
+        ...(l.preBillRate != null ? { preBillRate: Number(l.preBillRate) } : {}),
+        ...(l.preBillAmount != null ? { preBillAmount: Number(l.preBillAmount) } : {}),
         note: String(l.note || l.itemDescription || l.description || ''),
         selected: true,
       }));
@@ -510,10 +513,12 @@ export default function OwnerBillModal({
         lotNo: String(l.lotNo || l.lotNumber || ''),
         designNo: String(l.designNo || ''),
         suitComponent: String(l.suitComponent || 'main'),
+        isRework: Boolean(l.isRework),
         quantity: qty,
         rate: rate,
         amount: finalAmt,
         note: String(l.itemDescription || l.description || ''),
+        selected: true,
       };
     });
 
@@ -619,6 +624,7 @@ export default function OwnerBillModal({
       const lotsPayload = validLots.map((l) => ({
         ...l,
         lotId: String(l.lotId || l.id || l._id || ''),
+        isRework: Boolean(l.isRework),
         quantity: Number(l.quantity || 0),
         rate: Number(l.rate || 0),
         amount: Number(l.amount || 0),

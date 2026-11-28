@@ -61,20 +61,21 @@ function partyRevisionPositiveDelta(pe) {
 }
 
 /**
- * A 400 on approve almost always means our cached row is stale: the lot was already
- * approved/rejected/changed on the server, so it is no longer "pending approval".
- * We key off the 400 status (not the exact backend wording, which may change) and only
- * treat clearly unrelated client errors as real failures.
+ * Only treat explicit stale-status/conflict responses from the server as "Lot already updated"
+ * so genuine server/validation errors surface clearly instead of falsely claiming the lot changed.
  */
 function isStaleLotApprovalError(e) {
   const status = Number(e?.status);
+  if (status === 409) return true;
   if (status !== 400) return false;
+  if (e?.body?.code === 'NOT_AWAITING_APPROVAL') return true;
   const msg = String(e?.message || e || '').toLowerCase();
-  // Wording-tolerant: anything about the lot's approval/status counts as "already updated".
-  // Genuine input problems (amount/validation) keep the normal error message.
-  const looksLikeValidationError =
-    msg.includes('amount') || msg.includes('required') || msg.includes('invalid amount');
-  return !looksLikeValidationError;
+  return (
+    msg.includes('not awaiting approval') ||
+    msg.includes('already approved') ||
+    msg.includes('already rejected') ||
+    msg.includes('already updated')
+  );
 }
 
 export default function ReviewLots() {
@@ -396,11 +397,22 @@ export default function ReviewLots() {
         timerProgressBar: true,
       });
     } catch (e) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Could not reject',
-        text: String(e?.message || e || ''),
-      });
+      if (isStaleLotApprovalError(e)) {
+        setRejectModal(null);
+        setRejectReason('');
+        refreshData?.({ force: true });
+        Swal.fire({
+          icon: 'info',
+          title: 'Lot already updated',
+          text: 'This lot is no longer awaiting approval (it was already approved, rejected, or changed). The list has been refreshed.',
+        });
+      } else {
+        Swal.fire({
+          icon: 'error',
+          title: 'Could not reject',
+          text: String(e?.message || e || ''),
+        });
+      }
     } finally {
       setBusyId(null);
     }

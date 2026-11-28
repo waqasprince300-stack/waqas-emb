@@ -185,6 +185,12 @@ export default function GhausiaCollection() {
       setSearch(q);
       setSearchField('all');
     }
+    const stuckParam = params.get('stuckLotIds');
+    if (stuckParam) {
+      setStuckLotIdsFilter(
+        stuckParam.split(',').map((s) => s.trim()).filter(Boolean)
+      );
+    }
   }, [location.search]);
 
   const effectiveCollectionLots = useMemo(() => {
@@ -959,11 +965,15 @@ export default function GhausiaCollection() {
     return effectivePayments
       .filter((p) => {
         if (p.type !== 'Paid') return false;
-        // Exclude auto-generated OwnerBill lot-settlement Paid records (already counted in billableSettledTotal)
+        // Exclude auto-generated lot-settlement Paid records (already counted in billableSettledTotal)
+        const noteStr = String(p.note || '').trim();
         const isAutoOwnerBillPaid =
           Boolean(p.ownerBillId) ||
           (p.billedInBillNo && p.billedInBillNo !== 'none') ||
-          String(p.note || '').includes('billed to owner');
+          noteStr.includes('billed to owner') ||
+          /^(Billable lot settled|Defective lot settled|Lot completed|Rework lot settled|Rework lot completed)/i.test(
+            noteStr
+          );
         if (isAutoOwnerBillPaid) return false;
         const partyLower = String(p.party || '').trim().toLowerCase();
         return (
@@ -1012,14 +1022,18 @@ export default function GhausiaCollection() {
     });
 
     for (const t of sorted) {
-      if (t.amount != null && Number.isFinite(Number(t.amount))) {
-        return Number(t.amount);
-      }
-      const note = String(t.note || '');
+      const note = String(t.note || '').trim();
+      if (/^\[Checkpoint\]/i.test(note)) continue;
       const m = note.match(/Baqaya:\s*Rs\s*(-?[0-9,]+)/i);
       if (m) {
         const parsed = Number(m[1].replace(/,/g, ''));
         if (Number.isFinite(parsed)) return parsed;
+      }
+      if (t.ownerBillId && t.amount != null && Number.isFinite(Number(t.amount))) {
+        return Number(t.amount);
+      }
+      if (Number(t.amount || 0) !== 0 && Number.isFinite(Number(t.amount))) {
+        return Number(t.amount);
       }
     }
     return null;
@@ -1544,7 +1558,7 @@ export default function GhausiaCollection() {
       const currentDate = toLocalYmd();
       const selectedParty = parties.find((p) => p.id === partyId);
 
-      const currentStatus = lot?.status || 'pending';
+      const currentStatus = String(lot?.status || 'pending').toLowerCase().trim();
       const shouldUpdateStatus = currentStatus === 'pending' || currentStatus === 'dispatched';
 
       const payload = {
@@ -1552,7 +1566,7 @@ export default function GhausiaCollection() {
         partyName: selectedParty ? selectedParty.name : '',
       };
 
-      if (shouldUpdateStatus || !partyId) {
+      if (shouldUpdateStatus) {
         payload.status = partyId ? 'dispatched' : 'pending';
         if (partyId) payload.dispatchDate = currentDate;
       }
@@ -1569,6 +1583,12 @@ export default function GhausiaCollection() {
           { businessOwnerId: biz }
         );
       }
+    } catch (err) {
+      Swal.fire({
+        icon: 'error',
+        title: 'Party update failed',
+        text: err?.message || 'Could not update party assignment.',
+      });
     } finally {
       setInlineSummaryBusy(false);
     }
@@ -2272,22 +2292,30 @@ export default function GhausiaCollection() {
                 activeBillOwnerId
               );
             }
-            markLotsBilledLocally(billedLots, savedBill);
+            if (savedBill?.status !== 'draft') {
+              markLotsBilledLocally(billedLots, savedBill);
+            }
             setOptimisticCompletions((prev) => {
               const next = { ...prev };
-              billedLots.forEach((bl) => {
+              (selectedBillToView?.lots || []).forEach((bl) => {
                 const id = String(bl.lotId || bl.id || bl._id || '');
-                if (id) {
-                  next[id] = {
-                    lotPatch: {
-                      status: 'completed',
-                      ownerBillId: savedBill?.id || savedBill?._id,
-                      billedInBillNo: savedBill?.billNo,
-                      billedInBookNo: savedBill?.bookNo,
-                    },
-                  };
-                }
+                if (id) delete next[id];
               });
+              if (savedBill?.status !== 'draft') {
+                billedLots.forEach((bl) => {
+                  const id = String(bl.lotId || bl.id || bl._id || '');
+                  if (id) {
+                    next[id] = {
+                      lotPatch: {
+                        status: 'completed',
+                        ownerBillId: savedBill?.id || savedBill?._id,
+                        billedInBillNo: savedBill?.billNo,
+                        billedInBookNo: savedBill?.bookNo,
+                      },
+                    };
+                  }
+                });
+              }
               return next;
             });
             refreshData({ force: true });

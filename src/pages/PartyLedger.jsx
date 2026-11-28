@@ -1650,6 +1650,11 @@ export default function PartyLedger() {
       return { partyCompletedAmt, partyTotalBillAmt };
     };
 
+    const lotsForBalance =
+      partyFilter === 'All'
+        ? assignedLots
+        : assignedLots.filter((l) => samePartyId(l.partyId, partyFilter));
+
     if (partyFilter === 'All') {
       // Reconciled per-party aggregation (matches Parties page vendor accounting):
       // Each party's balance is evaluated independently. Advances of one party do NOT reduce what is owed to another party.
@@ -1663,7 +1668,7 @@ export default function PartyLedger() {
       }
 
       const lotsByParty = new Map();
-      for (const l of lotsForSummaryStats) {
+      for (const l of lotsForBalance) {
         let pid = String(l.partyId ?? '').trim();
         if (!pid) {
           const lowerLotParty = String(l.partyName || '').trim().toLowerCase();
@@ -1741,7 +1746,7 @@ export default function PartyLedger() {
     const party = parties.find((p) => samePartyId(p.id, partyFilter));
     const pname = (party?.name || '').trim();
 
-    const { partyCompletedAmt, partyTotalBillAmt } = sumPartyLedgerLots(lotsForSummaryStats);
+    const { partyCompletedAmt, partyTotalBillAmt } = sumPartyLedgerLots(lotsForBalance);
 
     const receivedFromBusiness = pays
       .filter(
@@ -1775,7 +1780,7 @@ export default function PartyLedger() {
     };
   }, [
     partyFilter,
-    lotsForSummaryStats,
+    assignedLots,
     ledgerPayments,
     parties,
     businessOwners,
@@ -1809,28 +1814,36 @@ export default function PartyLedger() {
       });
       return;
     }
-    if (newStatus === 'Pending') {
-      await updatePartyEdit(
-        lot.id,
-        { overrideStatus: 'Pending', completeDate: '' },
-        lotWorkspaceOpts(lot)
-      );
-      if ((lot.status || '').toLowerCase() !== 'pending') {
-        await updateLot(lot.id, { status: 'pending', dispatchDate: '' }, lotWorkspaceOpts(lot));
+    try {
+      if (newStatus === 'Pending') {
+        if ((lot.status || '').toLowerCase() !== 'pending') {
+          await updateLot(lot.id, { status: 'pending', dispatchDate: '' }, lotWorkspaceOpts(lot));
+        }
+        await updatePartyEdit(
+          lot.id,
+          { overrideStatus: 'Pending', completeDate: '' },
+          lotWorkspaceOpts(lot)
+        );
+        return;
       }
-      return;
-    }
-    await updatePartyEdit(lot.id, { overrideStatus: 'In Progress' }, lotWorkspaceOpts(lot));
-    const lowerStatus = (lot.status || '').toLowerCase();
-    if (lowerStatus !== 'dispatched') {
-      await updateLot(
-        lot.id,
-        {
-          status: 'dispatched',
-          dispatchDate: toLocalYmd(),
-        },
-        lotWorkspaceOpts(lot)
-      );
+      const lowerStatus = (lot.status || '').toLowerCase();
+      if (lowerStatus !== 'dispatched') {
+        await updateLot(
+          lot.id,
+          {
+            status: 'dispatched',
+            dispatchDate: toLocalYmd(),
+          },
+          lotWorkspaceOpts(lot)
+        );
+      }
+      await updatePartyEdit(lot.id, { overrideStatus: 'In Progress' }, lotWorkspaceOpts(lot));
+    } catch (err) {
+      await Swal.fire({
+        icon: 'error',
+        title: 'Status update failed',
+        text: err?.message || 'Could not update lot status. Please try again.',
+      });
     }
   };
 

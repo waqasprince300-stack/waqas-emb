@@ -464,7 +464,8 @@ export default function Payments() {
     if (form.type === 'Received') {
       return lotsForLinkedReceived.filter(
         (l) =>
-          l.status === 'received back' && !usedReceivedLotKeys.has(normalizeLotKey(lotDisplayRef(l)))
+          l.status === 'received back' &&
+          !usedReceivedLotKeys.has(scopedLinkedLotKey(lotLinkValueFromLot(l), l.businessOwnerId))
       );
     }
     if (form.type !== 'Paid' || !form.party || form.party === 'Other') {
@@ -483,7 +484,7 @@ export default function Payments() {
       const byId = party.id != null && l.partyId != null && String(l.partyId) === String(party.id);
       const byName = l.partyName && String(l.partyName).trim() === String(party.name).trim();
       if (!byId && !byName) return false;
-      if (usedPaidLotKeys.has(normalizeLotKey(lotDisplayRef(l)))) return false;
+      if (usedPaidLotKeys.has(scopedLinkedLotKey(lotLinkValueFromLot(l), l.businessOwnerId))) return false;
       return true;
     });
   }, [
@@ -1901,8 +1902,10 @@ export default function Payments() {
               >
                 <option value="">None</option>
                 {linkedLotOptions.map((l) => (
-                  <option key={l.id} value={l.lotNo || l.lotNumber}>
-                    {(l.lotNo || l.lotNumber) ? `${l.lotNo || l.lotNumber} / ${l.designNo || '—'}` : `(No Lot) / ${l.designNo || '—'}`}
+                  <option key={l.id} value={lotLinkValueFromLot(l)}>
+                    {(l.lotNo || l.lotNumber)
+                      ? `${lotLinkValueFromLot(l)} / ${l.designNo || '—'}`
+                      : `(No Lot) / ${l.designNo || '—'}`}
                     {form.type === 'Received' ? ` — ${l.status}` : ''}
                   </option>
                 ))}
@@ -2041,7 +2044,7 @@ export default function Payments() {
                 <button
                   type="button"
                   onClick={() => {
-                    const today = new Date().toISOString().slice(0, 10);
+                    const today = toLocalYmd();
                     setForm((f) => ({ ...f, date: today }));
                     setErrors((p) => ({ ...p, date: undefined }));
                   }}

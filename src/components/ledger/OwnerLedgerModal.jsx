@@ -19,22 +19,37 @@ const localTodayISO = () => {
   return `${y}-${m}-${day}`;
 };
 
-function TallyModal({ ownerId, ownerName, onClose, onAdded }) {
+function TallyModal({ ownerId, ownerName, currentBalance = 0, onClose, onAdded }) {
   const [date, setDate] = useState(() => localTodayISO());
   const [note, setNote] = useState('');
+  const [isCheckpointOnly, setIsCheckpointOnly] = useState(false);
+  const [baqayaInput, setBaqayaInput] = useState(() =>
+    String(Math.round(Number(currentBalance || 0)))
+  );
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!date) return;
+    let snapAmt = 0;
+    if (!isCheckpointOnly) {
+      snapAmt = Math.round(Number(baqayaInput));
+      if (!Number.isFinite(snapAmt)) {
+        alert('Please enter a valid numeric Baqaya amount');
+        return;
+      }
+    }
     setLoading(true);
     try {
+      const refText = `${note.trim() || 'Verified'}${ownerName ? ` (${ownerName})` : ''}`;
       await apiService.createPayment({
         type: 'Tally',
         party: 'Owner',
         date: date,
-        note: `Matched up to: ${note}${ownerName ? ` (${ownerName})` : ''}`,
-        amount: 0,
+        note: isCheckpointOnly
+          ? `[Checkpoint] Matched up to: ${refText}`
+          : `Matched up to: ${refText} (Baqaya: Rs ${snapAmt.toLocaleString()})`,
+        amount: isCheckpointOnly ? 0 : snapAmt,
         businessOwnerId: ownerId,
       }, ownerId);
       onAdded();
@@ -82,6 +97,27 @@ function TallyModal({ ownerId, ownerName, onClose, onAdded }) {
             </button>
           </div>
         </FormGroup>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}>
+          <input
+            type="checkbox"
+            checked={isCheckpointOnly}
+            onChange={(e) => setIsCheckpointOnly(e.target.checked)}
+          />
+          <span>Visual checkpoint only (do not override calculated Baqaya)</span>
+        </label>
+        {!isCheckpointOnly && (
+          <FormGroup label="Verified Closing Baqaya Snapshot (Rs)">
+            <input
+              type="number"
+              step={1}
+              value={baqayaInput}
+              onChange={(e) => setBaqayaInput(e.target.value)}
+              placeholder="e.g. 50000"
+              className="form-input"
+              required
+            />
+          </FormGroup>
+        )}
         <FormGroup label="Note / Reference (Optional)">
           <input
             type="text"
@@ -148,14 +184,16 @@ export default function OwnerLedgerModal({ ownerId, ownerName, payments, lots, o
 
   const parseBaqayaFromTally = (p) => {
     if (!p) return null;
-    if (p.amount != null && Number.isFinite(Number(p.amount))) {
-      return Number(p.amount);
-    }
-    const note = String(p.note || '');
+    const note = String(p.note || '').trim();
+    if (/^\[Checkpoint\]/i.test(note)) return null;
     const m = note.match(/Baqaya:\s*Rs\s*(-?[0-9,]+)/i);
     if (m) {
       const parsed = Number(m[1].replace(/,/g, ''));
       if (Number.isFinite(parsed)) return parsed;
+    }
+    if (!p.ownerBillId && Number(p.amount || 0) === 0) return null;
+    if (p.amount != null && Number.isFinite(Number(p.amount))) {
+      return Number(p.amount);
     }
     return null;
   };
@@ -237,11 +275,13 @@ export default function OwnerLedgerModal({ ownerId, ownerName, payments, lots, o
   ownerPayments.forEach((p) => {
     let when = parseDateValue(p.date) || parseDateValue(p.createdAt);
     if (when && String(p.date || '').length === 10) {
-      const created = parseDateValue(p.createdAt);
-      if (created) {
-        when.setHours(created.getHours(), created.getMinutes(), created.getSeconds(), created.getMilliseconds());
-      } else if (p.type === 'Tally') {
+      if (p.type === 'Tally') {
         when.setHours(23, 59, 59, 0);
+      } else {
+        const created = parseDateValue(p.createdAt);
+        if (created) {
+          when.setHours(created.getHours(), created.getMinutes(), created.getSeconds(), created.getMilliseconds());
+        }
       }
     }
     const sortMs = when ? when.getTime() : 0;
@@ -824,6 +864,7 @@ export default function OwnerLedgerModal({ ownerId, ownerName, payments, lots, o
         <TallyModal
           ownerId={ownerId}
           ownerName={ownerName}
+          currentBalance={currentNetBalance}
           onClose={() => setShowTallyModal(false)}
           onAdded={() => {
             setShowTallyModal(false);

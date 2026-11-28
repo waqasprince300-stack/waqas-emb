@@ -1,8 +1,34 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { apiService } from '../services/api';
+
+const PARTY_LEDGER_NOTIFICATION_TYPES = new Set([
+  'lot_rejected',
+  'lot_approved',
+  'lot_dispatched',
+  'lot_assigned',
+  'lot_updated',
+  'lot_deleted',
+  'bill_revision_approved',
+  'bill_revision_rejected',
+]);
+
+export function matchesNotificationContext(n, { category, type, types, lotId } = {}) {
+  if (!n) return false;
+  if (lotId && String(n.lotId || '').trim() === String(lotId).trim()) return true;
+  const nType = String(n.type || '');
+  if (type && nType === type) return true;
+  if (Array.isArray(types) && types.includes(nType)) return true;
+  if (category === 'review_lots' && nType === 'lot_pending_review') return true;
+  if (category === 'party_ledger' && PARTY_LEDGER_NOTIFICATION_TYPES.has(nType)) return true;
+  if (category === 'bill_revision' && nType === 'bill_revision_request') return true;
+  if (category === 'payments' && ['payment_recorded', 'payment_updated', 'payment_deleted'].includes(nType)) return true;
+  return false;
+}
 
 export function useNotificationsData({ isAuthenticated, userRole }) {
   const [notifications, setNotifications] = useState([]);
+  const notificationsRef = useRef([]);
+  notificationsRef.current = notifications;
   const [notificationUnreadCount, setNotificationUnreadCount] = useState(0);
   const [pendingLotNotice, setPendingLotNotice] = useState(null);
   const [activeAnnouncement, setActiveAnnouncement] = useState(null);
@@ -70,54 +96,25 @@ export function useNotificationsData({ isAuthenticated, userRole }) {
     }
   }, []);
 
+  const applyLocalNotificationsReadByContext = useCallback((criteria = {}) => {
+    const now = new Date().toISOString();
+    const matchedCount = notificationsRef.current.reduce(
+      (count, n) => (!n.readAt && matchesNotificationContext(n, criteria) ? count + 1 : count),
+      0
+    );
+
+    if (matchedCount > 0) {
+      setNotifications((prev) =>
+        prev.map((n) => (!n.readAt && matchesNotificationContext(n, criteria) ? { ...n, readAt: now } : n))
+      );
+      setNotificationUnreadCount((c) => Math.max(0, c - matchedCount));
+    }
+  }, []);
+
   const markNotificationsReadByContext = useCallback(
     async ({ category, type, types, lotId } = {}) => {
       if (!isAuthenticated) return;
-      const now = new Date().toISOString();
-      let matchedCount = 0;
-
-      setNotifications((prev) =>
-        prev.map((n) => {
-          if (n.readAt) return n;
-          let match = false;
-          if (lotId && String(n.lotId || '').trim() === String(lotId).trim()) match = true;
-          if (type && String(n.type || '') === type) match = true;
-          if (Array.isArray(types) && types.includes(String(n.type || ''))) match = true;
-          if (category === 'review_lots' && String(n.type || '') === 'lot_pending_review') match = true;
-          if (
-            category === 'party_ledger' &&
-            [
-              'lot_rejected',
-              'lot_approved',
-              'lot_dispatched',
-              'lot_assigned',
-              'lot_updated',
-              'lot_deleted',
-              'bill_revision_approved',
-              'bill_revision_rejected',
-            ].includes(String(n.type || ''))
-          ) {
-            match = true;
-          }
-          if (category === 'bill_revision' && String(n.type || '') === 'bill_revision_request') match = true;
-          if (
-            category === 'payments' &&
-            ['payment_recorded', 'payment_updated', 'payment_deleted'].includes(String(n.type || ''))
-          ) {
-            match = true;
-          }
-
-          if (match) {
-            matchedCount++;
-            return { ...n, readAt: now };
-          }
-          return n;
-        })
-      );
-
-      if (matchedCount > 0) {
-        setNotificationUnreadCount((c) => Math.max(0, c - matchedCount));
-      }
+      applyLocalNotificationsReadByContext({ category, type, types, lotId });
 
       try {
         await apiService.markNotificationsReadByContext({ category, type, types, lotId });
@@ -125,7 +122,7 @@ export function useNotificationsData({ isAuthenticated, userRole }) {
         console.warn('markNotificationsReadByContext failed', err);
       }
     },
-    [isAuthenticated]
+    [isAuthenticated, applyLocalNotificationsReadByContext]
   );
 
   const clearPendingLotNotice = useCallback(() => setPendingLotNotice(null), []);
@@ -160,6 +157,7 @@ export function useNotificationsData({ isAuthenticated, userRole }) {
     markNotificationRead,
     markAllNotificationsRead,
     markNotificationsReadByContext,
+    applyLocalNotificationsReadByContext,
     clearPendingLotNotice,
   };
 }
